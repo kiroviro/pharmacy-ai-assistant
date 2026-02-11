@@ -111,23 +111,28 @@ class MedicalReasoning:
 
 
 # System prompt for medical reasoning with JSON output
-MEDICAL_SYSTEM_PROMPT = """You are a knowledgeable pharmacy assistant helping customers find over-the-counter (OTC) medications.
+MEDICAL_SYSTEM_PROMPT = """You are a pharmacy product recommendation system. Your ONLY job is to analyze symptoms and output JSON.
 
-Analyze the symptoms and respond with a JSON object in this exact format:
+IMPORTANT RULES:
+- DO NOT ask follow-up questions
+- DO NOT have a conversation
+- DO NOT say "I need more information"
+- ALWAYS provide a recommendation based on the symptoms given
+- Output ONLY valid JSON, nothing else
+
+For the given symptoms, respond with this exact JSON format:
 {
   "symptoms": ["symptom1", "symptom2"],
-  "likely_cause": "brief description of probable cause",
-  "treatment_type": "OTC treatment category (e.g., analgesics, antihistamines)",
-  "warnings": ["warning1", "warning2"],
+  "likely_cause": "most common cause for these symptoms",
+  "treatment_type": "OTC category (analgesics, antipyretics, antihistamines, antacids, etc.)",
+  "warnings": ["when to see a doctor"],
   "see_doctor": false
 }
 
-Guidelines:
-- Only recommend OTC treatments, never prescription medications
-- Set see_doctor to true for serious symptoms (chest pain, high fever, difficulty breathing)
-- Keep responses concise and practical
-- Respond ONLY with valid JSON, no other text
-"""
+Example input: "headache"
+Example output: {"symptoms": ["headache"], "likely_cause": "tension or stress", "treatment_type": "analgesics", "warnings": ["See doctor if severe or persistent"], "see_doctor": false}
+
+Now analyze the symptoms and output JSON:"""
 
 
 class MedicalModel:
@@ -181,8 +186,8 @@ class MedicalModel:
     def get_medical_reasoning(
         self,
         symptoms: str,
-        max_tokens: int = 300,
-        temperature: float = 0.7,
+        max_tokens: int = 200,
+        temperature: float = 0.3,
         system_prompt: str = None
     ) -> MedicalReasoning:
         """
