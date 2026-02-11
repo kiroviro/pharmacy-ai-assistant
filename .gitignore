@@ -56,3 +56,8 @@ data/*.csv
 
 # ChromaDB (generated, can be rebuilt)
 data/chromadb/
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
