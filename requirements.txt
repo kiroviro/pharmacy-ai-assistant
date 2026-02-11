@@ -16,6 +16,7 @@ pydantic>=2.0.0         # Request/response models
 # Utils
 pandas>=2.0.0           # CSV handling
 python-dotenv>=1.0.0    # Environment variables
+pydantic-settings>=2.0  # Configuration management
 
 # Testing
 pytest>=7.0.0           # Test framework
