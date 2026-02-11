@@ -146,11 +146,20 @@ class MedicalModel:
         # Build product list for prompt
         product_list = []
         for i, product in enumerate(candidate_products, 1):
-            product_info = f"{i}. {product.name}"
-            if hasattr(product, 'indications') and product.indications:
-                product_info += f" - {product.indications}"
-            if hasattr(product, 'contraindications') and product.contraindications:
-                product_info += f" (Avoid if: {product.contraindications})"
+            # Support both old (name) and new (title) field names
+            name = getattr(product, 'title', None) or getattr(product, 'name', 'Unknown')
+            product_info = f"{i}. {name}"
+
+            # Add description/indications
+            desc = getattr(product, 'description', None) or getattr(product, 'indications', None)
+            if desc:
+                product_info += f" - {desc[:100]}"
+
+            # Add contraindications
+            contra = getattr(product, 'contraindications', None)
+            if contra:
+                product_info += f" (Avoid if: {contra[:80]})"
+
             product_list.append(product_info)
 
         products_str = "\n".join(product_list)
