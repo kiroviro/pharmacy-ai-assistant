@@ -39,7 +39,14 @@ Connect Open WebUI to: http://localhost:8000/v1
 
 Verify it's working:
 ```bash
+# Check models endpoint
 curl http://localhost:8000/v1/models
+
+# Check health status
+curl http://localhost:8000/health
+
+# Get Bulgarian hints for UI
+curl http://localhost:8000/hints
 ```
 
 ## Step 2: Install Open WebUI
@@ -121,16 +128,6 @@ docker run -d --name open-webui -p 3000:8080 \
   -e OPENAI_API_KEY=dummy \
   ghcr.io/open-webui/open-webui:main
 ```
-
-## Fallback: Gradio UI
-
-The original Gradio interface is still available as a fallback:
-
-```bash
-python app_gradio.py
-```
-
-Access it at `http://localhost:7860`
 
 ## Troubleshooting
 

@@ -6,10 +6,68 @@ Uses Helsinki-NLP's MarianMT models:
 - EN → BG: Helsinki-NLP/opus-mt-en-bg
 """
 
+from collections import OrderedDict
 from typing import Optional
-from functools import lru_cache
 
 from transformers import MarianMTModel, MarianTokenizer
+
+from src.logging_config import get_logger
+from src.config import get_settings
+
+logger = get_logger("viapharma.translator")
+
+
+class LRUCache:
+    """
+    Simple LRU (Least Recently Used) cache implementation.
+
+    Evicts the oldest entries when the cache reaches max_size.
+    """
+
+    def __init__(self, max_size: int = 1000):
+        self._cache: OrderedDict[str, str] = OrderedDict()
+        self._max_size = max_size
+        self._hits = 0
+        self._misses = 0
+
+    def get(self, key: str) -> Optional[str]:
+        """Get a value from cache, moving it to end (most recently used)."""
+        if key in self._cache:
+            self._cache.move_to_end(key)
+            self._hits += 1
+            return self._cache[key]
+        self._misses += 1
+        return None
+
+    def set(self, key: str, value: str) -> None:
+        """Set a value in cache, evicting oldest if necessary."""
+        if key in self._cache:
+            self._cache.move_to_end(key)
+        else:
+            if len(self._cache) >= self._max_size:
+                # Evict oldest (first) item
+                evicted_key, _ = self._cache.popitem(last=False)
+                logger.debug(f"Cache evicted entry", extra={"evicted_key_len": len(evicted_key)})
+        self._cache[key] = value
+
+    def clear(self) -> None:
+        """Clear the cache."""
+        self._cache.clear()
+        self._hits = 0
+        self._misses = 0
+
+    @property
+    def stats(self) -> dict:
+        """Get cache statistics."""
+        total = self._hits + self._misses
+        hit_rate = (self._hits / total * 100) if total > 0 else 0
+        return {
+            "size": len(self._cache),
+            "max_size": self._max_size,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate_percent": round(hit_rate, 1)
+        }
 
 
 class Translator:
@@ -31,26 +89,27 @@ class Translator:
         self._en_to_bg_model = None
         self._en_to_bg_tokenizer = None
 
-        # Cache for frequent translations
-        self._cache_bg_to_en = {}
-        self._cache_en_to_bg = {}
-        self._cache_max_size = 1000
+        # LRU cache for frequent translations
+        settings = get_settings()
+        cache_size = settings.translation_cache_size
+        self._cache_bg_to_en = LRUCache(max_size=cache_size)
+        self._cache_en_to_bg = LRUCache(max_size=cache_size)
 
     def _load_bg_to_en(self) -> None:
         """Load the Bulgarian to English model."""
         if self._bg_to_en_model is None:
-            print(f"Loading translation model: {self.BG_TO_EN_MODEL}...")
+            logger.info(f"Loading translation model: {self.BG_TO_EN_MODEL}...")
             self._bg_to_en_tokenizer = MarianTokenizer.from_pretrained(self.BG_TO_EN_MODEL)
             self._bg_to_en_model = MarianMTModel.from_pretrained(self.BG_TO_EN_MODEL)
-            print("BG→EN model loaded!")
+            logger.info("BG→EN model loaded!")
 
     def _load_en_to_bg(self) -> None:
         """Load the English to Bulgarian model."""
         if self._en_to_bg_model is None:
-            print(f"Loading translation model: {self.EN_TO_BG_MODEL}...")
+            logger.info(f"Loading translation model: {self.EN_TO_BG_MODEL}...")
             self._en_to_bg_tokenizer = MarianTokenizer.from_pretrained(self.EN_TO_BG_MODEL)
             self._en_to_bg_model = MarianMTModel.from_pretrained(self.EN_TO_BG_MODEL)
-            print("EN→BG model loaded!")
+            logger.info("EN→BG model loaded!")
 
     def load_all(self) -> None:
         """Pre-load both translation models."""
@@ -71,8 +130,9 @@ class Translator:
             return text
 
         # Check cache
-        if text in self._cache_bg_to_en:
-            return self._cache_bg_to_en[text]
+        cached = self._cache_bg_to_en.get(text)
+        if cached is not None:
+            return cached
 
         # Load model if needed
         self._load_bg_to_en()
@@ -83,8 +143,7 @@ class Translator:
         result = self._bg_to_en_tokenizer.decode(translated[0], skip_special_tokens=True)
 
         # Cache result
-        if len(self._cache_bg_to_en) < self._cache_max_size:
-            self._cache_bg_to_en[text] = result
+        self._cache_bg_to_en.set(text, result)
 
         return result
 
@@ -102,8 +161,9 @@ class Translator:
             return text
 
         # Check cache
-        if text in self._cache_en_to_bg:
-            return self._cache_en_to_bg[text]
+        cached = self._cache_en_to_bg.get(text)
+        if cached is not None:
+            return cached
 
         # Load model if needed
         self._load_en_to_bg()
@@ -114,8 +174,7 @@ class Translator:
         result = self._en_to_bg_tokenizer.decode(translated[0], skip_special_tokens=True)
 
         # Cache result
-        if len(self._cache_en_to_bg) < self._cache_max_size:
-            self._cache_en_to_bg[text] = result
+        self._cache_en_to_bg.set(text, result)
 
         return result
 
@@ -201,6 +260,14 @@ class Translator:
         """Clear the translation cache."""
         self._cache_bg_to_en.clear()
         self._cache_en_to_bg.clear()
+        logger.info("Translation caches cleared")
+
+    def get_cache_stats(self) -> dict:
+        """Get cache statistics for monitoring."""
+        return {
+            "bg_to_en": self._cache_bg_to_en.stats,
+            "en_to_bg": self._cache_en_to_bg.stats
+        }
 
 
 # Global translator instance (lazy loaded)

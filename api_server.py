@@ -34,6 +34,17 @@ executor = ThreadPoolExecutor(max_workers=4)
 # Rate limiting storage (simple in-memory implementation)
 rate_limit_store: dict[str, list[float]] = {}
 
+# Metrics tracking
+metrics_store = {
+    "requests_total": 0,
+    "requests_success": 0,
+    "requests_failed": 0,
+    "requests_medical": 0,
+    "requests_non_medical": 0,
+    "requests_red_flag": 0,
+    "total_latency_ms": 0.0,
+}
+
 
 # =============================================================================
 # Input Validation
@@ -321,6 +332,11 @@ async def request_middleware(request: Request, call_next):
 
     # Log response
     duration_ms = (time.time() - start_time) * 1000
+
+    # Track latency for chat endpoints
+    if "/chat/" in request.url.path or "/completions" in request.url.path:
+        metrics_store["total_latency_ms"] += duration_ms
+
     if settings.enable_request_logging:
         logger.info(f"Request completed", extra={
             "method": request.method,
@@ -405,6 +421,63 @@ async def get_hints():
     }
 
 
+@app.get("/metrics")
+async def get_metrics():
+    """
+    Get application metrics for monitoring.
+
+    Returns request counts, latencies, cache stats, and model status.
+    """
+    from fastapi.responses import JSONResponse
+
+    pipeline = get_pipeline()
+
+    # Calculate average latency
+    avg_latency = 0.0
+    if metrics_store["requests_total"] > 0:
+        avg_latency = metrics_store["total_latency_ms"] / metrics_store["requests_total"]
+
+    # Get cache stats if translator is loaded and has the method
+    cache_stats = None
+    if pipeline._translator is not None and hasattr(pipeline._translator, 'get_cache_stats'):
+        try:
+            stats = pipeline._translator.get_cache_stats()
+            # Ensure it's a plain dict with primitive types
+            if isinstance(stats, dict):
+                cache_stats = {
+                    "bg_to_en": dict(stats.get("bg_to_en", {})) if stats.get("bg_to_en") else None,
+                    "en_to_bg": dict(stats.get("en_to_bg", {})) if stats.get("en_to_bg") else None,
+                }
+        except Exception:
+            cache_stats = None
+
+    # Get product count
+    try:
+        products_count = pipeline.product_store.collection.count()
+    except Exception:
+        products_count = 0
+
+    # Build response with explicit JSONResponse to avoid serialization issues
+    return JSONResponse(content={
+        "requests": {
+            "total": int(metrics_store["requests_total"]),
+            "success": int(metrics_store["requests_success"]),
+            "failed": int(metrics_store["requests_failed"]),
+            "medical": int(metrics_store["requests_medical"]),
+            "non_medical": int(metrics_store["requests_non_medical"]),
+            "red_flag": int(metrics_store["requests_red_flag"]),
+        },
+        "latency": {
+            "average_ms": round(float(avg_latency), 2),
+            "total_ms": round(float(metrics_store["total_latency_ms"]), 2),
+        },
+        "cache": cache_stats,
+        "products_count": int(products_count),
+        "uptime_seconds": round(time.time() - startup_time, 2) if startup_time else 0,
+        "rate_limit_ips_tracked": len(rate_limit_store),
+    })
+
+
 @app.get("/v1/models", response_model=ModelsResponse)
 @app.get("/models", response_model=ModelsResponse)
 async def list_models():
@@ -468,6 +541,8 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
         )
     except asyncio.TimeoutError:
         logger.error("Request timed out")
+        metrics_store["requests_total"] += 1
+        metrics_store["requests_failed"] += 1
         raise HTTPException(
             status_code=504,
             detail="Заявката отне твърде дълго. Моля, опитайте отново."
@@ -478,6 +553,16 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
         "is_red_flag": result.is_red_flag,
         "response_length": len(result.response)
     })
+
+    # Track metrics
+    metrics_store["requests_total"] += 1
+    metrics_store["requests_success"] += 1
+    if result.is_medical:
+        metrics_store["requests_medical"] += 1
+    else:
+        metrics_store["requests_non_medical"] += 1
+    if result.is_red_flag:
+        metrics_store["requests_red_flag"] += 1
 
     # Build response
     response_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"

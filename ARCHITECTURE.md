@@ -201,6 +201,8 @@ medgemma/
 │
 ├── src/
 │   ├── __init__.py
+│   ├── config.py               # Centralized configuration (pydantic-settings)
+│   ├── logging_config.py       # Structured logging with request tracking
 │   ├── intent_classifier.py    # Step 1: Medical query detection
 │   ├── translator.py           # Step 2 & 6: BG↔EN translation
 │   ├── medical_model.py        # Step 3 & 5b: MedGemma wrapper
@@ -212,8 +214,70 @@ medgemma/
 ├── output/                     # Generated files (git-ignored)
 │
 └── tests/
-    └── .gitkeep
+    ├── conftest.py             # Pytest fixtures
+    ├── test_safety.py          # Safety layer tests (22 tests)
+    ├── test_intent_classifier.py # Intent classifier tests (26 tests)
+    ├── test_api.py             # API integration tests (17 tests)
+    └── test_pipeline.py        # Pipeline integration tests (13 tests)
 ```
+
+## API Endpoints
+
+The API server (`api_server.py`) provides OpenAI-compatible endpoints plus custom health/hints endpoints:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Basic status check |
+| `/health` | GET | Detailed health check (models loaded, products count, uptime) |
+| `/hints` | GET | Bulgarian UI hints and welcome message |
+| `/metrics` | GET | Application metrics (request counts, latencies, cache stats) |
+| `/v1/models` | GET | List available models (OpenAI-compatible) |
+| `/v1/chat/completions` | POST | Chat endpoint (OpenAI-compatible) |
+| `/models` | GET | Alias for `/v1/models` |
+| `/chat/completions` | POST | Alias for `/v1/chat/completions` |
+
+### Health Endpoint Response
+```json
+{
+  "status": "healthy",
+  "service": "ViaPharma Аптечен Асистент",
+  "version": "1.0.0",
+  "models_loaded": {
+    "medgemma": true,
+    "translator_bg_en": true,
+    "translator_en_bg": true
+  },
+  "products_count": 10247,
+  "uptime_seconds": 3600.5
+}
+```
+
+### Hints Endpoint Response
+```json
+{
+  "hints": [
+    "Имам главоболие и се чувствам уморен",
+    "Какво да взема за настинка?",
+    "..."
+  ],
+  "placeholder": "Опишете вашите симптоми...",
+  "welcome_message": "Здравейте! Аз съм вашият аптечен асистент."
+}
+```
+
+## Configuration
+
+All settings are managed via `src/config.py` using pydantic-settings. Environment variables use the `VIAPHARMA_` prefix:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `VIAPHARMA_API_PORT` | 8000 | API server port |
+| `VIAPHARMA_LOG_LEVEL` | INFO | Logging level |
+| `VIAPHARMA_LOG_JSON` | false | Use JSON log format |
+| `VIAPHARMA_MAX_MESSAGE_LENGTH` | 2000 | Max user message length |
+| `VIAPHARMA_RATE_LIMIT_PER_MINUTE` | 30 | Rate limit per IP |
+| `VIAPHARMA_ENABLE_RATE_LIMITING` | true | Enable rate limiting |
+| `VIAPHARMA_PREWARM_MODELS` | true | Pre-load models on startup |
 
 ## Dependencies
 
@@ -232,10 +296,16 @@ sentence-transformers   # Multilingual embeddings
 fastapi                 # REST API
 uvicorn                 # ASGI server
 pydantic                # Request/response models
+pydantic-settings       # Configuration management
 
 # Utils
 pandas                  # CSV handling
 python-dotenv           # Environment variables
+
+# Testing
+pytest                  # Test framework
+pytest-cov              # Coverage reporting
+pytest-asyncio          # Async test support
 ```
 
 ## Running the Application
@@ -306,19 +376,36 @@ Allows recommendations but adds warning message:
 
 ## Implementation Status
 
-| Component | Status | File |
-|-----------|--------|------|
-| OpenAI API | ✅ Done | `api_server.py` |
-| Pipeline | ✅ Done | `src/pipeline.py` |
-| MedGemma | ✅ Done | `src/medical_model.py` |
-| Translation | ✅ Done | `src/translator.py` |
-| Product Store | ✅ Done | `src/product_store.py` |
-| Data Loader | ✅ Done | `src/data_loader.py` |
-| Intent Classifier | ✅ Done | `src/intent_classifier.py` |
-| Safety Layer | ✅ Done | `src/safety.py` |
+| Component | Status | File | Tests |
+|-----------|--------|------|-------|
+| OpenAI API | ✅ Done | `api_server.py` | 18 tests |
+| Pipeline | ✅ Done | `src/pipeline.py` | 13 tests |
+| MedGemma | ✅ Done | `src/medical_model.py` | - |
+| Translation | ✅ Done | `src/translator.py` | - |
+| Product Store | ✅ Done | `src/product_store.py` | - |
+| Data Loader | ✅ Done | `src/data_loader.py` | - |
+| Intent Classifier | ✅ Done | `src/intent_classifier.py` | 26 tests |
+| Safety Layer | ✅ Done | `src/safety.py` | 22 tests |
+| Configuration | ✅ Done | `src/config.py` | - |
+| Logging | ✅ Done | `src/logging_config.py` | - |
+
+**Total: 79 automated tests**
+
+## Running Tests
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest tests/ --cov=src --cov-report=term-missing
+
+# Skip slow tests (those requiring model loading)
+pytest tests/ -v -k "not slow"
+```
 
 ## Next Steps
 
-1. **Product Catalogue** - Load your CSV into ChromaDB
-2. **Testing** - Unit and integration tests
-3. **Performance Optimization** - Caching for common queries
+1. **Performance Optimization** - Caching for common queries
+2. **Monitoring** - Add metrics/observability
+3. **Production Deployment** - Docker, scaling considerations
