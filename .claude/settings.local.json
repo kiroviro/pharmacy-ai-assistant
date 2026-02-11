@@ -13,7 +13,14 @@
       "Bash(pkill:*)",
       "Bash(git init:*)",
       "Bash(git branch:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: ViaPharma OTC Chatbot\n\n- Project structure with src/, data/, tests/ directories\n- MedGemma integration with MLX for medical reasoning\n- Two-stage retrieval pipeline \\(Perplexity pattern\\)\n- Gradio chat interface\n- FastAPI server for Open WebUI integration\n- Architecture documentation\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git config:*)",
+      "Bash(docker run:*)",
+      "Bash(ghcr.io/open-webui/open-webui:main)",
+      "Bash(docker start:*)",
+      "Bash(docker ps:*)",
+      "Bash(python3:*)"
     ]
   }
 }

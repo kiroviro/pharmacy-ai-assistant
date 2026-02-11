@@ -1,6 +1,7 @@
 # ViaPharma OTC Chatbot with MedGemma
 
 ## Overview
+
 Build a Bulgarian-language medical chatbot for viapharma.us that understands symptoms and recommends OTC products from a catalogue of ~10-11k items. Runs locally on Mac M-series with option to scale later.
 
 ## Architecture
@@ -10,6 +11,26 @@ Uses **Perplexity-style two-stage retrieval** for accurate product matching:
 2. **Stage 2**: LLM refines and picks best matches (accurate)
 
 ```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           USER INTERFACES                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  Option 1: Open WebUI                    Option 2: Gradio
+  ┌─────────────────┐                    ┌─────────────────┐
+  │   Open WebUI    │                    │  app_gradio.py  │
+  │   Port 3000     │                    │   Port 7860     │
+  └────────┬────────┘                    └────────┬────────┘
+           │                                      │
+           ▼                                      │
+  ┌─────────────────┐                             │
+  │  api_server.py  │                             │
+  │   Port 8000     │                             │
+  │  (OpenAI API)   │                             │
+  └────────┬────────┘                             │
+           │                                      │
+           └──────────────┬───────────────────────┘
+                          │
+                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                              PIPELINE FLOW                                    │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -71,6 +92,21 @@ Uses **Perplexity-style two-stage retrieval** for accurate product matching:
                       └───────────────┘
 ```
 
+## User Interface Options
+
+### Option 1: Open WebUI (Recommended)
+- Full-featured chat interface
+- Conversation history
+- Model selection
+- Runs via `api_server.py` (OpenAI-compatible API)
+- See `OPEN_WEBUI_SETUP.md` for setup instructions
+
+### Option 2: Gradio (Simple)
+- Lightweight chat interface
+- Quick testing and demos
+- Runs via `app_gradio.py`
+- Access at `http://localhost:7860`
+
 ## Two-Stage Retrieval (Key Innovation)
 
 Inspired by Perplexity's finance widget architecture:
@@ -96,85 +132,87 @@ Inspired by Perplexity's finance widget architecture:
 - **Model**: `distilbert-base-multilingual-cased` or Bulgarian-specific model
 - **Purpose**: Filter non-medical queries (weather, jokes, etc.)
 - **Output**: `is_medical: bool`
-- **File**: `src/intent_classifier.py`
+- **Status**: Placeholder (always returns True)
 
 ### Step 2: Translation BG → EN
 - **Model**: `Helsinki-NLP/opus-mt-bg-en` (MarianMT)
 - **Purpose**: Translate Bulgarian symptoms to English for MedGemma
 - **Cache**: Common phrases cached for speed
-- **File**: `src/translator.py`
+- **Status**: Placeholder (pass-through)
 
 ### Step 3: Medical Reasoning (MedGemma)
-- **Model**: `mlx-community/medgemma-4b-it-bf16` (already downloaded)
+- **Model**: `mlx-community/medgemma-4b-it-bf16`
 - **Purpose**: Understand symptoms, suggest treatment categories
 - **Prompt**: Structured to output treatment types, not specific products
-- **File**: `src/medical_model.py`
+- **Status**: ✅ Implemented
 
 ### Step 4: Safety Layer
 - **Red-flag symptoms**: chest pain, difficulty breathing, sudden vision loss, etc.
 - **OTC whitelist**: Only recommend products marked as OTC in catalogue
 - **Prescription filter**: Block any prescription drug recommendations
-- **File**: `src/safety.py`
+- **Status**: Placeholder (no filtering)
 
 ### Step 5a: Product Retrieval (Vector DB)
 - **Database**: ChromaDB with ~10-11k products
 - **Embeddings**: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
 - **Method**: Vector similarity search
 - **Returns**: Top 10 candidate products (fast, cheap)
-- **File**: `src/product_mapper.py`
+- **Status**: Placeholder (returns mock products)
 
 ### Step 5b: Product Refinement (LLM)
-- **Model**: MedGemma (or smaller/cheaper model)
+- **Model**: MedGemma (reuses loaded model)
 - **Input**: Original query + top-K candidates from vector search
 - **Method**: LLM picks best matches considering medical context
 - **Returns**: Top 3 most relevant products
-- **File**: `src/product_refiner.py`
+- **Status**: ✅ Implemented
 
 ### Step 6: Translation EN → BG
 - **Model**: `Helsinki-NLP/opus-mt-en-bg` (MarianMT)
 - **Purpose**: Translate response back to Bulgarian
-- **File**: `src/translator.py` (same file, both directions)
+- **Status**: Placeholder (pass-through)
 
 ### Step 7: Response Formatting
 - Product recommendations with prices
 - Always include disclaimer
 - "Add to cart" / "View product" links
-- **File**: `src/response_formatter.py`
+- **Status**: ✅ Implemented
 
 ## Project Structure
 
 ```
 medgemma/
-├── .env                        # HF token (exists)
-├── .gitignore                  # (exists)
+├── .env                        # HF token (git-ignored)
+├── .env.example                # Template for .env
+├── .gitignore
+├── ARCHITECTURE.md             # This file
+├── OPEN_WEBUI_SETUP.md         # Open WebUI setup guide
+├── requirements.txt            # Python dependencies
+│
+├── api_server.py               # OpenAI-compatible API (for Open WebUI)
+├── app_gradio.py               # Gradio chat interface
+│
 ├── models/
-│   └── medgemma-4b-it-bf16/    # MedGemma (exists)
+│   └── medgemma-4b-it-bf16/    # MedGemma model (git-ignored)
+│
 ├── data/
-│   ├── products.csv            # Product catalogue (~10-11k items)
-│   └── red_flags.json          # Red-flag symptoms list
+│   ├── .gitkeep
+│   └── products.csv            # Product catalogue (git-ignored)
+│
 ├── src/
 │   ├── __init__.py
-│   ├── intent_classifier.py    # Step 1: Filter non-medical
-│   ├── translator.py           # Step 2 & 6: BG↔EN translation
-│   ├── medical_model.py        # Step 3: MedGemma wrapper
-│   ├── safety.py               # Step 4: Red flags + OTC filter
-│   ├── product_mapper.py       # Step 5a: Vector DB retrieval
-│   ├── product_refiner.py      # Step 5b: LLM refinement (NEW)
-│   ├── response_formatter.py   # Step 7: Format output
-│   └── pipeline.py             # Orchestrates all steps
-├── app.py                      # FastAPI + Gradio UI
-├── requirements.txt
+│   ├── medical_model.py        # MedGemma wrapper
+│   └── pipeline.py             # Main pipeline orchestrator
+│
+├── output/                     # Generated files (git-ignored)
+│
 └── tests/
-    ├── test_intent.py
-    ├── test_translation.py
-    ├── test_safety.py
-    └── test_pipeline.py
+    └── .gitkeep
 ```
 
 ## Dependencies
 
 ```
-# Core
+# Core ML
 mlx-lm                  # MedGemma inference on Mac
 transformers            # Intent classifier + MarianMT
 torch                   # PyTorch backend
@@ -187,11 +225,34 @@ sentence-transformers   # Multilingual embeddings
 # API & UI
 fastapi                 # REST API
 uvicorn                 # ASGI server
-gradio                  # Quick prototype UI
+gradio                  # Web UI (fallback)
+pydantic                # Request/response models
 
 # Utils
 pandas                  # CSV handling
 python-dotenv           # Environment variables
+```
+
+## Running the Application
+
+### Quick Start (Gradio)
+```bash
+python app_gradio.py
+# Open http://localhost:7860
+```
+
+### With Open WebUI
+```bash
+# Terminal 1: Start API server
+python api_server.py
+
+# Terminal 2: Start Open WebUI (Docker)
+docker run -d --name open-webui -p 3000:8080 \
+  -e OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1 \
+  -e OPENAI_API_KEY=dummy \
+  ghcr.io/open-webui/open-webui:main
+
+# Open http://localhost:3000
 ```
 
 ## Safety Measures
@@ -215,63 +276,23 @@ python-dotenv           # Environment variables
 - "Това е информационна услуга, не медицински съвет"
 - "Консултирайте се с фармацевт за повече информация"
 
-## Sample Interaction
+## Implementation Status
 
-```
-User: Имам силно главоболие и температура от два дни
+| Component | Status | File |
+|-----------|--------|------|
+| Gradio UI | ✅ Done | `app_gradio.py` |
+| OpenAI API | ✅ Done | `api_server.py` |
+| Pipeline | ✅ Done | `src/pipeline.py` |
+| MedGemma | ✅ Done | `src/medical_model.py` |
+| Intent Classifier | ⏳ Placeholder | - |
+| Translation | ⏳ Placeholder | - |
+| Safety Layer | ⏳ Placeholder | - |
+| Product Retrieval | ⏳ Placeholder | - |
 
-Pipeline:
-1. Intent: ✅ Medical query
-2. Translate: "I have a severe headache and fever for two days"
-3. MedGemma: "Suggests antipyretics and analgesics for headache with fever"
-4. Safety: ✅ No red flags (fever < 3 days)
-5a. Vector DB: Returns 10 candidates (pain relievers, fever reducers)
-5b. LLM Refine: Picks best 3 based on symptom match
-6. Translate back to Bulgarian
+## Next Steps
 
-Bot: Въз основа на вашите симптоми, ето някои опции:
-
-1. **Парацетамол 500mg** (5.99 лв)
-   - Облекчава главоболие и понижава температурата
-   - Дозировка: 1-2 таблетки на всеки 4-6 часа
-
-2. **Ибупрофен 400mg** (7.99 лв)
-   - Противовъзпалително + обезболяващо
-   - Да се приема с храна
-
-⚠️ Ако температурата продължи повече от 3 дни, моля консултирайте се с лекар.
-
-ℹ️ Това е информационна услуга. За повече информация се консултирайте с фармацевт.
-```
-
-## Implementation Order
-
-1. **Phase 1: Core Infrastructure** ✅ In Progress
-   - [x] Project structure
-   - [x] Gradio UI (placeholder)
-   - [x] Pipeline skeleton with two-stage retrieval
-   - [ ] Product catalogue loader + ChromaDB setup
-   - [ ] Translation module (MarianMT both directions)
-   - [ ] Basic MedGemma wrapper
-
-2. **Phase 2: Safety & Intelligence**
-   - [ ] Intent classifier
-   - [ ] Safety layer with red-flag detection
-   - [ ] Product refinement with LLM (Step 5b)
-
-3. **Phase 3: Integration**
-   - [ ] Full pipeline orchestration
-   - [ ] FastAPI endpoints
-   - [ ] Gradio UI polish
-
-4. **Phase 4: Testing & Polish**
-   - [ ] Unit tests for each component
-   - [ ] End-to-end integration tests
-   - [ ] Performance optimization (caching)
-
-## Future Enhancements (Out of Scope for Now)
-- User authentication
-- Conversation history
-- Product stock availability
-- Shopping cart integration
-- Analytics dashboard
+1. **Translation** - Add MarianMT for Bulgarian ↔ English
+2. **Product Catalogue** - Load CSV into ChromaDB
+3. **Intent Classifier** - Filter non-medical queries
+4. **Safety Layer** - Red-flag symptom detection
+5. **Testing** - Unit and integration tests
