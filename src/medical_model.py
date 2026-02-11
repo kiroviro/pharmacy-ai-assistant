@@ -4,31 +4,129 @@ MedGemma medical reasoning model wrapper.
 Uses MLX for efficient inference on Apple Silicon.
 """
 
+import json
 import os
+import re
+from dataclasses import dataclass, asdict
 from typing import Optional
 from mlx_lm import load, generate
 
 
-# System prompt for medical reasoning
-MEDICAL_SYSTEM_PROMPT = """You are a knowledgeable pharmacy assistant helping customers find over-the-counter (OTC) medications for their symptoms.
+@dataclass
+class MedicalReasoning:
+    """Structured medical reasoning output."""
+    symptoms: list[str]  # List of identified symptoms
+    likely_cause: str  # Probable condition/cause
+    treatment_type: str  # Recommended OTC treatment category
+    warnings: list[str]  # Important cautions
+    see_doctor: bool = False  # Whether to recommend seeing a doctor
 
-Your role is to:
-1. Analyze the symptoms described by the customer
-2. Identify the likely condition(s) or causes
-3. Suggest appropriate treatment categories (e.g., analgesics, antipyretics, antihistamines)
-4. Note any important warnings or when to see a doctor
+    def to_dict(self) -> dict:
+        return asdict(self)
 
-Important guidelines:
-- Only recommend OTC (over-the-counter) treatments, never prescription medications
-- Always advise seeing a doctor for serious or persistent symptoms
-- Be concise and practical
-- Do not diagnose specific diseases, just identify symptom patterns
+    @classmethod
+    def from_dict(cls, data: dict) -> "MedicalReasoning":
+        return cls(
+            symptoms=data.get("symptoms", []),
+            likely_cause=data.get("likely_cause", ""),
+            treatment_type=data.get("treatment_type", ""),
+            warnings=data.get("warnings", []),
+            see_doctor=data.get("see_doctor", False),
+        )
 
-Respond in a structured format:
-- Symptoms identified: [list key symptoms]
-- Likely cause: [common condition or cause]
-- Recommended treatment type: [OTC category]
-- Warnings: [any important cautions]
+    def format_english(self) -> str:
+        """Format the reasoning in English for translation."""
+        parts = []
+
+        if self.symptoms:
+            symptoms_str = ", ".join(self.symptoms)
+            parts.append(f"Identified symptoms: {symptoms_str}.")
+
+        if self.likely_cause:
+            parts.append(f"Probable cause: {self.likely_cause}.")
+
+        if self.treatment_type:
+            parts.append(f"Recommended treatment: {self.treatment_type}.")
+
+        if self.warnings:
+            warnings_str = ". ".join(self.warnings)
+            parts.append(f"Warnings: {warnings_str}.")
+
+        if self.see_doctor:
+            parts.append("We recommend consulting a doctor.")
+
+        return " ".join(parts)
+
+    def format_bulgarian(self, translated_text: str = None) -> str:
+        """
+        Format the reasoning in Bulgarian for display.
+
+        Args:
+            translated_text: Optional pre-translated text to use instead of raw fields
+        """
+        if translated_text:
+            # Use the translated text and add formatting
+            parts = translated_text.split(". ")
+            formatted = []
+            for part in parts:
+                part = part.strip()
+                if not part:
+                    continue
+                # Add bullet points and bold headers for key sections
+                if part.lower().startswith("идентифицирани симптоми") or part.lower().startswith("симптоми"):
+                    formatted.append(f"**{part}**")
+                elif part.lower().startswith("вероятна причина") or part.lower().startswith("причина"):
+                    formatted.append(f"**{part}**")
+                elif part.lower().startswith("препоръчано лечение") or part.lower().startswith("лечение"):
+                    formatted.append(f"**{part}**")
+                elif part.lower().startswith("предупрежден") or part.lower().startswith("внимание"):
+                    formatted.append(f"⚠️ **{part}**")
+                elif "консултация" in part.lower() or "лекар" in part.lower():
+                    formatted.append(f"\n⚠️ **{part}**")
+                else:
+                    formatted.append(part)
+            return "\n\n".join(formatted) if formatted else translated_text
+
+        # Fallback: format with English content but Bulgarian labels
+        parts = []
+
+        if self.symptoms:
+            symptoms_str = ", ".join(self.symptoms)
+            parts.append(f"**Идентифицирани симптоми:** {symptoms_str}")
+
+        if self.likely_cause:
+            parts.append(f"**Вероятна причина:** {self.likely_cause}")
+
+        if self.treatment_type:
+            parts.append(f"**Препоръчано лечение:** {self.treatment_type}")
+
+        if self.warnings:
+            warnings_str = "; ".join(self.warnings)
+            parts.append(f"**Предупреждения:** {warnings_str}")
+
+        if self.see_doctor:
+            parts.append("\n⚠️ **Препоръчваме консултация с лекар.**")
+
+        return "\n\n".join(parts)
+
+
+# System prompt for medical reasoning with JSON output
+MEDICAL_SYSTEM_PROMPT = """You are a knowledgeable pharmacy assistant helping customers find over-the-counter (OTC) medications.
+
+Analyze the symptoms and respond with a JSON object in this exact format:
+{
+  "symptoms": ["symptom1", "symptom2"],
+  "likely_cause": "brief description of probable cause",
+  "treatment_type": "OTC treatment category (e.g., analgesics, antihistamines)",
+  "warnings": ["warning1", "warning2"],
+  "see_doctor": false
+}
+
+Guidelines:
+- Only recommend OTC treatments, never prescription medications
+- Set see_doctor to true for serious symptoms (chest pain, high fever, difficulty breathing)
+- Keep responses concise and practical
+- Respond ONLY with valid JSON, no other text
 """
 
 
@@ -86,7 +184,7 @@ class MedicalModel:
         max_tokens: int = 300,
         temperature: float = 0.7,
         system_prompt: str = None
-    ) -> str:
+    ) -> MedicalReasoning:
         """
         Get medical reasoning for the given symptoms.
 
@@ -97,7 +195,7 @@ class MedicalModel:
             system_prompt: Optional custom system prompt
 
         Returns:
-            Medical reasoning response
+            MedicalReasoning object with structured data
         """
         if not self._loaded:
             self.load()
@@ -111,10 +209,98 @@ class MedicalModel:
             max_tokens=max_tokens,
         )
 
-        # Clean up response (remove any trailing incomplete sentences)
+        # Clean up and parse JSON response
         response = response.strip()
 
-        return response
+        return self._parse_medical_response(response)
+
+    def _parse_medical_response(self, response: str) -> MedicalReasoning:
+        """
+        Parse the JSON response from MedGemma into a MedicalReasoning object.
+
+        Args:
+            response: Raw response from the model
+
+        Returns:
+            MedicalReasoning object
+        """
+        try:
+            # Try to extract JSON from response
+            # Sometimes the model adds text before/after JSON
+            json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                data = json.loads(json_str)
+                return MedicalReasoning.from_dict(data)
+        except (json.JSONDecodeError, ValueError) as e:
+            print(f"Warning: Failed to parse JSON response: {e}")
+
+        # Fallback: try to parse unstructured response
+        return self._parse_unstructured_response(response)
+
+    def _parse_unstructured_response(self, response: str) -> MedicalReasoning:
+        """
+        Fallback parser for non-JSON responses.
+
+        Args:
+            response: Raw unstructured response
+
+        Returns:
+            MedicalReasoning object with best-effort parsing
+        """
+        symptoms = []
+        likely_cause = ""
+        treatment_type = ""
+        warnings = []
+        see_doctor = False
+
+        # Check for refusal
+        response_lower = response.lower()
+        refusal_phrases = ["i cannot", "i can't", "не мога", "not able to"]
+        if any(phrase in response_lower for phrase in refusal_phrases):
+            return MedicalReasoning(
+                symptoms=[],
+                likely_cause="Заявката не може да бъде обработена",
+                treatment_type="",
+                warnings=[],
+                see_doctor=False,
+            )
+
+        # Try to extract structured info from text
+        lines = response.split('\n')
+        for line in lines:
+            line_lower = line.lower()
+            if 'symptom' in line_lower or 'симптом' in line_lower:
+                # Extract symptoms
+                parts = line.split(':', 1)
+                if len(parts) > 1:
+                    symptoms = [s.strip() for s in parts[1].split(',') if s.strip()]
+            elif 'cause' in line_lower or 'причина' in line_lower:
+                parts = line.split(':', 1)
+                if len(parts) > 1:
+                    likely_cause = parts[1].strip()
+            elif 'treatment' in line_lower or 'лечение' in line_lower:
+                parts = line.split(':', 1)
+                if len(parts) > 1:
+                    treatment_type = parts[1].strip()
+            elif 'warning' in line_lower or 'предупрежден' in line_lower:
+                parts = line.split(':', 1)
+                if len(parts) > 1:
+                    warnings = [parts[1].strip()]
+            elif 'doctor' in line_lower or 'лекар' in line_lower:
+                see_doctor = True
+
+        # If nothing parsed, use the whole response as likely_cause
+        if not symptoms and not likely_cause and not treatment_type:
+            likely_cause = response[:200] if len(response) > 200 else response
+
+        return MedicalReasoning(
+            symptoms=symptoms,
+            likely_cause=likely_cause,
+            treatment_type=treatment_type,
+            warnings=warnings,
+            see_doctor=see_doctor,
+        )
 
     def refine_product_selection(
         self,
