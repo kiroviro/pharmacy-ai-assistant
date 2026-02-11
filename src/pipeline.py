@@ -10,11 +10,15 @@ Pipeline follows the Perplexity two-stage retrieval pattern:
 from dataclasses import dataclass, field
 from typing import Optional
 
-from src.medical_model import get_medical_model
+from src.medical_model import get_medical_model, MedicalReasoning
 from src.translator import get_translator
 from src.product_store import get_product_store
 from src.intent_classifier import get_intent_classifier
 from src.safety import get_safety_layer
+
+
+# Base URL for product links (configure for your site)
+PRODUCT_BASE_URL = "https://viapharma.bg/product"
 
 
 @dataclass
@@ -26,6 +30,7 @@ class Product:
     manufacturer: str = ""  # Производител
     category: str = ""
     tags: str = ""
+    url_handle: str = ""  # URL slug for product link
 
     # Pricing
     price_bgn: float = 0.0  # Price in лв
@@ -47,6 +52,13 @@ class Product:
     # Search relevance
     score: float = 0.0
 
+    @property
+    def product_url(self) -> str:
+        """Get the full URL to the product page."""
+        if self.url_handle:
+            return f"{PRODUCT_BASE_URL}/{self.url_handle}"
+        return ""
+
     @classmethod
     def from_chromadb(cls, data: dict) -> "Product":
         """Create a Product from ChromaDB search result."""
@@ -57,6 +69,7 @@ class Product:
             manufacturer=data.get("manufacturer", ""),
             category=data.get("category", ""),
             tags=data.get("tags", ""),
+            url_handle=data.get("url_handle", ""),
             price_bgn=float(data.get("price_bgn", 0)),
             price_eur=float(data.get("price_eur", 0)),
             description=data.get("description", ""),
@@ -72,26 +85,38 @@ class Product:
         )
 
     def to_display_string(self) -> str:
-        """Format product for display in chat."""
-        parts = [f"**{self.title}** ({self.price_bgn:.2f} лв / {self.price_eur:.2f} €)"]
+        """Format product for display in chat with clean markdown."""
+        lines = []
 
+        # Title - make it a link if URL available
+        if self.product_url:
+            lines.append(f"**[{self.title}]({self.product_url})**")
+        else:
+            lines.append(f"**{self.title}**")
+
+        # Price and brand on same line
+        price_line = f"💰 {self.price_bgn:.2f} лв ({self.price_eur:.2f} €)"
         if self.brand:
-            parts.append(f"   Марка: {self.brand}")
+            price_line += f"  •  🏷️ {self.brand}"
+        lines.append(price_line)
 
+        # Description - clean formatting, smart truncation
         if self.description:
-            # Truncate long descriptions
-            desc = self.description[:150] + "..." if len(self.description) > 150 else self.description
-            parts.append(f"   {desc}")
+            desc = self.description[:300].strip()
+            if len(self.description) > 300:
+                # Cut at last complete sentence or word
+                last_period = desc.rfind('.')
+                if last_period > 200:
+                    desc = desc[:last_period + 1]
+                else:
+                    desc = desc.rsplit(' ', 1)[0] + "..."
+            lines.append(f"\n{desc}")
 
-        if self.usage:
-            usage = self.usage[:100] + "..." if len(self.usage) > 100 else self.usage
-            parts.append(f"   Дозировка: {usage}")
+        # Add to cart link
+        if self.product_url:
+            lines.append(f"\n🛒 [Виж продукта / Купи]({self.product_url})")
 
-        if self.contraindications:
-            contra = self.contraindications[:100] + "..." if len(self.contraindications) > 100 else self.contraindications
-            parts.append(f"   ⚠️ {contra}")
-
-        return "\n".join(parts)
+        return "\n".join(lines)
 
 
 @dataclass
@@ -102,7 +127,7 @@ class PipelineResult:
     is_red_flag: bool = False
     original_text: str = ""
     translated_text: str = ""
-    medical_reasoning: str = ""
+    medical_reasoning: Optional[MedicalReasoning] = None
     candidate_products: list = field(default_factory=list)  # Stage 1: top-K from vector DB
     selected_products: list = field(default_factory=list)   # Stage 2: LLM-refined selection
 
@@ -280,17 +305,18 @@ class Pipeline:
         is_medical, confidence, reason = self.intent_classifier.is_medical_query(text)
         return is_medical
 
-    def _is_refusal_response(self, response: str) -> bool:
+    def _is_refusal_response(self, reasoning: MedicalReasoning) -> bool:
         """
         Check if MedGemma's response indicates it cannot or will not help.
 
         This catches cases where inappropriate queries slip through the intent
         classifier but MedGemma refuses to respond.
         """
-        if not response:
+        if not reasoning:
             return False
 
-        response_lower = response.lower()
+        # Check if the likely_cause indicates a refusal
+        response_lower = reasoning.likely_cause.lower() if reasoning.likely_cause else ""
 
         # Refusal phrases in English
         refusal_phrases_en = [
@@ -381,7 +407,7 @@ class Pipeline:
     # =========================================================================
     # Step 4: Safety Check
     # =========================================================================
-    def _check_safety(self, user_query: str, medical_reasoning: str) -> tuple[bool, str]:
+    def _check_safety(self, user_query: str, medical_reasoning: MedicalReasoning) -> tuple[bool, str]:
         """
         Check for red-flag symptoms that require professional medical attention.
 
@@ -389,6 +415,7 @@ class Pipeline:
         - Emergency symptoms (call 112/911)
         - Urgent symptoms (see doctor within 24-48h)
         - Warning symptoms (monitor, see doctor if persists)
+        - MedGemma's see_doctor recommendation
 
         Note: Only checks the USER's query, not the medical reasoning output.
         MedGemma often includes standard medical warnings that would trigger
@@ -399,12 +426,20 @@ class Pipeline:
         if result.is_red_flag:
             return True, result.message
 
+        # Also check if MedGemma flagged this as needing a doctor
+        if medical_reasoning.see_doctor:
+            return True, (
+                "⚠️ **Препоръчваме консултация с лекар.**\n\n"
+                "Базирано на вашите симптоми, препоръчваме да се консултирате "
+                "с медицински специалист за правилна диагноза и лечение."
+            )
+
         return False, ""
 
     # =========================================================================
     # Step 5a: Product Retrieval (Vector DB - FAST)
     # =========================================================================
-    def _retrieve_product_candidates(self, medical_reasoning: str, top_k: int = 10) -> list:
+    def _retrieve_product_candidates(self, medical_reasoning: MedicalReasoning, top_k: int = 10) -> list:
         """
         Stage 1: Fast vector similarity search to get top-K product candidates.
 
@@ -423,8 +458,19 @@ class Pipeline:
             print("Warning: Product store is empty. Run product_store.py --reload to load products.")
             return []
 
+        # Build search query from medical reasoning
+        search_parts = []
+        if medical_reasoning.treatment_type:
+            search_parts.append(medical_reasoning.treatment_type)
+        if medical_reasoning.symptoms:
+            search_parts.extend(medical_reasoning.symptoms)
+        if medical_reasoning.likely_cause:
+            search_parts.append(medical_reasoning.likely_cause)
+
+        search_query = " ".join(search_parts) if search_parts else "medicine"
+
         # Search ChromaDB using the medical reasoning as query
-        results = self.product_store.search(medical_reasoning, n_results=top_k)
+        results = self.product_store.search(search_query, n_results=top_k)
 
         # Convert results to Product objects
         products = []
@@ -444,7 +490,7 @@ class Pipeline:
     def _refine_product_selection(
         self,
         user_query: str,
-        medical_reasoning: str,
+        medical_reasoning: MedicalReasoning,
         candidates: list,
         max_products: int = 3
     ) -> list:
@@ -467,10 +513,15 @@ class Pipeline:
         if not candidates:
             return []
 
+        # Convert MedicalReasoning to string for LLM refinement
+        reasoning_str = f"Symptoms: {', '.join(medical_reasoning.symptoms)}. "
+        reasoning_str += f"Likely cause: {medical_reasoning.likely_cause}. "
+        reasoning_str += f"Treatment type: {medical_reasoning.treatment_type}."
+
         # Use MedGemma to refine the selection
         return self.medical_model.refine_product_selection(
             user_query=user_query,
-            medical_reasoning=medical_reasoning,
+            medical_reasoning=reasoning_str,
             candidate_products=candidates,
             max_products=max_products
         )
@@ -478,13 +529,13 @@ class Pipeline:
     # =========================================================================
     # Step 7: Response Formatting
     # =========================================================================
-    def _format_response(self, medical_reasoning: str, products: list) -> str:
+    def _format_response(self, medical_reasoning: MedicalReasoning, products: list) -> str:
         """Format the final response with products and disclaimer."""
 
         response_parts = []
 
-        # Medical context (translated back to Bulgarian)
-        response_parts.append(self._translate_to_bulgarian(medical_reasoning))
+        # Medical context (already formatted in Bulgarian)
+        response_parts.append(medical_reasoning.format_bulgarian())
 
         # Product recommendations
         if products:
