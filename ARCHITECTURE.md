@@ -287,13 +287,11 @@ docker run -d --name open-webui -p 3000:8080 \
 | Translation | ✅ Done | `src/translator.py` |
 | Product Store | ✅ Done | `src/product_store.py` |
 | Data Loader | ✅ Done | `src/data_loader.py` |
-| Intent Classifier | ⏳ Placeholder | - |
-| Safety Layer | ⏳ Placeholder | - |
+| Intent Classifier | ✅ Done | `src/intent_classifier.py` |
+| Safety Layer | ✅ Done | `src/safety.py` |
 
 ## Next Steps
 
 1. **Product Catalogue** - Load your CSV into ChromaDB
-2. **Product Catalogue** - Load CSV into ChromaDB
-3. **Intent Classifier** - Filter non-medical queries
-4. **Safety Layer** - Red-flag symptom detection
-5. **Testing** - Unit and integration tests
+2. **Testing** - Unit and integration tests
+3. **Performance Optimization** - Caching for common queries

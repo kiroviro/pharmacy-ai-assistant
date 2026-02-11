@@ -12,31 +12,85 @@ from typing import Optional
 
 from src.medical_model import get_medical_model
 from src.translator import get_translator
+from src.product_store import get_product_store
+from src.intent_classifier import get_intent_classifier
+from src.safety import get_safety_layer
 
 
 @dataclass
 class Product:
     """Represents a product from the catalogue."""
     id: str
-    name: str
-    category: str
-    active_ingredients: str = ""
-    indications: str = ""
-    dosage: str = ""
-    contraindications: str = ""
-    warnings: str = ""
-    price: float = 0.0
+    title: str  # Product name
+    brand: str = ""  # Марка
+    manufacturer: str = ""  # Производител
+    category: str = ""
+    tags: str = ""
+
+    # Pricing
+    price_bgn: float = 0.0  # Price in лв
+    price_eur: float = 0.0  # Price in €
+
+    # Product details
+    description: str = ""  # Описание
+    composition: str = ""  # Състав
+    usage: str = ""  # Начин на употреба
+    contraindications: str = ""  # Противопоказания
+
+    # Additional info
+    barcode: str = ""
+    image_url: str = ""
+    target_audience: str = ""  # За кого
+    form: str = ""  # Форма
     is_otc: bool = True
+
+    # Search relevance
+    score: float = 0.0
+
+    @classmethod
+    def from_chromadb(cls, data: dict) -> "Product":
+        """Create a Product from ChromaDB search result."""
+        return cls(
+            id=str(data.get("id", data.get("sku", ""))),
+            title=data.get("title", ""),
+            brand=data.get("brand", ""),
+            manufacturer=data.get("manufacturer", ""),
+            category=data.get("category", ""),
+            tags=data.get("tags", ""),
+            price_bgn=float(data.get("price_bgn", 0)),
+            price_eur=float(data.get("price_eur", 0)),
+            description=data.get("description", ""),
+            composition=data.get("composition", ""),
+            usage=data.get("usage", ""),
+            contraindications=data.get("contraindications", ""),
+            barcode=data.get("barcode", ""),
+            image_url=data.get("image_url", ""),
+            target_audience=data.get("target_audience", ""),
+            form=data.get("form", ""),
+            is_otc=data.get("is_otc", True),
+            score=float(data.get("score", 0)),
+        )
 
     def to_display_string(self) -> str:
         """Format product for display in chat."""
-        parts = [f"**{self.name}** ({self.price:.2f} лв)"]
-        if self.indications:
-            parts.append(f"   - {self.indications}")
-        if self.dosage:
-            parts.append(f"   - Дозировка: {self.dosage}")
-        if self.warnings:
-            parts.append(f"   - ⚠️ {self.warnings}")
+        parts = [f"**{self.title}** ({self.price_bgn:.2f} лв / {self.price_eur:.2f} €)"]
+
+        if self.brand:
+            parts.append(f"   Марка: {self.brand}")
+
+        if self.description:
+            # Truncate long descriptions
+            desc = self.description[:150] + "..." if len(self.description) > 150 else self.description
+            parts.append(f"   {desc}")
+
+        if self.usage:
+            usage = self.usage[:100] + "..." if len(self.usage) > 100 else self.usage
+            parts.append(f"   Дозировка: {usage}")
+
+        if self.contraindications:
+            contra = self.contraindications[:100] + "..." if len(self.contraindications) > 100 else self.contraindications
+            parts.append(f"   ⚠️ {contra}")
+
         return "\n".join(parts)
 
 
@@ -69,10 +123,12 @@ class Pipeline:
         Args:
             lazy_load: If True, models are loaded on first use. If False, load immediately.
         """
-        # Component placeholders - will be replaced with real implementations
-        self.intent_classifier = None
-        self.safety_layer = None
-        self.vector_store = None
+        # Initialize intent classifier and safety layer
+        self.intent_classifier = get_intent_classifier()
+        self.safety_layer = get_safety_layer()
+
+        # Product store (ChromaDB)
+        self._product_store = None
 
         # Models (lazy loaded by default for faster startup)
         self._medical_model = None
@@ -82,6 +138,19 @@ class Pipeline:
         if not lazy_load:
             self._load_medical_model()
             self._load_translator()
+            self._load_product_store()
+
+    def _load_product_store(self):
+        """Load the product store."""
+        if self._product_store is None:
+            self._product_store = get_product_store()
+
+    @property
+    def product_store(self):
+        """Get the product store, loading it if necessary."""
+        if self._product_store is None:
+            self._load_product_store()
+        return self._product_store
 
     def _load_translator(self):
         """Load the translator models."""
@@ -129,7 +198,7 @@ class Pipeline:
         is_medical = self._classify_intent(user_input)
         if not is_medical:
             return PipelineResult(
-                response="Мога да помогна само с въпроси, свързани със здравето. Моля, опишете вашите симптоми.",
+                response=self.intent_classifier.get_rejection_message("bg"),
                 is_medical=False,
                 original_text=user_input
             )
@@ -143,8 +212,9 @@ class Pipeline:
         # Step 4: Safety Check
         is_red_flag, safety_message = self._check_safety(translated, medical_reasoning)
         if is_red_flag:
+            # Safety messages are already in Bulgarian, no translation needed
             return PipelineResult(
-                response=self._translate_to_bulgarian(safety_message),
+                response=safety_message,
                 is_medical=True,
                 is_red_flag=True,
                 original_text=user_input,
@@ -155,6 +225,9 @@ class Pipeline:
         # Step 5a: Product Retrieval - Vector DB returns top-K candidates (FAST)
         candidate_products = self._retrieve_product_candidates(medical_reasoning)
 
+        # Filter to OTC-only products
+        candidate_products = self.safety_layer.filter_otc_only(candidate_products)
+
         # Step 5b: Product Refinement - LLM picks best matches (ACCURATE)
         selected_products = self._refine_product_selection(
             user_query=translated,
@@ -162,11 +235,17 @@ class Pipeline:
             candidates=candidate_products
         )
 
+        # Check for warning-level symptoms (not blocking, but add message)
+        warning_result = self.safety_layer.check_safety(user_input)
+
         # Step 6 & 7: Translate back and format response
         final_response = self._format_response(
             medical_reasoning=medical_reasoning,
             products=selected_products
         )
+
+        # Add warning message if applicable
+        final_response = self.safety_layer.add_safety_disclaimer(final_response, warning_result)
 
         return PipelineResult(
             response=final_response,
@@ -186,10 +265,10 @@ class Pipeline:
         """
         Check if input is a medical/health query.
 
-        Placeholder: always returns True
-        TODO: Replace with DistilBERT multilingual classifier
+        Uses keyword-based classification with Bulgarian and English medical terms.
         """
-        return True
+        is_medical, confidence, reason = self.intent_classifier.is_medical_query(text)
+        return is_medical
 
     # =========================================================================
     # Step 2 & 6: Translation
@@ -243,13 +322,21 @@ class Pipeline:
         """
         Check for red-flag symptoms that require professional medical attention.
 
-        Placeholder: no red flags
-        TODO: Replace with safety layer checking for:
-        - Chest pain, difficulty breathing
-        - Sudden severe symptoms
-        - Symptoms lasting too long
-        - Any prescription-only conditions
+        Checks for:
+        - Emergency symptoms (call 112/911)
+        - Urgent symptoms (see doctor within 24-48h)
+        - Warning symptoms (monitor, see doctor if persists)
         """
+        # Check user query first
+        result = self.safety_layer.check_safety(user_query)
+        if result.is_red_flag:
+            return True, result.message
+
+        # Also check medical reasoning for any red flags
+        result = self.safety_layer.check_safety(medical_reasoning)
+        if result.is_red_flag:
+            return True, result.message
+
         return False, ""
 
     # =========================================================================
@@ -259,8 +346,8 @@ class Pipeline:
         """
         Stage 1: Fast vector similarity search to get top-K product candidates.
 
-        Placeholder: returns empty list
-        TODO: Replace with ChromaDB vector search
+        Uses ChromaDB with multilingual embeddings to find relevant products
+        based on the medical reasoning from MedGemma.
 
         Args:
             medical_reasoning: The medical analysis from MedGemma
@@ -269,42 +356,25 @@ class Pipeline:
         Returns:
             List of Product objects (candidates, not final selection)
         """
-        # Placeholder products for testing
-        return [
-            Product(
-                id="1",
-                name="Парацетамол 500mg",
-                category="Аналгетици",
-                indications="Главоболие, температура, болки",
-                dosage="1-2 таблетки на всеки 4-6 часа",
-                contraindications="Чернодробни заболявания",
-                warnings="Не превишавайте 8 таблетки дневно",
-                price=3.99,
-                is_otc=True
-            ),
-            Product(
-                id="2",
-                name="Ибупрофен 400mg",
-                category="НСПВС",
-                indications="Болка, възпаление, температура",
-                dosage="1 таблетка на всеки 6-8 часа",
-                contraindications="Стомашни язви, бременност",
-                warnings="Приемайте с храна",
-                price=5.99,
-                is_otc=True
-            ),
-            Product(
-                id="3",
-                name="Аспирин 500mg",
-                category="Аналгетици",
-                indications="Болка, температура, възпаление",
-                dosage="1-2 таблетки на всеки 4 часа",
-                contraindications="Деца под 16, астма",
-                warnings="Не приемайте на празен стомах",
-                price=4.50,
-                is_otc=True
-            ),
-        ]
+        # Check if product store has products
+        if self.product_store.collection.count() == 0:
+            print("Warning: Product store is empty. Run product_store.py --reload to load products.")
+            return []
+
+        # Search ChromaDB using the medical reasoning as query
+        results = self.product_store.search(medical_reasoning, n_results=top_k)
+
+        # Convert results to Product objects
+        products = []
+        for result in results:
+            try:
+                product = Product.from_chromadb(result)
+                products.append(product)
+            except Exception as e:
+                print(f"Warning: Failed to parse product: {e}")
+                continue
+
+        return products
 
     # =========================================================================
     # Step 5b: Product Refinement (LLM - ACCURATE)
