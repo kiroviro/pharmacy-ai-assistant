@@ -12,25 +12,22 @@ Uses **Perplexity-style two-stage retrieval** for accurate product matching:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                           USER INTERFACES                                     │
+│                           USER INTERFACE                                      │
 └──────────────────────────────────────────────────────────────────────────────┘
 
-  Option 1: Open WebUI                    Option 2: Gradio
-  ┌─────────────────┐                    ┌─────────────────┐
-  │   Open WebUI    │                    │  app_gradio.py  │
-  │   Port 3000     │                    │   Port 7860     │
-  └────────┬────────┘                    └────────┬────────┘
-           │                                      │
-           ▼                                      │
-  ┌─────────────────┐                             │
-  │  api_server.py  │                             │
-  │   Port 8000     │                             │
-  │  (OpenAI API)   │                             │
-  └────────┬────────┘                             │
-           │                                      │
-           └──────────────┬───────────────────────┘
-                          │
-                          ▼
+  ┌─────────────────┐
+  │   Open WebUI    │
+  │   Port 3000     │
+  └────────┬────────┘
+           │
+           ▼
+  ┌─────────────────┐
+  │  api_server.py  │
+  │   Port 8000     │
+  │  (OpenAI API)   │
+  └────────┬────────┘
+           │
+           ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                              PIPELINE FLOW                                    │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -92,20 +89,14 @@ Uses **Perplexity-style two-stage retrieval** for accurate product matching:
                       └───────────────┘
 ```
 
-## User Interface Options
+## User Interface
 
-### Option 1: Open WebUI (Recommended)
+### Open WebUI
 - Full-featured chat interface
 - Conversation history
 - Model selection
 - Runs via `api_server.py` (OpenAI-compatible API)
 - See `OPEN_WEBUI_SETUP.md` for setup instructions
-
-### Option 2: Gradio (Simple)
-- Lightweight chat interface
-- Quick testing and demos
-- Runs via `app_gradio.py`
-- Access at `http://localhost:7860`
 
 ## Two-Stage Retrieval (Key Innovation)
 
@@ -199,7 +190,6 @@ medgemma/
 ├── requirements.txt            # Python dependencies
 │
 ├── api_server.py               # OpenAI-compatible API (for Open WebUI)
-├── app_gradio.py               # Gradio chat interface
 │
 ├── models/
 │   └── medgemma-4b-it-bf16/    # MedGemma model (git-ignored)
@@ -241,7 +231,6 @@ sentence-transformers   # Multilingual embeddings
 # API & UI
 fastapi                 # REST API
 uvicorn                 # ASGI server
-gradio                  # Web UI (fallback)
 pydantic                # Request/response models
 
 # Utils
@@ -251,13 +240,6 @@ python-dotenv           # Environment variables
 
 ## Running the Application
 
-### Quick Start (Gradio)
-```bash
-python app_gradio.py
-# Open http://localhost:7860
-```
-
-### With Open WebUI
 ```bash
 # Terminal 1: Start API server
 python api_server.py
@@ -326,7 +308,6 @@ Allows recommendations but adds warning message:
 
 | Component | Status | File |
 |-----------|--------|------|
-| Gradio UI | ✅ Done | `app_gradio.py` |
 | OpenAI API | ✅ Done | `api_server.py` |
 | Pipeline | ✅ Done | `src/pipeline.py` |
 | MedGemma | ✅ Done | `src/medical_model.py` |

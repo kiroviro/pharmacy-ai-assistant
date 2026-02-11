@@ -209,6 +209,16 @@ class Pipeline:
         # Step 3: Medical Reasoning - understand symptoms and suggest treatment types
         medical_reasoning = self._get_medical_reasoning(translated)
 
+        # Check if MedGemma refused to help (non-medical query slipped through)
+        if self._is_refusal_response(medical_reasoning):
+            return PipelineResult(
+                response=self.intent_classifier.get_rejection_message("bg"),
+                is_medical=False,
+                original_text=user_input,
+                translated_text=translated,
+                medical_reasoning=medical_reasoning
+            )
+
         # Step 4: Safety Check
         is_red_flag, safety_message = self._check_safety(translated, medical_reasoning)
         if is_red_flag:
@@ -269,6 +279,59 @@ class Pipeline:
         """
         is_medical, confidence, reason = self.intent_classifier.is_medical_query(text)
         return is_medical
+
+    def _is_refusal_response(self, response: str) -> bool:
+        """
+        Check if MedGemma's response indicates it cannot or will not help.
+
+        This catches cases where inappropriate queries slip through the intent
+        classifier but MedGemma refuses to respond.
+        """
+        if not response:
+            return False
+
+        response_lower = response.lower()
+
+        # Refusal phrases in English
+        refusal_phrases_en = [
+            "i cannot",
+            "i can't",
+            "i'm not able to",
+            "i am not able to",
+            "i will not",
+            "i won't",
+            "cannot fulfill",
+            "can't fulfill",
+            "cannot help with",
+            "can't help with",
+            "not appropriate",
+            "inappropriate request",
+            "decline to",
+            "refuse to",
+            "against my guidelines",
+            "violates my guidelines",
+            "not a medical",
+            "isn't a medical",
+            "is not a medical",
+        ]
+
+        # Refusal phrases in Bulgarian
+        refusal_phrases_bg = [
+            "не мога",
+            "не съм в състояние",
+            "не е възможно",
+            "не е подходящо",
+            "неподходящ",
+            "отказвам",
+            "не е медицински",
+            "това не е",
+        ]
+
+        for phrase in refusal_phrases_en + refusal_phrases_bg:
+            if phrase in response_lower:
+                return True
+
+        return False
 
     # =========================================================================
     # Step 2 & 6: Translation
