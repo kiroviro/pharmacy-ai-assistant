@@ -530,28 +530,33 @@ class Pipeline:
     # Step 7: Response Formatting
     # =========================================================================
     def _format_response(self, medical_reasoning: MedicalReasoning, products: list) -> str:
-        """Format the final response with products and disclaimer."""
+        """Format the final response as a friendly pharmacy assistant."""
 
         response_parts = []
 
-        # Medical context (already formatted in Bulgarian)
-        response_parts.append(medical_reasoning.format_bulgarian())
+        # Simple friendly intro
+        response_parts.append("Въз основа на вашите симптоми, ето какво препоръчвам:")
 
         # Product recommendations
         if products:
-            response_parts.append("\n\n**Препоръчани продукти:**\n")
+            response_parts.append("")  # Empty line
             for i, product in enumerate(products, 1):
                 if isinstance(product, Product):
-                    response_parts.append(f"{i}. {product.to_display_string()}\n")
+                    response_parts.append(f"### {i}. {product.to_display_string()}\n")
                 else:
-                    response_parts.append(f"{i}. {product}\n")
+                    response_parts.append(f"### {i}. {product}\n")
         else:
-            response_parts.append("\n\n*[Продуктовият каталог все още не е зареден]*")
+            response_parts.append("\n*Съжалявам, не намерих подходящи продукти в каталога.*")
+
+        # Add see doctor warning if needed
+        if medical_reasoning.see_doctor:
+            response_parts.append("\n⚠️ **Важно:** Ако симптомите продължат или се влошат, "
+                                "моля консултирайте се с лекар.")
 
         # Disclaimer (always shown)
         response_parts.append("\n---")
-        response_parts.append("*Това е информационна услуга, не медицински съвет.*")
-        response_parts.append("*Консултирайте се с фармацевт за повече информация.*")
+        response_parts.append("*Това е информационна услуга, не медицински съвет. "
+                            "Консултирайте се с фармацевт за повече информация.*")
 
         return "\n".join(response_parts)
 
