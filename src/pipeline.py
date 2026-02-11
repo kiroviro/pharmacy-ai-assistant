@@ -18,7 +18,7 @@ from src.safety import get_safety_layer
 
 
 # Base URL for product links (configure for your site)
-PRODUCT_BASE_URL = "https://viapharma.bg/product"
+PRODUCT_BASE_URL = "https://viapharma.us/products"
 
 
 @dataclass
