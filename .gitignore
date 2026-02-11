@@ -57,6 +57,12 @@ data/*.csv
 # ChromaDB (generated, can be rebuilt)
 data/chromadb/
 
+# Metrics data (generated during evaluation)
+data/metrics/*.json
+
+# Query collection (development/testing only)
+data/queries/*.jsonl
+
 # Testing
 .coverage
 .pytest_cache/

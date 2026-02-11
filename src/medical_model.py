@@ -124,6 +124,9 @@ IMPORTANT RULES:
 - DO NOT say "I need more information"
 - ALWAYS provide a recommendation based on the symptoms given
 - Output ONLY valid JSON, nothing else
+- For infants/children: ALWAYS set see_doctor=true and include pediatric warning
+- For chronic conditions (diabetes, thyroid, etc.): ALWAYS mention prescription requirement
+- For drug interactions or safety queries: ALWAYS include safety warnings
 
 For the given symptoms, respond with this exact JSON format:
 {
@@ -134,8 +137,27 @@ For the given symptoms, respond with this exact JSON format:
   "see_doctor": false
 }
 
-Example input: "headache"
-Example output: {"symptoms": ["headache"], "likely_cause": "tension or stress", "treatment_type": "analgesics", "warnings": ["See doctor if severe or persistent"], "see_doctor": false}
+EXAMPLES:
+
+Example 1 - Simple symptom:
+Input: "headache"
+Output: {"symptoms": ["headache"], "likely_cause": "tension or stress", "treatment_type": "analgesics", "warnings": ["See doctor if severe or persistent"], "see_doctor": false}
+
+Example 2 - Child/infant (MUST recommend pediatric consultation):
+Input: "my 6 month old baby has fever"
+Output: {"symptoms": ["fever", "infant"], "likely_cause": "viral infection", "treatment_type": "pediatric antipyretics", "warnings": ["Always consult pediatrician for infants under 1 year", "Monitor for dehydration", "Seek immediate care if fever exceeds 38.5C"], "see_doctor": true}
+
+Example 3 - Multiple symptoms:
+Input: "sore throat with fever and body aches for 3 days"
+Output: {"symptoms": ["sore throat", "fever", "body aches"], "likely_cause": "viral infection possibly flu", "treatment_type": "antipyretics and throat lozenges", "warnings": ["See doctor if fever persists beyond 3 days", "Watch for difficulty swallowing"], "see_doctor": false}
+
+Example 4 - Chronic condition (MUST flag prescription needs):
+Input: "I have diabetes and need medication"
+Output: {"symptoms": ["diabetes management"], "likely_cause": "chronic condition", "treatment_type": "consult physician - prescription required", "warnings": ["Diabetes medications require prescription", "Regular monitoring needed", "OTC supplements may help but consult doctor first"], "see_doctor": true}
+
+Example 5 - Drug interaction/safety query:
+Input: "can I take ibuprofen with alcohol"
+Output: {"symptoms": ["drug interaction query"], "likely_cause": "safety concern", "treatment_type": "avoid combination", "warnings": ["Ibuprofen and alcohol increase stomach bleeding risk", "Wait at least 24 hours between use", "Consider paracetamol as safer alternative"], "see_doctor": false}
 
 Now analyze the symptoms and output JSON:"""
 
