@@ -219,6 +219,38 @@ class MedicalModel:
 
         return self._parse_medical_response(response)
 
+    # Garbage phrases that should not appear in output (from product side effects, etc.)
+    GARBAGE_PHRASES = [
+        "с неизвестна честота",
+        "неизвестна честота",
+        "unknown frequency",
+        "нежелани реакции",
+        "странични ефекти",
+        "side effects",
+    ]
+
+    def _sanitize_text(self, text: str) -> str:
+        """Remove garbage phrases from text."""
+        if not text:
+            return text
+        result = text
+        for phrase in self.GARBAGE_PHRASES:
+            result = result.replace(phrase, "").strip()
+        # Clean up double spaces and punctuation
+        result = re.sub(r'\s+', ' ', result)
+        result = re.sub(r'[,;:]+\s*[,;:]+', '', result)
+        return result.strip()
+
+    def _sanitize_reasoning(self, reasoning: MedicalReasoning) -> MedicalReasoning:
+        """Sanitize all fields in MedicalReasoning to remove garbage text."""
+        return MedicalReasoning(
+            symptoms=[self._sanitize_text(s) for s in reasoning.symptoms if self._sanitize_text(s)],
+            likely_cause=self._sanitize_text(reasoning.likely_cause),
+            treatment_type=self._sanitize_text(reasoning.treatment_type),
+            warnings=[self._sanitize_text(w) for w in reasoning.warnings if self._sanitize_text(w)],
+            see_doctor=reasoning.see_doctor,
+        )
+
     def _parse_medical_response(self, response: str) -> MedicalReasoning:
         """
         Parse the JSON response from MedGemma into a MedicalReasoning object.
@@ -227,8 +259,9 @@ class MedicalModel:
             response: Raw response from the model
 
         Returns:
-            MedicalReasoning object
+            MedicalReasoning object (sanitized)
         """
+        reasoning = None
         try:
             # Try to extract JSON from response
             # Sometimes the model adds text before/after JSON
@@ -236,12 +269,16 @@ class MedicalModel:
             if json_match:
                 json_str = json_match.group()
                 data = json.loads(json_str)
-                return MedicalReasoning.from_dict(data)
+                reasoning = MedicalReasoning.from_dict(data)
         except (json.JSONDecodeError, ValueError) as e:
             print(f"Warning: Failed to parse JSON response: {e}")
 
         # Fallback: try to parse unstructured response
-        return self._parse_unstructured_response(response)
+        if reasoning is None:
+            reasoning = self._parse_unstructured_response(response)
+
+        # Sanitize to remove garbage text
+        return self._sanitize_reasoning(reasoning)
 
     def _parse_unstructured_response(self, response: str) -> MedicalReasoning:
         """
@@ -295,9 +332,10 @@ class MedicalModel:
             elif 'doctor' in line_lower or 'лекар' in line_lower:
                 see_doctor = True
 
-        # If nothing parsed, use the whole response as likely_cause
+        # If nothing parsed, use a generic Bulgarian message
         if not symptoms and not likely_cause and not treatment_type:
-            likely_cause = response[:200] if len(response) > 200 else response
+            likely_cause = "Общо неразположение"
+            treatment_type = "симптоматично лечение"
 
         return MedicalReasoning(
             symptoms=symptoms,

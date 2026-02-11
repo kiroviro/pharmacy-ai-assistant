@@ -60,6 +60,8 @@ class ModelInfo(BaseModel):
     object: str = "model"
     created: int
     owned_by: str
+    description: str = ""
+    meta: dict = {}
 
 
 class ModelsResponse(BaseModel):
@@ -85,14 +87,28 @@ SYSTEM_PROMPT = """Вие сте ViaPharma Аптечен Асистент - в�
 - Препоръчвайте САМО продукти без рецепта
 """
 
+# Bulgarian medical hints - suggested queries for UI
+MODEL_HINTS = [
+    "Имам главоболие и се чувствам уморен",
+    "Какво да взема за настинка?",
+    "Боли ме гърлото от няколко дни",
+    "Имам стомашни болки и гадене",
+    "Търся нещо за алергия",
+    "Какво помага при безсъние?",
+    "Имам болки в мускулите след тренировка",
+    "Търся витамини за имунитет",
+]
+
+MODEL_DESCRIPTION = "Аптечен асистент за препоръки на продукти без рецепта. Опишете вашите симптоми на български език."
+
 
 # =============================================================================
 # FastAPI Application
 # =============================================================================
 
 app = FastAPI(
-    title="ViaPharma API",
-    description="OpenAI-compatible API for ViaPharma OTC Chatbot",
+    title="ViaPharma Аптечен Асистент",
+    description="API за аптечен чатбот - препоръки за продукти без рецепта на български език",
     version="1.0.0",
 )
 
@@ -114,7 +130,27 @@ app.add_middleware(
 @app.get("/")
 async def root():
     """Health check endpoint."""
-    return {"status": "ok", "service": "ViaPharma API"}
+    return {
+        "status": "ok",
+        "service": "ViaPharma Аптечен Асистент",
+        "description": MODEL_DESCRIPTION,
+        "language": "bg"
+    }
+
+
+@app.get("/hints")
+async def get_hints():
+    """
+    Get suggested medical queries in Bulgarian.
+
+    These hints can be displayed in the UI to help users know what to ask.
+    """
+    return {
+        "hints": MODEL_HINTS,
+        "placeholder": "Опишете вашите симптоми...",
+        "welcome_message": "Здравейте! Аз съм вашият аптечен асистент. Как мога да ви помогна днес?",
+        "examples_title": "Примерни въпроси:",
+    }
 
 
 @app.get("/v1/models", response_model=ModelsResponse)
@@ -127,6 +163,12 @@ async def list_models():
                 id="viapharma-medgemma",
                 created=int(time.time()),
                 owned_by="viapharma",
+                description=MODEL_DESCRIPTION,
+                meta={
+                    "hints": MODEL_HINTS,
+                    "language": "bg",
+                    "category": "medical",
+                }
             )
         ]
     )
@@ -149,7 +191,7 @@ async def chat_completions(request: ChatCompletionRequest):
             break
 
     if not user_message:
-        raise HTTPException(status_code=400, detail="No user message found")
+        raise HTTPException(status_code=400, detail="Няма съобщение от потребителя")
 
     # Handle streaming (simplified - just returns full response)
     if request.stream:
@@ -244,10 +286,14 @@ async def _stream_response(user_message: str, model: str):
 if __name__ == "__main__":
     import uvicorn
 
-    print("Starting ViaPharma API server...")
-    print("OpenAI-compatible endpoints available at:")
-    print("  - GET  /v1/models")
-    print("  - POST /v1/chat/completions")
-    print("\nConnect Open WebUI to: http://localhost:8000/v1")
+    print("=" * 60)
+    print("🏥 ViaPharma Аптечен Асистент - API Сървър")
+    print("=" * 60)
+    print("\nOpenAI-съвместими endpoints:")
+    print("  - GET  /v1/models        (списък модели)")
+    print("  - POST /v1/chat/completions (чат)")
+    print("  - GET  /hints            (примерни въпроси)")
+    print("\n📡 Свържете Open WebUI към: http://localhost:8000/v1")
+    print("=" * 60)
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
