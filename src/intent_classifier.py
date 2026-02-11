@@ -61,6 +61,12 @@ class IntentClassifier:
             'болкоуспокояващо', 'антибиотик',
             'какво да взема', 'какво помага', 'какво да направя',
             'препоръчай', 'препоръчайте', 'посъветвай',
+
+            # Age-specific (children/babies)
+            'бебе', 'бебета', 'бебешки', 'бебешка',
+            'дете', 'деца', 'детски', 'детска',
+            'новородено', 'кърмаче',
+            'дозировка за дете', 'доза за дете',
         }
 
         # English medical keywords (backup if query comes in English)
@@ -95,7 +101,7 @@ class IntentClassifier:
 
         # Non-medical keywords (strong indicators of off-topic)
         self.non_medical_keywords = {
-            # Bulgarian
+            # Bulgarian - general
             'времето', 'прогноза', 'температура навън',
             'новини', 'спорт', 'футбол', 'мач',
             'рецепта за', 'готвене', 'храна', 'ресторант',
@@ -105,7 +111,21 @@ class IntentClassifier:
             'банка', 'пари', 'кредит', 'сметка',
             'шега', 'виц', 'смешно',
 
-            # English
+            # Bulgarian - e-commerce/delivery/payment
+            'доставка', 'доставката', 'доставя', 'доставяне',
+            'колко време се доставя', 'кога ще пристигне',
+            'поръчка', 'поръчката', 'поръчам', 'поръчвам',
+            'статус на поръчка', 'проследя', 'проследяване',
+            'плащане', 'платя', 'плащам', 'начин на плащане',
+            'карта', 'с карта', 'банкова карта', 'кредитна карта',
+            'наложен платеж', 'в брой', 'кеш',
+            'връщане', 'върна', 'връщам', 'да върна продукт',
+            'фактура', 'получа фактура', 'данъчна фактура',
+            'отстъпка', 'промоция', 'намаление', 'по-голяма поръчка',
+            'цена на доставка', 'цената на доставката', 'безплатна доставка',
+            'работно време', 'адрес на аптека', 'къде се намирате',
+
+            # English - general
             'weather', 'forecast', 'news', 'sports', 'football',
             'recipe', 'cooking', 'restaurant', 'food',
             'movie', 'music', 'song', 'book',
@@ -113,6 +133,16 @@ class IntentClassifier:
             'work', 'office', 'meeting', 'project',
             'bank', 'money', 'loan', 'account',
             'joke', 'funny', 'tell me a',
+
+            # English - e-commerce/delivery/payment
+            'delivery', 'shipping', 'deliver', 'ship',
+            'order', 'order status', 'track order', 'tracking',
+            'payment', 'pay', 'pay with card', 'credit card',
+            'cash on delivery', 'cod',
+            'return', 'refund', 'return product',
+            'invoice', 'receipt',
+            'discount', 'promotion', 'sale',
+            'free shipping', 'delivery cost', 'shipping cost',
         }
 
         # Profanity/inappropriate language (Bulgarian and English)
@@ -141,7 +171,12 @@ class IntentClassifier:
         bg_pattern = '|'.join(re.escape(kw) for kw in self.bg_medical_keywords)
         en_pattern = '|'.join(re.escape(kw) for kw in self.en_medical_keywords)
         non_med_pattern = '|'.join(re.escape(kw) for kw in self.non_medical_keywords)
-        profanity_pattern = '|'.join(re.escape(kw) for kw in self.profanity_keywords)
+
+        # Profanity needs word boundaries to avoid false positives
+        # e.g. "бебе" should not match profanity patterns
+        profanity_pattern = '|'.join(
+            r'\b' + re.escape(kw) + r'\b' for kw in self.profanity_keywords
+        )
 
         self._bg_medical_pattern = re.compile(f'({bg_pattern})', re.IGNORECASE)
         self._en_medical_pattern = re.compile(f'\\b({en_pattern})\\b', re.IGNORECASE)

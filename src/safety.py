@@ -53,6 +53,13 @@ class SafetyLayer:
             'отравяне', 'отрових се', 'погълнах',
             'суицидни мисли', 'искам да се убия', 'самоубийство',
 
+            # Bulgarian - severe allergic reactions
+            'силна алергична реакция', 'тежка алергична реакция',
+            'силна алергия', 'тежка алергия',
+            'подуване на гърлото', 'оток на гърлото', 'подут език',
+            'не мога да преглъщам', 'задушавам се от алергия',
+            'обрив по цялото тяло', 'подуване на лицето',
+
             # English
             "can't breathe", "cannot breathe", "difficulty breathing", "choking",
             "chest pain", "chest pressure", "chest tightness",
@@ -65,6 +72,12 @@ class SafetyLayer:
             "anaphylaxis", "anaphylactic shock",
             "poisoning", "overdose", "swallowed",
             "suicidal", "want to kill myself", "suicide",
+
+            # English - severe allergic reactions
+            "severe allergic reaction", "serious allergic reaction",
+            "severe allergy", "throat swelling", "throat closing",
+            "swollen tongue", "can't swallow", "whole body rash",
+            "face swelling", "lips swelling",
         }
 
         # Urgent symptoms - should see doctor within 24-48 hours

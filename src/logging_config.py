@@ -190,3 +190,105 @@ def init_default_logger(level: str = "INFO", json_format: bool = False):
     global _default_logger
     _default_logger = setup_logging(level=level, json_format=json_format)
     return _default_logger
+
+
+# =============================================================================
+# Audit Logging for Medical Queries (Regulatory Compliance)
+# =============================================================================
+
+_audit_logger: Optional[logging.Logger] = None
+
+
+def get_audit_logger() -> logging.Logger:
+    """
+    Get the audit logger for medical query tracking.
+
+    Audit logs are always JSON format and written to a separate file
+    for compliance and liability purposes.
+    """
+    global _audit_logger
+    if _audit_logger is None:
+        _audit_logger = logging.getLogger("viapharma.audit")
+        _audit_logger.setLevel(logging.INFO)
+        _audit_logger.handlers.clear()
+
+        # Always use JSON formatter for audit logs
+        formatter = JsonFormatter()
+
+        # Console handler for audit logs
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(formatter)
+        console_handler.addFilter(RequestIdFilter())
+        _audit_logger.addHandler(console_handler)
+
+        # File handler for persistent audit trail
+        import os
+        from pathlib import Path
+
+        audit_dir = Path("logs/audit")
+        audit_dir.mkdir(parents=True, exist_ok=True)
+
+        file_handler = logging.FileHandler(
+            audit_dir / "medical_queries.jsonl",
+            encoding="utf-8"
+        )
+        file_handler.setFormatter(formatter)
+        file_handler.addFilter(RequestIdFilter())
+        _audit_logger.addHandler(file_handler)
+
+        _audit_logger.propagate = False
+
+    return _audit_logger
+
+
+def log_medical_query(
+    query_hash: str,
+    is_medical: bool,
+    is_red_flag: bool,
+    products_recommended: list[str],
+    safety_severity: str,
+    response_length: int,
+    client_ip_hash: str = "",
+    duration_ms: float = 0.0,
+):
+    """
+    Log a medical query for audit purposes.
+
+    Privacy-preserving: logs hashes instead of actual query content.
+
+    Args:
+        query_hash: SHA256 hash of the user query (privacy-preserving)
+        is_medical: Whether the query was classified as medical
+        is_red_flag: Whether red-flag symptoms were detected
+        products_recommended: List of product SKUs recommended
+        safety_severity: Safety check severity level
+        response_length: Length of the response
+        client_ip_hash: Hashed client IP (privacy-preserving)
+        duration_ms: Request processing time
+    """
+    import hashlib
+    from datetime import datetime, timezone
+
+    audit = get_audit_logger()
+    audit.info(
+        "medical_query_processed",
+        extra={
+            "event_type": "medical_query",
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "query_hash": query_hash,
+            "client_ip_hash": client_ip_hash,
+            "is_medical": is_medical,
+            "is_red_flag": is_red_flag,
+            "safety_severity": safety_severity,
+            "products_count": len(products_recommended),
+            "products_skus": products_recommended[:5],  # Limit to first 5
+            "response_length": response_length,
+            "duration_ms": round(duration_ms, 2),
+        }
+    )
+
+
+def hash_for_audit(text: str) -> str:
+    """Create a privacy-preserving hash for audit logging."""
+    import hashlib
+    return hashlib.sha256(text.encode()).hexdigest()[:16]

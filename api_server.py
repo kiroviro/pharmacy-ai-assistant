@@ -19,7 +19,10 @@ from pydantic import BaseModel, Field
 
 from src.pipeline import get_pipeline
 from src.config import get_settings
-from src.logging_config import init_default_logger, get_logger, set_request_id
+from src.logging_config import (
+    init_default_logger, get_logger, set_request_id,
+    log_medical_query, hash_for_audit
+)
 
 # Load settings
 settings = get_settings()
@@ -293,10 +296,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for Open WebUI
+# CORS for Open WebUI and viapharma.us
+# Parse allowed origins from config (comma-separated)
+cors_origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -365,6 +370,59 @@ async def root():
         "service": "ViaPharma Аптечен Асистент",
         "description": MODEL_DESCRIPTION,
         "language": "bg"
+    }
+
+
+@app.get("/health/live")
+async def liveness():
+    """
+    Kubernetes liveness probe.
+
+    Returns 200 if the process is alive. Does NOT check model status.
+    Use this for liveness probes to avoid restart loops during model loading.
+    """
+    return {"status": "alive"}
+
+
+@app.get("/health/ready")
+async def readiness():
+    """
+    Kubernetes readiness probe.
+
+    Returns 200 only if models are loaded and ready to serve requests.
+    Returns 503 if still initializing.
+    """
+    pipeline = get_pipeline()
+
+    # Check if medical model is loaded
+    medgemma_ready = (
+        pipeline._medical_model is not None and
+        pipeline._medical_model._loaded
+    )
+
+    # Check if product store has products
+    try:
+        products_count = pipeline.product_store.collection.count()
+        products_ready = products_count > 0
+    except Exception:
+        products_ready = False
+
+    if not medgemma_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="MedGemma model not loaded"
+        )
+
+    if not products_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="Product store empty or not initialized"
+        )
+
+    return {
+        "status": "ready",
+        "models": {"medgemma": medgemma_ready},
+        "products_count": products_count
     }
 
 
@@ -563,6 +621,25 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
         metrics_store["requests_non_medical"] += 1
     if result.is_red_flag:
         metrics_store["requests_red_flag"] += 1
+
+    # Audit log for compliance (privacy-preserving)
+    client_ip = get_client_ip(req)
+    product_skus = []
+    if hasattr(result, 'selected_products') and result.selected_products:
+        for p in result.selected_products:
+            sku = getattr(p, 'id', None) or getattr(p, 'sku', None)
+            if sku:
+                product_skus.append(str(sku))
+
+    log_medical_query(
+        query_hash=hash_for_audit(user_message),
+        is_medical=result.is_medical,
+        is_red_flag=result.is_red_flag,
+        products_recommended=product_skus,
+        safety_severity="red_flag" if result.is_red_flag else "none",
+        response_length=len(result.response),
+        client_ip_hash=hash_for_audit(client_ip),
+    )
 
     # Build response
     response_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"

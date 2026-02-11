@@ -90,6 +90,10 @@ class Settings(BaseSettings):
     min_message_length: int = Field(default=2, description="Minimum user message length")
     rate_limit_per_minute: int = Field(default=30, description="Max requests per minute per IP")
     request_timeout_seconds: int = Field(default=60, description="Request timeout in seconds")
+    cors_origins: str = Field(
+        default="https://viapharma.us,http://localhost:3000,http://localhost:8080",
+        description="Comma-separated list of allowed CORS origins"
+    )
 
     # ==========================================================================
     # Logging

@@ -149,6 +149,19 @@ class TestHealthEndpoints:
         assert "success" in data["requests"]
         assert "failed" in data["requests"]
 
+    def test_liveness_endpoint(self, client):
+        """Liveness probe should always return 200."""
+        response = client.get("/health/live")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "alive"
+
+    def test_readiness_endpoint(self, client):
+        """Readiness probe should check model status."""
+        response = client.get("/health/ready")
+        # With mocked pipeline, should return 200 or 503
+        assert response.status_code in [200, 503]
+
 
 class TestModelsEndpoint:
     """Tests for the models endpoint."""

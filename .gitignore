@@ -61,3 +61,6 @@ data/chromadb/
 .coverage
 .pytest_cache/
 htmlcov/
+
+# Logs
+logs/

@@ -258,8 +258,8 @@ class Pipeline:
                 medical_reasoning=medical_reasoning
             )
 
-        # Step 4: Safety Check
-        is_red_flag, safety_message = self._check_safety(translated, medical_reasoning)
+        # Step 4: Safety Check (check BOTH original Bulgarian and translated English)
+        is_red_flag, safety_message = self._check_safety(user_input, translated, medical_reasoning)
         logger.debug(f"Safety check", extra={"is_red_flag": is_red_flag})
         if is_red_flag:
             logger.warning(f"Red flag detected, referring to doctor")
@@ -432,7 +432,7 @@ class Pipeline:
     # =========================================================================
     # Step 4: Safety Check
     # =========================================================================
-    def _check_safety(self, user_query: str, medical_reasoning: MedicalReasoning) -> tuple[bool, str]:
+    def _check_safety(self, original_query: str, translated_query: str, medical_reasoning: MedicalReasoning) -> tuple[bool, str]:
         """
         Check for red-flag symptoms that require professional medical attention.
 
@@ -442,14 +442,18 @@ class Pipeline:
         - Warning symptoms (monitor, see doctor if persists)
         - MedGemma's see_doctor recommendation
 
-        Note: Only checks the USER's query, not the medical reasoning output.
-        MedGemma often includes standard medical warnings that would trigger
-        false positives if we checked the reasoning text.
+        Note: Checks BOTH original Bulgarian and translated English text
+        to ensure safety patterns in both languages are caught.
         """
-        # Only check the user's query for red-flag symptoms
-        result = self.safety_layer.check_safety(user_query)
+        # Check ORIGINAL Bulgarian text first (for Bulgarian safety phrases)
+        result = self.safety_layer.check_safety(original_query)
         if result.is_red_flag:
             return True, result.message
+
+        # Also check TRANSLATED English text (for English safety phrases)
+        result_en = self.safety_layer.check_safety(translated_query)
+        if result_en.is_red_flag:
+            return True, result_en.message
 
         # Also check if MedGemma flagged this as needing a doctor
         if medical_reasoning.see_doctor:
@@ -480,7 +484,7 @@ class Pipeline:
         """
         # Check if product store has products
         if self.product_store.collection.count() == 0:
-            print("Warning: Product store is empty. Run product_store.py --reload to load products.")
+            logger.warning("Product store is empty. Run product_store.py --reload to load products.")
             return []
 
         # Build search query from medical reasoning
@@ -504,7 +508,7 @@ class Pipeline:
                 product = Product.from_chromadb(result)
                 products.append(product)
             except Exception as e:
-                print(f"Warning: Failed to parse product: {e}")
+                logger.warning(f"Failed to parse product", extra={"error": str(e)})
                 continue
 
         return products

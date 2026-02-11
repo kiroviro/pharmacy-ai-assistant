@@ -12,6 +12,9 @@ import chromadb
 from chromadb.config import Settings
 
 from src.data_loader import ParsedProduct, load_products
+from src.logging_config import get_logger
+
+logger = get_logger("viapharma.product_store")
 
 
 # Default embedding model for multilingual support
@@ -93,8 +96,7 @@ class ProductStore:
         """
         # Check if already loaded
         if not force_reload and self.collection.count() > 0:
-            print(f"Collection already contains {self.collection.count()} products.")
-            print("Use force_reload=True to reload.")
+            logger.info(f"Collection already contains {self.collection.count()} products. Use force_reload=True to reload.")
             return self.collection.count()
 
         # Delete existing collection if force reload
@@ -102,7 +104,7 @@ class ProductStore:
             try:
                 self.client.delete_collection(COLLECTION_NAME)
                 self._collection = None
-                print("Deleted existing collection.")
+                logger.info("Deleted existing collection.")
             except Exception:
                 pass
 
@@ -110,11 +112,11 @@ class ProductStore:
         products = load_products(data_dir)
 
         if not products:
-            print("No products to load.")
+            logger.warning("No products to load.")
             return 0
 
         # Prepare data for ChromaDB (deduplicate by SKU)
-        print(f"\nPreparing {len(products)} products for ChromaDB...")
+        logger.info(f"Preparing {len(products)} products for ChromaDB...")
 
         ids = []
         documents = []
@@ -140,10 +142,10 @@ class ProductStore:
             metadatas.append(product.to_dict())
 
             if (i + 1) % 1000 == 0:
-                print(f"  Prepared {len(ids)}/{len(products)} products (deduped)...")
+                logger.debug(f"Prepared {len(ids)}/{len(products)} products (deduped)")
 
         # Add to ChromaDB in batches
-        print("\nAdding products to ChromaDB...")
+        logger.info("Adding products to ChromaDB...")
         batch_size = 500
 
         for i in range(0, len(ids), batch_size):
@@ -153,9 +155,9 @@ class ProductStore:
                 documents=documents[i:batch_end],
                 metadatas=metadatas[i:batch_end],
             )
-            print(f"  Added batch {i // batch_size + 1}/{(len(ids) + batch_size - 1) // batch_size}")
+            logger.debug(f"Added batch {i // batch_size + 1}/{(len(ids) + batch_size - 1) // batch_size}")
 
-        print(f"\nLoaded {self.collection.count()} products into ChromaDB.")
+        logger.info(f"Loaded {self.collection.count()} products into ChromaDB.")
         return self.collection.count()
 
     def search(
