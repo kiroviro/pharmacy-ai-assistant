@@ -41,7 +41,7 @@ Uses **Perplexity-style two-stage retrieval** for accurate product matching:
 ┌───────────────┐
 │ 1. INTENT     │──── Not medical? ────▶ Polite rejection
 │   CLASSIFIER  │                        "Мога да помогна само с
-│  (DistilBERT) │                         здравни въпроси"
+│  (Keywords)   │                         здравни въпроси"
 └───────┬───────┘
         │ Medical query
         ▼
@@ -128,53 +128,63 @@ Inspired by Perplexity's finance widget architecture:
 
 ## Pipeline Components
 
-### Step 1: Intent Classifier
-- **Model**: `distilbert-base-multilingual-cased` or Bulgarian-specific model
-- **Purpose**: Filter non-medical queries (weather, jokes, etc.)
-- **Output**: `is_medical: bool`
-- **Status**: Placeholder (always returns True)
+### Step 1: Intent Classifier (`src/intent_classifier.py`)
+- **Method**: Keyword-based classification (fast, no ML model needed)
+- **Purpose**: Filter non-medical queries (weather, jokes, cooking, etc.)
+- **Languages**: Bulgarian and English medical terms supported
+- **Keywords**:
+  - Medical: symptoms, body parts, medications, treatment actions
+  - Non-medical: weather, news, sports, recipes, travel, banking
+- **Output**: `(is_medical: bool, confidence: float, reason: str)`
+- **Behavior**: Permissive - defaults to medical if unclear (better to process than reject)
+- **Status**: ✅ Implemented
 
-### Step 2: Translation BG → EN
+### Step 2: Translation BG → EN (`src/translator.py`)
 - **Model**: `Helsinki-NLP/opus-mt-bg-en` (MarianMT)
 - **Purpose**: Translate Bulgarian symptoms to English for MedGemma
-- **Cache**: Common phrases cached for speed
-- **Status**: Placeholder (pass-through)
+- **Cache**: LRU cache for repeated translations
+- **Status**: ✅ Implemented
 
-### Step 3: Medical Reasoning (MedGemma)
+### Step 3: Medical Reasoning (`src/medical_model.py`)
 - **Model**: `mlx-community/medgemma-4b-it-bf16`
 - **Purpose**: Understand symptoms, suggest treatment categories
 - **Prompt**: Structured to output treatment types, not specific products
 - **Status**: ✅ Implemented
 
-### Step 4: Safety Layer
-- **Red-flag symptoms**: chest pain, difficulty breathing, sudden vision loss, etc.
-- **OTC whitelist**: Only recommend products marked as OTC in catalogue
-- **Prescription filter**: Block any prescription drug recommendations
-- **Status**: Placeholder (no filtering)
+### Step 4: Safety Layer (`src/safety.py`)
+- **Purpose**: Detect dangerous symptoms and ensure safe recommendations
+- **Severity Levels**:
+  - **Emergency** 🚨: Immediate 112 call (chest pain, difficulty breathing, seizures, poisoning, suicidal thoughts)
+  - **Urgent** ⚠️: See doctor within 24-48h (blood in urine/stool, high fever >3 days, severe headache, jaundice)
+  - **Warning** ℹ️: Monitor and seek help if worsens (persistent cough, unexplained weight loss, changing moles)
+- **Languages**: Bulgarian and English symptom detection
+- **OTC Filter**: Removes non-OTC products from recommendations
+- **Output**: `SafetyCheckResult` with severity, matched symptoms, and localized message
+- **Status**: ✅ Implemented
 
-### Step 5a: Product Retrieval (Vector DB)
+### Step 5a: Product Retrieval (`src/product_store.py`)
 - **Database**: ChromaDB with ~10-11k products
 - **Embeddings**: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
 - **Method**: Vector similarity search
 - **Returns**: Top 10 candidate products (fast, cheap)
-- **Status**: Placeholder (returns mock products)
+- **Status**: ✅ Implemented
 
-### Step 5b: Product Refinement (LLM)
+### Step 5b: Product Refinement (`src/medical_model.py`)
 - **Model**: MedGemma (reuses loaded model)
 - **Input**: Original query + top-K candidates from vector search
 - **Method**: LLM picks best matches considering medical context
 - **Returns**: Top 3 most relevant products
 - **Status**: ✅ Implemented
 
-### Step 6: Translation EN → BG
+### Step 6: Translation EN → BG (`src/translator.py`)
 - **Model**: `Helsinki-NLP/opus-mt-en-bg` (MarianMT)
 - **Purpose**: Translate response back to Bulgarian
-- **Status**: Placeholder (pass-through)
+- **Status**: ✅ Implemented
 
-### Step 7: Response Formatting
-- Product recommendations with prices
-- Always include disclaimer
-- "Add to cart" / "View product" links
+### Step 7: Response Formatting (`src/pipeline.py`)
+- Product recommendations with prices (BGN and EUR)
+- Safety disclaimers added based on symptom severity
+- Standard disclaimer always shown
 - **Status**: ✅ Implemented
 
 ## Project Structure
@@ -196,11 +206,17 @@ medgemma/
 │
 ├── data/
 │   ├── .gitkeep
-│   └── products.csv            # Product catalogue (git-ignored)
+│   ├── products.csv            # Product catalogue (git-ignored)
+│   └── chromadb/               # Vector database (git-ignored)
 │
 ├── src/
 │   ├── __init__.py
-│   ├── medical_model.py        # MedGemma wrapper
+│   ├── intent_classifier.py    # Step 1: Medical query detection
+│   ├── translator.py           # Step 2 & 6: BG↔EN translation
+│   ├── medical_model.py        # Step 3 & 5b: MedGemma wrapper
+│   ├── safety.py               # Step 4: Red-flag detection + OTC filter
+│   ├── product_store.py        # Step 5a: ChromaDB vector search
+│   ├── data_loader.py          # CSV to ChromaDB loader
 │   └── pipeline.py             # Main pipeline orchestrator
 │
 ├── output/                     # Generated files (git-ignored)
@@ -257,15 +273,45 @@ docker run -d --name open-webui -p 3000:8080 \
 
 ## Safety Measures
 
-### Red-Flag Symptoms (escalate to doctor)
-- Chest pain or pressure
-- Difficulty breathing
-- Sudden severe headache
-- Vision changes
-- Numbness/weakness on one side
-- Persistent high fever (>39°C for 3+ days)
-- Blood in stool/urine
+### Emergency Symptoms 🚨 (Call 112 immediately)
+Blocks all recommendations and shows emergency message:
+- Chest pain, pressure, or tightness
+- Difficulty breathing, choking
+- Loss of consciousness, fainting
+- Paralysis, facial drooping, slurred speech
+- Sudden vision loss
+- Seizures, convulsions
+- Severe bleeding
+- Anaphylaxis
+- Poisoning, overdose
+- Suicidal thoughts
+
+### Urgent Symptoms ⚠️ (See doctor within 24-48h)
+Blocks recommendations and advises medical consultation:
+- Blood in urine or stool
+- Vomiting blood
 - Severe abdominal pain
+- High fever (>39°C) for 3+ days
+- Worst headache ever, thunderclap headache
+- Stiff neck with fever
+- Facial swelling, swollen tongue/lips
+- Jaundice (yellow eyes/skin)
+- Confusion, disorientation
+- Severe back/kidney pain
+- Unable to urinate
+
+### Warning Symptoms ℹ️ (Monitor, add disclaimer)
+Allows recommendations but adds warning message:
+- Persistent cough (>2 weeks)
+- Unexplained weight loss
+- Night sweats
+- Persistent fatigue (>2 weeks)
+- Lumps, nodules, growths
+- Changing moles
+- Non-healing wounds
+- Difficulty swallowing
+- Frequent headaches
+- Vision/hearing changes
 
 ### OTC-Only Enforcement
 - Product catalogue has `is_otc: bool` column
