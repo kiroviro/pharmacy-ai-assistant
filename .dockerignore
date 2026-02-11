@@ -1,0 +1,48 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Tests
+tests/
+pytest.ini
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Documentation
+*.md
+docs/
+
+# CI/CD
+.github/
+
+# Local development
+.env
+.env.local
+*.log
+
+# Large files (mount as volumes instead)
+models/
+data/chromadb/
+output/
+logs/
+
+# Claude Code
+.claude/

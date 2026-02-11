@@ -1,0 +1,59 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: viapharma-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount product data (required)
+      - ./output:/app/output:ro
+      # Mount ChromaDB for persistence
+      - ./data/chromadb:/app/data/chromadb
+      # Mount models directory (optional - for MedGemma)
+      - ./models:/app/models:ro
+      # Mount logs for debugging
+      - ./logs:/app/logs
+    environment:
+      - VIAPHARMA_API_HOST=0.0.0.0
+      - VIAPHARMA_API_PORT=8000
+      - VIAPHARMA_LOG_LEVEL=INFO
+      - VIAPHARMA_LOG_JSON=true
+      - VIAPHARMA_ENABLE_RATE_LIMITING=true
+      - VIAPHARMA_PREWARM_MODELS=false
+      # Set to production origin in deployment
+      - VIAPHARMA_CORS_ORIGINS=https://viapharma.us
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Gradio UI (optional - for testing)
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: viapharma-ui
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./output:/app/output:ro
+      - ./data/chromadb:/app/data/chromadb
+      - ./models:/app/models:ro
+    environment:
+      - VIAPHARMA_LOG_LEVEL=INFO
+      - VIAPHARMA_PREWARM_MODELS=false
+    command: ["python", "gradio_app.py"]
+    restart: unless-stopped
+    profiles:
+      - ui  # Only starts with: docker-compose --profile ui up
+
+# Volumes for data persistence
+volumes:
+  chromadb_data:

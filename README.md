@@ -1,6 +1,49 @@
 # ViaPharma OTC Chatbot
 
+[![CI](https://github.com/YOUR_USERNAME/medgemma/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/medgemma/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Bulgarian-language medical chatbot that recommends OTC products based on symptoms. Powered by MedGemma on Mac M-series.
+
+## Architecture
+
+```
+User (Bulgarian)
+      │
+      ▼
+┌─────────────────┐     ┌─────────────────┐
+│ Intent          │────▶│ Non-medical     │──▶ Polite rejection
+│ Classifier      │     │ Query?          │
+└────────┬────────┘     └─────────────────┘
+         │ Medical
+         ▼
+┌─────────────────┐
+│ Translate       │
+│ BG → EN         │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐     ┌─────────────────┐
+│ MedGemma        │────▶│ Safety Layer    │──▶ Red flag? → "Call 112"
+│ Medical AI      │     │ (Red flags)     │
+└────────┬────────┘     └─────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Product Search  │
+│ (ChromaDB RAG)  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Translate       │
+│ EN → BG         │
+└────────┬────────┘
+         │
+         ▼
+   Response + Disclaimer
+```
 
 ## Quick Start
 
@@ -58,9 +101,26 @@ Open `http://localhost:3000` and select the `viapharma-medgemma` model.
 | Endpoint | Description |
 |----------|-------------|
 | `GET /health` | Health check with model status |
+| `GET /health/live` | Kubernetes liveness probe |
+| `GET /health/ready` | Kubernetes readiness probe |
 | `GET /hints` | Bulgarian UI hints |
 | `GET /v1/models` | List models (OpenAI-compatible) |
 | `POST /v1/chat/completions` | Chat (OpenAI-compatible) |
+| `GET /docs` | **Swagger UI** - Interactive API docs |
+| `GET /redoc` | ReDoc - Alternative API docs |
+
+## Docker
+
+```bash
+# Build and run with Docker Compose
+docker-compose up -d
+
+# Or build manually
+docker build -t viapharma-medgemma .
+docker run -p 8000:8000 -v ./output:/app/output:ro viapharma-medgemma
+```
+
+The API will be available at `http://localhost:8000/docs` (Swagger UI).
 
 ## Configuration
 
