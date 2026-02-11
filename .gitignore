@@ -53,3 +53,6 @@ output/
 
 # Data files (may contain large CSVs)
 data/*.csv
+
+# ChromaDB (generated, can be rebuilt)
+data/chromadb/

@@ -20,7 +20,11 @@
       "Bash(ghcr.io/open-webui/open-webui:main)",
       "Bash(docker start:*)",
       "Bash(docker ps:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(git commit:*)",
+      "Bash(wc:*)",
+      "Bash(PYTHONPATH=. python3:*)",
+      "Bash(git reset:*)"
     ]
   }
 }

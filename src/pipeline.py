@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from src.medical_model import get_medical_model
+from src.translator import get_translator
 
 
 @dataclass
@@ -70,16 +71,31 @@ class Pipeline:
         """
         # Component placeholders - will be replaced with real implementations
         self.intent_classifier = None
-        self.translator = None
         self.safety_layer = None
         self.vector_store = None
 
-        # MedGemma model (lazy loaded by default for faster startup)
+        # Models (lazy loaded by default for faster startup)
         self._medical_model = None
+        self._translator = None
         self._lazy_load = lazy_load
 
         if not lazy_load:
             self._load_medical_model()
+            self._load_translator()
+
+    def _load_translator(self):
+        """Load the translator models."""
+        if self._translator is None:
+            self._translator = get_translator()
+            # Pre-load both translation models
+            self._translator.load_all()
+
+    @property
+    def translator(self):
+        """Get the translator, loading it if necessary."""
+        if self._translator is None:
+            self._translator = get_translator()
+        return self._translator
 
     def _load_medical_model(self):
         """Load the MedGemma model."""
@@ -180,21 +196,27 @@ class Pipeline:
     # =========================================================================
     def _translate_to_english(self, text: str) -> str:
         """
-        Translate Bulgarian to English.
+        Translate Bulgarian to English using MarianMT.
 
-        Placeholder: returns as-is
-        TODO: Replace with MarianMT BG→EN
+        Args:
+            text: Bulgarian text to translate
+
+        Returns:
+            English translation
         """
-        return text
+        return self.translator.translate_to_english(text)
 
     def _translate_to_bulgarian(self, text: str) -> str:
         """
-        Translate English to Bulgarian.
+        Translate English to Bulgarian using MarianMT.
 
-        Placeholder: returns as-is
-        TODO: Replace with MarianMT EN→BG
+        Args:
+            text: English text to translate
+
+        Returns:
+            Bulgarian translation
         """
-        return text
+        return self.translator.translate_to_bulgarian(text)
 
     # =========================================================================
     # Step 3: Medical Reasoning
