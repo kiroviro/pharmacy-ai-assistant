@@ -11,6 +11,10 @@ import re
 from typing import Optional
 from dataclasses import dataclass
 
+from src.logging_config import get_logger
+
+logger = get_logger("viapharma.safety")
+
 
 @dataclass
 class SafetyCheckResult:
@@ -171,6 +175,10 @@ class SafetyLayer:
         # Check for emergency symptoms
         emergency_matches = self._emergency_pattern.findall(text_lower)
         if emergency_matches:
+            logger.warning(f"EMERGENCY symptoms detected", extra={
+                "severity": "emergency",
+                "matched": list(set(emergency_matches))
+            })
             return SafetyCheckResult(
                 is_red_flag=True,
                 severity="emergency",
@@ -182,6 +190,10 @@ class SafetyLayer:
         # Check for urgent symptoms
         urgent_matches = self._urgent_pattern.findall(text_lower)
         if urgent_matches:
+            logger.warning(f"URGENT symptoms detected", extra={
+                "severity": "urgent",
+                "matched": list(set(urgent_matches))
+            })
             return SafetyCheckResult(
                 is_red_flag=True,
                 severity="urgent",

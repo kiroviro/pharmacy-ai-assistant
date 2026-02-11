@@ -9,12 +9,17 @@ import time
 import uuid
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.pipeline import get_pipeline
+from src.logging_config import init_default_logger, get_logger, set_request_id
+
+# Initialize logging
+init_default_logger(level="INFO", json_format=False)
+logger = get_logger("viapharma.api")
 
 # =============================================================================
 # API Models (OpenAI-compatible)
@@ -122,6 +127,36 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all incoming requests with timing."""
+    request_id = set_request_id()
+    start_time = time.time()
+
+    # Log request
+    logger.info(f"Request started", extra={
+        "method": request.method,
+        "path": request.url.path,
+        "request_id": request_id
+    })
+
+    response = await call_next(request)
+
+    # Log response
+    duration_ms = (time.time() - start_time) * 1000
+    logger.info(f"Request completed", extra={
+        "method": request.method,
+        "path": request.url.path,
+        "status_code": response.status_code,
+        "duration_ms": round(duration_ms, 2),
+        "request_id": request_id
+    })
+
+    # Add request ID to response headers
+    response.headers["X-Request-ID"] = request_id
+    return response
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -191,7 +226,14 @@ async def chat_completions(request: ChatCompletionRequest):
             break
 
     if not user_message:
+        logger.warning("Empty user message received")
         raise HTTPException(status_code=400, detail="Няма съобщение от потребителя")
+
+    logger.info(f"Chat request", extra={
+        "model": request.model,
+        "message_length": len(user_message),
+        "stream": request.stream
+    })
 
     # Handle streaming (simplified - just returns full response)
     if request.stream:
@@ -200,6 +242,12 @@ async def chat_completions(request: ChatCompletionRequest):
     # Process through pipeline
     pipeline = get_pipeline()
     result = pipeline.process(user_message)
+
+    logger.debug(f"Pipeline result", extra={
+        "is_medical": result.is_medical,
+        "is_red_flag": result.is_red_flag,
+        "response_length": len(result.response)
+    })
 
     # Build response
     response_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
@@ -286,14 +334,14 @@ async def _stream_response(user_message: str, model: str):
 if __name__ == "__main__":
     import uvicorn
 
-    print("=" * 60)
-    print("🏥 ViaPharma Аптечен Асистент - API Сървър")
-    print("=" * 60)
-    print("\nOpenAI-съвместими endpoints:")
-    print("  - GET  /v1/models        (списък модели)")
-    print("  - POST /v1/chat/completions (чат)")
-    print("  - GET  /hints            (примерни въпроси)")
-    print("\n📡 Свържете Open WebUI към: http://localhost:8000/v1")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("ViaPharma Аптечен Асистент - API Сървър")
+    logger.info("=" * 60)
+    logger.info("OpenAI-съвместими endpoints:")
+    logger.info("  GET  /v1/models        (списък модели)")
+    logger.info("  POST /v1/chat/completions (чат)")
+    logger.info("  GET  /hints            (примерни въпроси)")
+    logger.info("Свържете Open WebUI към: http://localhost:8000/v1")
+    logger.info("=" * 60)
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")

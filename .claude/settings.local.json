@@ -24,7 +24,10 @@
       "Bash(git commit:*)",
       "Bash(wc:*)",
       "Bash(PYTHONPATH=. python3:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(mlx_vlm generate:*)",
+      "Bash(git restore:*)",
+      "Bash(by stiff neck, seek attention\"\\) which were triggering false positives.\nNow the safety layer only checks the user''s actual symptoms.\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

@@ -16,3 +16,8 @@ pydantic>=2.0.0         # Request/response models
 # Utils
 pandas>=2.0.0           # CSV handling
 python-dotenv>=1.0.0    # Environment variables
+
+# Testing
+pytest>=7.0.0           # Test framework
+pytest-cov>=4.0.0       # Coverage reporting
+pytest-asyncio>=0.21.0  # Async test support

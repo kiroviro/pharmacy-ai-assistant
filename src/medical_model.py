@@ -7,9 +7,14 @@ Uses MLX for efficient inference on Apple Silicon.
 import json
 import os
 import re
+import time
 from dataclasses import dataclass, asdict
 from typing import Optional
 from mlx_lm import load, generate
+
+from src.logging_config import get_logger
+
+logger = get_logger("viapharma.medical_model")
 
 
 @dataclass
@@ -159,10 +164,12 @@ class MedicalModel:
         if self._loaded:
             return
 
-        print(f"Loading MedGemma from {self.model_path}...")
+        logger.info(f"Loading MedGemma from {self.model_path}...")
+        start_time = time.perf_counter()
         self.model, self.tokenizer = load(self.model_path)
         self._loaded = True
-        print("MedGemma loaded successfully!")
+        duration = time.perf_counter() - start_time
+        logger.info(f"MedGemma loaded successfully", extra={"load_time_s": round(duration, 2)})
 
     def _format_prompt(self, user_message: str, system_prompt: str = None) -> str:
         """
@@ -271,7 +278,7 @@ class MedicalModel:
                 data = json.loads(json_str)
                 reasoning = MedicalReasoning.from_dict(data)
         except (json.JSONDecodeError, ValueError) as e:
-            print(f"Warning: Failed to parse JSON response: {e}")
+            logger.warning(f"Failed to parse JSON response: {e}")
 
         # Fallback: try to parse unstructured response
         if reasoning is None:

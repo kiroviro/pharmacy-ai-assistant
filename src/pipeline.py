@@ -7,6 +7,7 @@ Pipeline follows the Perplexity two-stage retrieval pattern:
 2. LLM refines and picks best matches (accurate)
 """
 
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -15,6 +16,9 @@ from src.translator import get_translator
 from src.product_store import get_product_store
 from src.intent_classifier import get_intent_classifier
 from src.safety import get_safety_layer
+from src.logging_config import get_logger
+
+logger = get_logger("viapharma.pipeline")
 
 
 # Base URL for product links (configure for your site)
@@ -218,9 +222,19 @@ class Pipeline:
         6. Translate EN → BG
         7. Format Response
         """
+        start_time = time.perf_counter()
+        logger.info(f"Processing query", extra={
+            "query_length": len(user_input),
+            "query_preview": user_input[:50] + "..." if len(user_input) > 50 else user_input
+        })
 
         # Step 1: Intent Classification
         is_medical, confidence, reason = self.intent_classifier.is_medical_query(user_input)
+        logger.debug(f"Intent classification", extra={
+            "is_medical": is_medical,
+            "confidence": confidence,
+            "reason": reason
+        })
         if not is_medical:
             return PipelineResult(
                 response=self.intent_classifier.get_rejection_message("bg", reason),
@@ -246,7 +260,9 @@ class Pipeline:
 
         # Step 4: Safety Check
         is_red_flag, safety_message = self._check_safety(translated, medical_reasoning)
+        logger.debug(f"Safety check", extra={"is_red_flag": is_red_flag})
         if is_red_flag:
+            logger.warning(f"Red flag detected, referring to doctor")
             # Safety messages are already in Bulgarian, no translation needed
             return PipelineResult(
                 response=safety_message,
@@ -259,6 +275,7 @@ class Pipeline:
 
         # Step 5a: Product Retrieval - Vector DB returns top-K candidates (FAST)
         candidate_products = self._retrieve_product_candidates(medical_reasoning)
+        logger.debug(f"Vector search returned {len(candidate_products)} candidates")
 
         # Filter to OTC-only products
         candidate_products = self.safety_layer.filter_otc_only(candidate_products)
@@ -281,6 +298,14 @@ class Pipeline:
 
         # Add warning message if applicable
         final_response = self.safety_layer.add_safety_disclaimer(final_response, warning_result)
+
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(f"Pipeline completed", extra={
+            "duration_ms": round(duration_ms, 2),
+            "candidates": len(candidate_products),
+            "selected": len(selected_products),
+            "is_red_flag": False
+        })
 
         return PipelineResult(
             response=final_response,
