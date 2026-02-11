@@ -284,14 +284,15 @@ docker run -d --name open-webui -p 3000:8080 \
 | OpenAI API | ✅ Done | `api_server.py` |
 | Pipeline | ✅ Done | `src/pipeline.py` |
 | MedGemma | ✅ Done | `src/medical_model.py` |
+| Translation | ✅ Done | `src/translator.py` |
+| Product Store | ✅ Done | `src/product_store.py` |
+| Data Loader | ✅ Done | `src/data_loader.py` |
 | Intent Classifier | ⏳ Placeholder | - |
-| Translation | ⏳ Placeholder | - |
 | Safety Layer | ⏳ Placeholder | - |
-| Product Retrieval | ⏳ Placeholder | - |
 
 ## Next Steps
 
-1. **Translation** - Add MarianMT for Bulgarian ↔ English
+1. **Product Catalogue** - Load your CSV into ChromaDB
 2. **Product Catalogue** - Load CSV into ChromaDB
 3. **Intent Classifier** - Filter non-medical queries
 4. **Safety Layer** - Red-flag symptom detection
