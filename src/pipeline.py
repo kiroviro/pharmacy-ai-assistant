@@ -195,10 +195,10 @@ class Pipeline:
         """
 
         # Step 1: Intent Classification
-        is_medical = self._classify_intent(user_input)
+        is_medical, confidence, reason = self.intent_classifier.is_medical_query(user_input)
         if not is_medical:
             return PipelineResult(
-                response=self.intent_classifier.get_rejection_message("bg"),
+                response=self.intent_classifier.get_rejection_message("bg", reason),
                 is_medical=False,
                 original_text=user_input
             )
@@ -326,14 +326,13 @@ class Pipeline:
         - Emergency symptoms (call 112/911)
         - Urgent symptoms (see doctor within 24-48h)
         - Warning symptoms (monitor, see doctor if persists)
-        """
-        # Check user query first
-        result = self.safety_layer.check_safety(user_query)
-        if result.is_red_flag:
-            return True, result.message
 
-        # Also check medical reasoning for any red flags
-        result = self.safety_layer.check_safety(medical_reasoning)
+        Note: Only checks the USER's query, not the medical reasoning output.
+        MedGemma often includes standard medical warnings that would trigger
+        false positives if we checked the reasoning text.
+        """
+        # Only check the user's query for red-flag symptoms
+        result = self.safety_layer.check_safety(user_query)
         if result.is_red_flag:
             return True, result.message
 

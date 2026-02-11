@@ -115,6 +115,23 @@ class IntentClassifier:
             'joke', 'funny', 'tell me a',
         }
 
+        # Profanity/inappropriate language (Bulgarian and English)
+        self.profanity_keywords = {
+            # Bulgarian vulgar words
+            'ебаваш', 'ебеш', 'ебати', 'еба', 'ебал', 'ебана',
+            'путка', 'пишка', 'кур', 'гъз', 'задник',
+            'дебил', 'идиот', 'тъпак', 'глупак', 'малоумен',
+            'мамка', 'копеле', 'педал', 'педераст',
+            'шибан', 'проклет', 'мръсник',
+            'боклук', 'измет', 'лайно', 'лайна',
+
+            # English vulgar words
+            'fuck', 'fucking', 'shit', 'bullshit', 'damn',
+            'ass', 'asshole', 'bitch', 'bastard',
+            'idiot', 'moron', 'stupid', 'dumb',
+            'crap', 'suck', 'sucks',
+        }
+
         # Compile patterns for efficiency
         self._compile_patterns()
 
@@ -124,10 +141,12 @@ class IntentClassifier:
         bg_pattern = '|'.join(re.escape(kw) for kw in self.bg_medical_keywords)
         en_pattern = '|'.join(re.escape(kw) for kw in self.en_medical_keywords)
         non_med_pattern = '|'.join(re.escape(kw) for kw in self.non_medical_keywords)
+        profanity_pattern = '|'.join(re.escape(kw) for kw in self.profanity_keywords)
 
         self._bg_medical_pattern = re.compile(f'({bg_pattern})', re.IGNORECASE)
         self._en_medical_pattern = re.compile(f'\\b({en_pattern})\\b', re.IGNORECASE)
         self._non_medical_pattern = re.compile(f'({non_med_pattern})', re.IGNORECASE)
+        self._profanity_pattern = re.compile(f'({profanity_pattern})', re.IGNORECASE)
 
     def is_medical_query(self, text: str) -> tuple[bool, float, str]:
         """
@@ -151,33 +170,60 @@ class IntentClassifier:
         bg_matches = len(self._bg_medical_pattern.findall(text_lower))
         en_matches = len(self._en_medical_pattern.findall(text_lower))
         non_med_matches = len(self._non_medical_pattern.findall(text_lower))
+        profanity_matches = len(self._profanity_pattern.findall(text_lower))
 
         medical_matches = bg_matches + en_matches
 
         # Decision logic
+
+        # Reject profanity/inappropriate language immediately
+        if profanity_matches > 0:
+            return False, 0.99, "Inappropriate language detected"
+
+        # Reject clearly non-medical queries
         if non_med_matches > 0 and medical_matches == 0:
             return False, 0.9, f"Non-medical keywords detected: {non_med_matches}"
 
+        # Accept strong medical signals
         if medical_matches >= 2:
             return True, 0.95, f"Multiple medical keywords: {medical_matches}"
 
         if medical_matches == 1:
             return True, 0.7, f"Single medical keyword found"
 
-        # No clear indicators - assume medical (be permissive)
+        # Short queries without medical keywords - reject
+        if len(text.split()) < 4 and medical_matches == 0:
+            return False, 0.6, "Short non-medical query"
+
+        # No clear indicators - assume medical (be permissive for longer queries)
         # Better to process a non-medical query than reject a medical one
         return True, 0.3, "No clear indicators, defaulting to medical"
 
-    def get_rejection_message(self, language: str = "bg") -> str:
+    def get_rejection_message(self, language: str = "bg", reason: str = "") -> str:
         """
         Get a polite rejection message for non-medical queries.
 
         Args:
             language: "bg" for Bulgarian, "en" for English
+            reason: Classification reason (used to customize message)
 
         Returns:
             Rejection message
         """
+        # Special message for inappropriate language
+        if "inappropriate" in reason.lower() or "profanity" in reason.lower():
+            if language == "bg":
+                return (
+                    "Моля, използвайте подходящ език. "
+                    "Аз съм аптечен асистент и мога да помогна само с въпроси за здраве и лекарства."
+                )
+            else:
+                return (
+                    "Please use appropriate language. "
+                    "I'm a pharmacy assistant and can only help with health and medication questions."
+                )
+
+        # Standard rejection for non-medical queries
         if language == "bg":
             return (
                 "Съжалявам, но мога да помогна само с въпроси, свързани със здравето и лекарства. "
