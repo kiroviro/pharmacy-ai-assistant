@@ -13,6 +13,9 @@ from typing import Optional
 
 import pandas as pd
 
+from src.logging_config import get_logger
+
+logger = get_logger("viapharma.data_loader")
 
 # BGN to EUR conversion rate (approximate, update as needed)
 BGN_TO_EUR_RATE = 0.51  # 1 BGN ≈ 0.51 EUR (fixed rate in Bulgaria)
@@ -280,7 +283,7 @@ def load_products(data_dir: str = "output") -> list[ParsedProduct]:
     all_products = []
 
     for csv_file in csv_files:
-        print(f"Loading {csv_file.name}...")
+        logger.info(f"Loading {csv_file.name}...")
         df = pd.read_csv(csv_file, encoding="utf-8")
 
         # Filter to active products only
@@ -293,12 +296,12 @@ def load_products(data_dir: str = "output") -> list[ParsedProduct]:
                 if product.title:  # Skip empty rows
                     all_products.append(product)
             except Exception as e:
-                print(f"  Error parsing row: {e}")
+                logger.warning(f"Error parsing row: {e}")
                 continue
 
-        print(f"  Loaded {len(df)} products from {csv_file.name}")
+        logger.info(f"Loaded {len(df)} products from {csv_file.name}")
 
-    print(f"\nTotal products loaded: {len(all_products)}")
+    logger.info(f"Total products loaded: {len(all_products)}")
     return all_products
 
 
@@ -310,7 +313,7 @@ def save_processed_products(products: list[ParsedProduct], output_path: str = "d
     records = [p.to_dict() for p in products]
     df = pd.DataFrame(records)
     df.to_csv(output_file, index=False, encoding="utf-8")
-    print(f"Saved processed products to {output_path}")
+    logger.info(f"Saved processed products to {output_path}")
 
 
 if __name__ == "__main__":

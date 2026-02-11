@@ -34,7 +34,6 @@ ENV PATH=/home/appuser/.local/bin:$PATH
 # Copy application code
 COPY src/ ./src/
 COPY api_server.py .
-COPY gradio_app.py .
 
 # Create directories for data and logs
 RUN mkdir -p data/chromadb logs/audit output models \

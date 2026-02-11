@@ -17,12 +17,9 @@ from src.product_store import get_product_store
 from src.intent_classifier import get_intent_classifier
 from src.safety import get_safety_layer
 from src.logging_config import get_logger
+from src.config import get_settings
 
 logger = get_logger("viapharma.pipeline")
-
-
-# Base URL for product links (configure for your site)
-PRODUCT_BASE_URL = "https://viapharma.us/products"
 
 
 @dataclass
@@ -60,7 +57,8 @@ class Product:
     def product_url(self) -> str:
         """Get the full URL to the product page."""
         if self.url_handle:
-            return f"{PRODUCT_BASE_URL}/{self.url_handle}"
+            base_url = get_settings().product_base_url
+            return f"{base_url}/{self.url_handle}"
         return ""
 
     @classmethod
@@ -299,6 +297,18 @@ class Pipeline:
         # Add warning message if applicable
         final_response = self.safety_layer.add_safety_disclaimer(final_response, warning_result)
 
+        # Add child-specific disclaimer if query is about children/babies
+        if self._is_child_related_query(user_input):
+            final_response = self._add_child_disclaimer(final_response)
+
+        # Add safety information disclaimer for medication safety questions
+        if self._is_safety_information_query(user_input):
+            final_response = self._add_safety_info_disclaimer(final_response)
+
+        # Add prescription warning for chronic disease queries
+        if self._is_chronic_disease_query(user_input):
+            final_response = self._add_chronic_disease_disclaimer(final_response)
+
         duration_ms = (time.perf_counter() - start_time) * 1000
         logger.info(f"Pipeline completed", extra={
             "duration_ms": round(duration_ms, 2),
@@ -317,18 +327,6 @@ class Pipeline:
             candidate_products=candidate_products,
             selected_products=selected_products
         )
-
-    # =========================================================================
-    # Step 1: Intent Classification
-    # =========================================================================
-    def _classify_intent(self, text: str) -> bool:
-        """
-        Check if input is a medical/health query.
-
-        Uses keyword-based classification with Bulgarian and English medical terms.
-        """
-        is_medical, confidence, reason = self.intent_classifier.is_medical_query(text)
-        return is_medical
 
     def _is_refusal_response(self, reasoning: MedicalReasoning) -> bool:
         """
@@ -554,6 +552,139 @@ class Pipeline:
             candidate_products=candidates,
             max_products=max_products
         )
+
+    # =========================================================================
+    # Step 6: Special Context Detection
+    # =========================================================================
+    def _is_child_related_query(self, text: str) -> bool:
+        """
+        Check if query is about children or babies.
+
+        Returns True if the query mentions children, babies, or age-related terms.
+        """
+        child_keywords = {
+            # Bulgarian
+            'бебе', 'бебета', 'бебешки', 'бебешка', 'бебето',
+            'дете', 'деца', 'детски', 'детска', 'детето',
+            'новородено', 'кърмаче', 'малко дете',
+            'месечно', 'годишно', 'месеца', 'години',
+            'педиатър', 'педиатричен',
+            'никнене на зъби', 'зъбки',
+            'дозировка за дете', 'доза за дете',
+            'за деца', 'за бебета',
+            # English
+            'baby', 'babies', 'infant', 'infants',
+            'child', 'children', 'kid', 'kids',
+            'toddler', 'newborn',
+            'months old', 'years old',
+            'pediatric', 'teething',
+        }
+        text_lower = text.lower()
+        return any(kw in text_lower for kw in child_keywords)
+
+    def _is_safety_information_query(self, text: str) -> bool:
+        """
+        Check if query is asking about medication safety.
+
+        These queries should always include a safety disclaimer.
+        """
+        safety_keywords = {
+            # Bulgarian - dosage/overdose
+            'двойна доза', 'тройна доза', 'предозиране', 'предозирах',
+            'максимална доза', 'максималната доза', 'колко мога да взема',
+            'прекалено много', 'твърде много',
+            # Bulgarian - interactions
+            'алкохол с', 'пия алкохол', 'комбинирам', 'смесвам',
+            'взема заедно', 'едновременно',
+            # Bulgarian - safety concerns
+            'безопасно ли е', 'опасно ли е', 'вредно ли е',
+            'странични ефекти', 'странични действия', 'нежелани реакции',
+            'противопоказания', 'да не взема',
+            # Bulgarian - pregnancy/breastfeeding
+            'по време на бременност', 'бременна', 'кърмене', 'кърмя',
+            # English
+            'double dose', 'overdose', 'maximum dose',
+            'alcohol with', 'combine', 'mix medications',
+            'safe to take', 'dangerous', 'harmful',
+            'side effects', 'contraindications',
+            'during pregnancy', 'pregnant', 'breastfeeding',
+        }
+        text_lower = text.lower()
+        return any(kw in text_lower for kw in safety_keywords)
+
+    def _add_child_disclaimer(self, response: str) -> str:
+        """Add child-specific safety disclaimer to response."""
+        disclaimer = """
+⚠️ **Важно за деца и бебета:**
+- Винаги проверявайте възрастовите ограничения на опаковката
+- Дозировката зависи от възрастта и теглото на детето
+- Консултирайте се с педиатър преди даване на лекарства на бебета под 6 месеца
+- При съмнение, попитайте фармацевт за подходящата доза"""
+        return response + "\n" + disclaimer
+
+    def _add_safety_info_disclaimer(self, response: str) -> str:
+        """Add medication safety disclaimer to response."""
+        # Don't add if response already contains emergency message
+        if "112" in response or "СПЕШНО" in response:
+            return response
+
+        disclaimer = """
+💊 **Важна информация за безопасност:**
+- Винаги спазвайте препоръчаната доза от листовката
+- Не комбинирайте лекарства без консултация с фармацевт или лекар
+- При съмнение за предозиране, обадете се на Токсикологичен център или 112
+- Консултирайте се с лекар преди употреба при бременност или кърмене"""
+        return response + "\n" + disclaimer
+
+    def _is_chronic_disease_query(self, text: str) -> bool:
+        """
+        Check if query is about chronic disease medications.
+
+        These typically require prescriptions and should include a warning.
+        """
+        chronic_keywords = {
+            # Bulgarian - diabetes
+            'диабет', 'диабетик', 'захарен диабет', 'инсулин',
+            'кръвна захар', 'глюкоза',
+            # Bulgarian - thyroid
+            'щитовидна', 'щитовидната жлеза', 'тироксин',
+            'хипотиреоидизъм', 'хипертиреоидизъм',
+            # Bulgarian - cardiovascular
+            'хипертония', 'високо кръвно', 'кръвно налягане',
+            'сърдечна недостатъчност', 'аритмия',
+            'холестерол', 'статини',
+            # Bulgarian - respiratory
+            'астма', 'бронхиална астма', 'хобб',
+            # Bulgarian - neurological
+            'епилепсия', 'паркинсон', 'множествена склероза',
+            # Bulgarian - mental health (prescription)
+            'антидепресант', 'антипсихотик', 'шизофрения',
+            # Bulgarian - autoimmune
+            'ревматоиден артрит', 'лупус', 'имуносупресор',
+            # English equivalents
+            'diabetes', 'insulin', 'blood sugar',
+            'thyroid', 'hypothyroidism', 'hyperthyroidism',
+            'hypertension', 'blood pressure',
+            'asthma', 'copd',
+            'epilepsy', 'parkinson',
+            'antidepressant', 'antipsychotic',
+        }
+        text_lower = text.lower()
+        return any(kw in text_lower for kw in chronic_keywords)
+
+    def _add_chronic_disease_disclaimer(self, response: str) -> str:
+        """Add prescription warning for chronic disease queries."""
+        # Don't add if response already refers to doctor
+        if "консултация с лекар" in response.lower() or "112" in response:
+            return response
+
+        disclaimer = """
+📋 **Важно за хронични заболявания:**
+- Лекарствата за хронични заболявания обикновено се отпускат **по лекарска рецепта**
+- Не променяйте дозировката без консултация с вашия лекар
+- Мога да ви помогна с допълнителни продукти: тест ленти, глюкомери, хранителни добавки
+- За предписани лекарства, моля консултирайте се с вашия лекар или фармацевт"""
+        return response + "\n" + disclaimer
 
     # =========================================================================
     # Step 7: Response Formatting

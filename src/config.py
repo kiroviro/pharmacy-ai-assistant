@@ -5,7 +5,6 @@ Uses pydantic-settings for type-safe configuration with environment variable sup
 All hardcoded values should be moved here.
 """
 
-import os
 from functools import lru_cache
 from typing import Optional
 
@@ -127,35 +126,3 @@ def get_settings() -> Settings:
     To reload settings, call get_settings.cache_clear() first.
     """
     return Settings()
-
-
-# Convenience function for accessing settings
-def settings() -> Settings:
-    """Shorthand for get_settings()."""
-    return get_settings()
-
-
-# ==========================================================================
-# Environment-specific presets
-# ==========================================================================
-
-def get_development_settings() -> Settings:
-    """Get settings optimized for development."""
-    return Settings(
-        debug=True,
-        log_level="DEBUG",
-        log_json=False,
-        enable_rate_limiting=False,
-        prewarm_models=False,  # Faster startup for development
-    )
-
-
-def get_production_settings() -> Settings:
-    """Get settings optimized for production."""
-    return Settings(
-        debug=False,
-        log_level="INFO",
-        log_json=True,
-        enable_rate_limiting=True,
-        prewarm_models=True,
-    )

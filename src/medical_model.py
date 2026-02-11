@@ -430,7 +430,6 @@ Respond with ONLY the product numbers separated by commas (e.g., "1, 3, 5").
         selected_indices = []
         try:
             # Extract numbers from response
-            import re
             numbers = re.findall(r'\d+', response)
             for num in numbers:
                 idx = int(num) - 1  # Convert to 0-indexed
