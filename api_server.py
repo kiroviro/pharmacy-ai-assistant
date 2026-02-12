@@ -446,20 +446,30 @@ async def get_metrics():
     })
 
 
-def _get_cache_stats(pipeline) -> dict | None:
-    """Get translator cache stats if available."""
-    if pipeline._translator is None or not hasattr(pipeline._translator, 'get_cache_stats'):
-        return None
-    try:
-        stats = pipeline._translator.get_cache_stats()
-        if isinstance(stats, dict):
-            return {
-                "bg_to_en": dict(stats.get("bg_to_en", {})) if stats.get("bg_to_en") else None,
-                "en_to_bg": dict(stats.get("en_to_bg", {})) if stats.get("en_to_bg") else None,
-            }
-    except Exception:
-        pass
-    return None
+def _get_cache_stats(pipeline) -> dict:
+    """Get all cache stats (translator and medical model)."""
+    result = {}
+
+    # Translator cache stats
+    if pipeline._translator is not None and hasattr(pipeline._translator, 'get_cache_stats'):
+        try:
+            stats = pipeline._translator.get_cache_stats()
+            if isinstance(stats, dict):
+                result["translator"] = {
+                    "bg_to_en": dict(stats.get("bg_to_en", {})) if stats.get("bg_to_en") else None,
+                    "en_to_bg": dict(stats.get("en_to_bg", {})) if stats.get("en_to_bg") else None,
+                }
+        except Exception:
+            pass
+
+    # Medical model (MedGemma) cache stats
+    if pipeline._medical_model is not None and hasattr(pipeline._medical_model, 'get_cache_stats'):
+        try:
+            result["medical_reasoning"] = pipeline._medical_model.get_cache_stats()
+        except Exception:
+            pass
+
+    return result if result else None
 
 
 @app.get("/v1/models", response_model=ModelsResponse)

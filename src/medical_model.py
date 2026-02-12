@@ -2,12 +2,15 @@
 MedGemma medical reasoning model wrapper.
 
 Uses MLX for efficient inference on Apple Silicon.
+Includes LRU caching for repeated queries.
 """
 
+import hashlib
 import json
 import os
 import re
 import time
+from collections import OrderedDict
 from dataclasses import asdict, dataclass
 from typing import Optional
 
@@ -17,6 +20,12 @@ from mlx_lm.sample_utils import make_sampler
 from src.logging_config import get_logger
 
 logger = get_logger("viapharma.medical_model")
+
+# =============================================================================
+# CACHE CONFIGURATION
+# =============================================================================
+# Cache size for medical reasoning results (number of unique queries)
+REASONING_CACHE_SIZE = 500
 
 
 @dataclass
@@ -220,19 +229,27 @@ class MedicalModel:
     Wrapper for MedGemma model inference.
 
     Provides medical reasoning based on symptom descriptions.
+    Includes LRU caching for repeated queries to improve performance.
     """
 
-    def __init__(self, model_path: str = "./models/medgemma-4b-it-bf16"):
+    def __init__(self, model_path: str = "./models/medgemma-4b-it-bf16", cache_size: int = REASONING_CACHE_SIZE):
         """
         Initialize the medical model.
 
         Args:
             model_path: Path to the MedGemma model directory
+            cache_size: Maximum number of cached reasoning results
         """
         self.model_path = model_path
         self.model = None
         self.tokenizer = None
         self._loaded = False
+
+        # LRU cache for medical reasoning results
+        self._cache: OrderedDict[str, dict] = OrderedDict()
+        self._cache_size = cache_size
+        self._cache_hits = 0
+        self._cache_misses = 0
 
     def load(self) -> None:
         """Load the model into memory. Call this once at startup."""
@@ -245,6 +262,98 @@ class MedicalModel:
         self._loaded = True
         duration = time.perf_counter() - start_time
         logger.info(f"MedGemma loaded successfully", extra={"load_time_s": round(duration, 2)})
+
+    # =========================================================================
+    # CACHING METHODS
+    # =========================================================================
+
+    def _normalize_query(self, query: str) -> str:
+        """
+        Normalize query for cache key generation.
+
+        Normalizes whitespace, case, and punctuation to improve cache hits
+        for semantically equivalent queries.
+        """
+        if not query:
+            return ""
+        # Lowercase and normalize whitespace
+        normalized = " ".join(query.lower().split())
+        # Remove trailing punctuation that doesn't change meaning
+        normalized = normalized.rstrip("?!.,;:")
+        return normalized
+
+    def _get_cache_key(self, query: str, temperature: float) -> str:
+        """
+        Generate cache key from normalized query and parameters.
+
+        Args:
+            query: The symptom description
+            temperature: Sampling temperature (affects output)
+
+        Returns:
+            Hash string for cache lookup
+        """
+        normalized = self._normalize_query(query)
+        # Include temperature in key since it affects output
+        key_input = f"{normalized}|temp={temperature:.2f}"
+        return hashlib.sha256(key_input.encode()).hexdigest()[:16]
+
+    def _get_from_cache(self, cache_key: str) -> Optional[MedicalReasoning]:
+        """
+        Get cached reasoning result if available.
+
+        Moves accessed item to end (most recently used) for LRU behavior.
+        """
+        if cache_key in self._cache:
+            # Move to end (most recently used)
+            self._cache.move_to_end(cache_key)
+            self._cache_hits += 1
+            cached_data = self._cache[cache_key]
+            logger.debug(f"Cache HIT", extra={"cache_key": cache_key})
+            return MedicalReasoning.from_dict(cached_data)
+        self._cache_misses += 1
+        return None
+
+    def _put_in_cache(self, cache_key: str, reasoning: MedicalReasoning) -> None:
+        """
+        Store reasoning result in cache.
+
+        Evicts least recently used item if cache is full.
+        """
+        # Evict oldest if at capacity
+        while len(self._cache) >= self._cache_size:
+            evicted_key, _ = self._cache.popitem(last=False)
+            logger.debug(f"Cache eviction", extra={"evicted_key": evicted_key})
+
+        self._cache[cache_key] = reasoning.to_dict()
+        logger.debug(f"Cache STORE", extra={
+            "cache_key": cache_key,
+            "cache_size": len(self._cache)
+        })
+
+    def get_cache_stats(self) -> dict:
+        """
+        Get cache statistics for monitoring.
+
+        Returns:
+            Dictionary with cache metrics
+        """
+        total_requests = self._cache_hits + self._cache_misses
+        hit_rate = (self._cache_hits / total_requests * 100) if total_requests > 0 else 0.0
+
+        return {
+            "size": len(self._cache),
+            "max_size": self._cache_size,
+            "hits": self._cache_hits,
+            "misses": self._cache_misses,
+            "hit_rate_percent": round(hit_rate, 2),
+            "total_requests": total_requests,
+        }
+
+    def clear_cache(self) -> None:
+        """Clear all cached reasoning results."""
+        self._cache.clear()
+        logger.info("Reasoning cache cleared")
 
     def _format_prompt(self, user_message: str, system_prompt: str = None) -> str:
         """
@@ -270,23 +379,42 @@ class MedicalModel:
         symptoms: str,
         max_tokens: int = 200,
         temperature: float = 0.3,
-        system_prompt: str = None
+        system_prompt: str = None,
+        use_cache: bool = True
     ) -> MedicalReasoning:
         """
         Get medical reasoning for the given symptoms.
+
+        Uses LRU caching to avoid redundant inference for repeated queries.
 
         Args:
             symptoms: Description of symptoms (in English)
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature (0.0 = deterministic, 1.0 = creative)
             system_prompt: Optional custom system prompt
+            use_cache: Whether to use caching (default True)
 
         Returns:
             MedicalReasoning object with structured data
         """
+        # Check cache first (only for default system prompt)
+        cache_key = None
+        if use_cache and system_prompt is None:
+            cache_key = self._get_cache_key(symptoms, temperature)
+            cached_result = self._get_from_cache(cache_key)
+            if cached_result is not None:
+                logger.info("Returning cached medical reasoning", extra={
+                    "cache_key": cache_key,
+                    "query_preview": symptoms[:50]
+                })
+                return cached_result
+
+        # Load model if needed
         if not self._loaded:
             self.load()
 
+        # Run inference
+        start_time = time.perf_counter()
         prompt = self._format_prompt(symptoms, system_prompt)
 
         sampler = make_sampler(temp=temperature)
@@ -297,11 +425,27 @@ class MedicalModel:
             max_tokens=max_tokens,
             sampler=sampler,
         )
+        inference_time_ms = (time.perf_counter() - start_time) * 1000
 
         # Clean up and parse JSON response
         response = response.strip()
+        result = self._parse_medical_response(response)
 
-        return self._parse_medical_response(response)
+        # Store in cache (only for default system prompt)
+        if cache_key is not None:
+            self._put_in_cache(cache_key, result)
+            logger.info("Medical reasoning completed and cached", extra={
+                "cache_key": cache_key,
+                "inference_time_ms": round(inference_time_ms, 2),
+                "query_preview": symptoms[:50]
+            })
+        else:
+            logger.info("Medical reasoning completed (not cached)", extra={
+                "inference_time_ms": round(inference_time_ms, 2),
+                "query_preview": symptoms[:50]
+            })
+
+        return result
 
     # Garbage phrases that should not appear in output (from product side effects, etc.)
     GARBAGE_PHRASES = [
