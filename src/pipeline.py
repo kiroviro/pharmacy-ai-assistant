@@ -705,107 +705,66 @@ class Pipeline:
         """
         response_parts = []
 
-        # Medical analysis section - show MedGemma's reasoning
+        # Helper function to translate text safely
+        def translate(text: str) -> str:
+            if not translate_reasoning or not text:
+                return text
+            try:
+                return self._translate_to_bulgarian(text)
+            except Exception:
+                return text
+
+        # Medical analysis section
         response_parts.append("## 🔍 Медицински анализ\n")
 
-        # Build English text for translation
-        english_parts = []
+        # Symptoms - format nicely whether list or single string
         if medical_reasoning.symptoms:
-            english_parts.append(f"Symptoms: {', '.join(medical_reasoning.symptoms)}")
+            symptoms_list = medical_reasoning.symptoms
+            # If it's a list with one long item, it's probably an explanation - skip it
+            if len(symptoms_list) == 1 and len(symptoms_list[0]) > 50:
+                # Model returned explanation as symptom - use likely_cause instead
+                pass
+            else:
+                symptoms_str = ", ".join(symptoms_list)
+                response_parts.append(f"**🩺 Симптоми:** {symptoms_str}\n")
+
+        # Probable cause with explanation
         if medical_reasoning.likely_cause:
-            english_parts.append(f"Probable cause: {medical_reasoning.likely_cause}")
+            cause = translate(medical_reasoning.likely_cause)
+            response_parts.append(f"**🔬 Вероятна причина:** {cause}\n")
+
         if medical_reasoning.explanation:
-            english_parts.append(f"Explanation: {medical_reasoning.explanation}")
+            explanation = translate(medical_reasoning.explanation)
+            response_parts.append(f"{explanation}\n")
+
+        # Treatment recommendation
+        if medical_reasoning.treatment_type:
+            treatment = translate(medical_reasoning.treatment_type)
+            response_parts.append(f"**💊 Препоръчано лечение:** {treatment}\n")
+
         if medical_reasoning.how_treatment_helps:
-            english_parts.append(f"How treatment helps: {medical_reasoning.how_treatment_helps}")
+            how_helps = translate(medical_reasoning.how_treatment_helps)
+            response_parts.append(f"*{how_helps}*\n")
+
+        # Self-care tips
         if medical_reasoning.self_care_tips:
-            english_parts.append(f"Self-care tips: {'; '.join(medical_reasoning.self_care_tips)}")
-        if medical_reasoning.duration_guidance:
-            english_parts.append(f"Recovery time: {medical_reasoning.duration_guidance}")
-        if medical_reasoning.warnings:
-            english_parts.append(f"Warnings: {'; '.join(medical_reasoning.warnings)}")
-
-        english_text = ". ".join(english_parts)
-
-        # Translate to Bulgarian
-        if translate_reasoning and english_text:
-            try:
-                bulgarian_text = self._translate_to_bulgarian(english_text)
-            except Exception as e:
-                logger.warning(f"Failed to translate reasoning: {e}")
-                bulgarian_text = english_text
-        else:
-            bulgarian_text = english_text
-
-        # Format the analysis sections
-        if medical_reasoning.symptoms:
-            response_parts.append(f"**🩺 Идентифицирани симптоми:** {', '.join(medical_reasoning.symptoms)}\n")
-
-        if medical_reasoning.likely_cause or medical_reasoning.explanation:
-            cause_text = medical_reasoning.likely_cause
-            if translate_reasoning and cause_text:
-                try:
-                    cause_text = self._translate_to_bulgarian(cause_text)
-                except Exception:
-                    pass
-            response_parts.append(f"**🔬 Вероятна причина:** {cause_text}\n")
-
-            if medical_reasoning.explanation:
-                explanation = medical_reasoning.explanation
-                if translate_reasoning:
-                    try:
-                        explanation = self._translate_to_bulgarian(explanation)
-                    except Exception:
-                        pass
-                response_parts.append(f"📋 {explanation}\n")
-
-        if medical_reasoning.treatment_type or medical_reasoning.how_treatment_helps:
-            treatment = medical_reasoning.treatment_type
-            if translate_reasoning and treatment:
-                try:
-                    treatment = self._translate_to_bulgarian(treatment)
-                except Exception:
-                    pass
-            response_parts.append(f"**💉 Препоръчано лечение:** {treatment}\n")
-
-            if medical_reasoning.how_treatment_helps:
-                how_helps = medical_reasoning.how_treatment_helps
-                if translate_reasoning:
-                    try:
-                        how_helps = self._translate_to_bulgarian(how_helps)
-                    except Exception:
-                        pass
-                response_parts.append(f"📋 {how_helps}\n")
-
-        if medical_reasoning.self_care_tips:
-            response_parts.append("**🏠 Съвети за домашна грижа:**")
+            response_parts.append("**🏠 Домашни грижи:**")
             for tip in medical_reasoning.self_care_tips:
-                if translate_reasoning:
-                    try:
-                        tip = self._translate_to_bulgarian(tip)
-                    except Exception:
-                        pass
-                response_parts.append(f"• {tip}")
+                tip_translated = translate(tip)
+                response_parts.append(f"• {tip_translated}")
             response_parts.append("")
 
+        # Recovery timeline
         if medical_reasoning.duration_guidance:
-            duration = medical_reasoning.duration_guidance
-            if translate_reasoning:
-                try:
-                    duration = self._translate_to_bulgarian(duration)
-                except Exception:
-                    pass
-            response_parts.append(f"**⏱️ Очаквано възстановяване:** {duration}\n")
+            duration = translate(medical_reasoning.duration_guidance)
+            response_parts.append(f"**⏱️ Възстановяване:** {duration}\n")
 
+        # Warnings
         if medical_reasoning.warnings:
-            response_parts.append("**⚠️ Важни предупреждения:**")
+            response_parts.append("**⚠️ Кога да потърсите лекар:**")
             for warning in medical_reasoning.warnings:
-                if translate_reasoning:
-                    try:
-                        warning = self._translate_to_bulgarian(warning)
-                    except Exception:
-                        pass
-                response_parts.append(f"• {warning}")
+                warning_translated = translate(warning)
+                response_parts.append(f"• {warning_translated}")
             response_parts.append("")
 
         # Product recommendations section
