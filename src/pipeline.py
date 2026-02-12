@@ -912,8 +912,58 @@ class Pipeline:
         return self.translator.translate_to_bulgarian(text)
 
     def _get_medical_reasoning(self, text: str) -> MedicalReasoning:
-        """Use MedGemma to understand symptoms and suggest treatment categories."""
-        return self.medical_model.get_medical_reasoning(text)
+        """
+        Use MedGemma to understand symptoms and suggest treatment categories.
+
+        Includes fallback strategy for graceful degradation if model fails.
+        """
+        try:
+            return self.medical_model.get_medical_reasoning(text)
+        except Exception as e:
+            logger.error(f"MedGemma inference failed: {e}", exc_info=True)
+            return self._create_fallback_reasoning(text)
+
+    def _create_fallback_reasoning(self, text: str) -> MedicalReasoning:
+        """
+        Create a safe fallback MedicalReasoning when MedGemma fails.
+
+        Returns a conservative response that recommends consulting a pharmacist.
+        """
+        logger.warning("Using fallback medical reasoning due to model failure")
+
+        # Extract basic symptoms from text using simple keyword detection
+        symptom_keywords = {
+            "headache": ["главоболие", "headache", "болка в главата"],
+            "fever": ["температура", "fever", "треска"],
+            "cough": ["кашлица", "cough"],
+            "pain": ["болка", "pain", "боли"],
+            "cold": ["настинка", "cold", "простуда"],
+            "stomach": ["стомах", "stomach", "корем"],
+            "throat": ["гърло", "throat"],
+        }
+
+        detected_symptoms = []
+        text_lower = text.lower()
+        for symptom, keywords in symptom_keywords.items():
+            if any(kw in text_lower for kw in keywords):
+                detected_symptoms.append(symptom)
+
+        return MedicalReasoning(
+            symptoms=detected_symptoms if detected_symptoms else ["described symptoms"],
+            likely_cause="Unable to perform detailed analysis",
+            treatment_type="general wellness products",
+            warnings=[
+                "Automated analysis unavailable - please consult a pharmacist",
+                "If symptoms persist or worsen, see a doctor"
+            ],
+            see_doctor=False,
+            explanation="Our medical analysis system is temporarily limited. "
+                       "We can show you general wellness products that may help.",
+            how_treatment_helps="",
+            self_care_tips=["Rest and stay hydrated", "Monitor your symptoms"],
+            duration_guidance="Consult a pharmacist for personalized advice",
+            user_conditions=[]
+        )
 
     def _check_safety(self, original_query: str, translated_query: str, medical_reasoning: MedicalReasoning) -> tuple[bool, str]:
         """
@@ -1298,22 +1348,29 @@ class Pipeline:
         products: list,
         translate_reasoning: bool = True
     ) -> str:
-        """Format the final response as a friendly pharmacy assistant."""
+        """Format the final response as a friendly pharmacy assistant.
+
+        Uses batched translation for efficiency when translate_reasoning=True.
+        """
         parts = ["## 🔍 Медицински анализ\n"]
 
-        # Helper for translation with garbage filtering
-        def translate_if_valid(text: str, min_length: int = 3) -> str | None:
-            if not text or len(text) <= min_length or self._contains_garbage(text):
+        # Collect all texts to translate in one batch for efficiency
+        if translate_reasoning:
+            texts_to_translate = self._collect_texts_for_translation(medical_reasoning)
+            translated_texts = self._batch_translate_texts(texts_to_translate)
+        else:
+            translated_texts = {}
+
+        # Helper to get translated text or original
+        def get_translated(key: str, original: str, min_length: int = 3) -> str | None:
+            if not original or len(original) <= min_length or self._contains_garbage(original):
                 return None
             if not translate_reasoning:
-                return text
-            try:
-                translated = self._translate_to_bulgarian(text)
-                if self._contains_garbage(translated):
-                    return text
-                return translated
-            except Exception:
-                return text
+                return original
+            translated = translated_texts.get(key, original)
+            if self._contains_garbage(translated):
+                return original
+            return translated
 
         # Symptoms
         if medical_reasoning.symptoms:
@@ -1322,34 +1379,42 @@ class Pipeline:
                 parts.append(f"**🩺 Симптоми:** {', '.join(valid_symptoms)}\n")
 
         # Probable cause with explanation
-        if cause := translate_if_valid(medical_reasoning.likely_cause):
+        if cause := get_translated("likely_cause", medical_reasoning.likely_cause):
             parts.append(f"**🔬 Вероятна причина:** {cause}\n")
 
-        if explanation := translate_if_valid(medical_reasoning.explanation, min_length=10):
+        if explanation := get_translated("explanation", medical_reasoning.explanation, min_length=10):
             parts.append(f"{explanation}\n")
 
         # Treatment recommendation
-        if treatment := translate_if_valid(medical_reasoning.treatment_type):
+        if treatment := get_translated("treatment_type", medical_reasoning.treatment_type):
             parts.append(f"**💊 Препоръчано лечение:** {treatment}\n")
 
-        if how_helps := translate_if_valid(medical_reasoning.how_treatment_helps, min_length=10):
+        if how_helps := get_translated("how_treatment_helps", medical_reasoning.how_treatment_helps, min_length=10):
             parts.append(f"*{how_helps}*\n")
 
         # Self-care tips
         if medical_reasoning.self_care_tips:
-            valid_tips = [t for tip in medical_reasoning.self_care_tips if (t := translate_if_valid(tip, min_length=5))]
+            valid_tips = []
+            for i, tip in enumerate(medical_reasoning.self_care_tips):
+                translated_tip = get_translated(f"tip_{i}", tip, min_length=5)
+                if translated_tip:
+                    valid_tips.append(translated_tip)
             if valid_tips:
                 parts.append("**🏠 Домашни грижи:**")
                 parts.extend(f"• {tip}" for tip in valid_tips)
                 parts.append("")
 
         # Recovery timeline
-        if duration := translate_if_valid(medical_reasoning.duration_guidance):
+        if duration := get_translated("duration_guidance", medical_reasoning.duration_guidance):
             parts.append(f"**⏱️ Възстановяване:** {duration}\n")
 
         # Warnings
         if medical_reasoning.warnings:
-            valid_warnings = [w for warning in medical_reasoning.warnings if (w := translate_if_valid(warning, min_length=10))]
+            valid_warnings = []
+            for i, warning in enumerate(medical_reasoning.warnings):
+                translated_warning = get_translated(f"warning_{i}", warning, min_length=10)
+                if translated_warning:
+                    valid_warnings.append(translated_warning)
             if valid_warnings:
                 parts.append("**⚠️ Кога да потърсите лекар:**")
                 parts.extend(f"• {warning}" for warning in valid_warnings)
@@ -1372,6 +1437,50 @@ class Pipeline:
                     "Консултирайте се с фармацевт за повече информация.*")
 
         return "\n".join(parts)
+
+    def _collect_texts_for_translation(self, medical_reasoning: MedicalReasoning) -> dict[str, str]:
+        """Collect all texts from MedicalReasoning that need translation."""
+        texts = {}
+
+        if medical_reasoning.likely_cause:
+            texts["likely_cause"] = medical_reasoning.likely_cause
+        if medical_reasoning.explanation:
+            texts["explanation"] = medical_reasoning.explanation
+        if medical_reasoning.treatment_type:
+            texts["treatment_type"] = medical_reasoning.treatment_type
+        if medical_reasoning.how_treatment_helps:
+            texts["how_treatment_helps"] = medical_reasoning.how_treatment_helps
+        if medical_reasoning.duration_guidance:
+            texts["duration_guidance"] = medical_reasoning.duration_guidance
+
+        # Self-care tips
+        if medical_reasoning.self_care_tips:
+            for i, tip in enumerate(medical_reasoning.self_care_tips):
+                if tip:
+                    texts[f"tip_{i}"] = tip
+
+        # Warnings
+        if medical_reasoning.warnings:
+            for i, warning in enumerate(medical_reasoning.warnings):
+                if warning:
+                    texts[f"warning_{i}"] = warning
+
+        return texts
+
+    def _batch_translate_texts(self, texts: dict[str, str]) -> dict[str, str]:
+        """Batch translate all texts in one call for efficiency."""
+        if not texts:
+            return {}
+
+        keys = list(texts.keys())
+        values = list(texts.values())
+
+        try:
+            translated_values = self.translator.translate_batch_to_bulgarian(values)
+            return dict(zip(keys, translated_values))
+        except Exception as e:
+            logger.warning(f"Batch translation failed, falling back to originals: {e}")
+            return texts
 
     def _contains_garbage(self, text: str) -> bool:
         """Check if text contains garbage patterns or excessive repetition."""

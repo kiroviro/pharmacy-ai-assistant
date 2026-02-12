@@ -15,7 +15,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
 from src.config import get_settings
@@ -454,10 +454,13 @@ def _get_cache_stats(pipeline) -> dict:
     if pipeline._translator is not None and hasattr(pipeline._translator, 'get_cache_stats'):
         try:
             stats = pipeline._translator.get_cache_stats()
+            # Verify it's a real dict (not a Mock)
             if isinstance(stats, dict):
+                bg_to_en = stats.get("bg_to_en")
+                en_to_bg = stats.get("en_to_bg")
                 result["translator"] = {
-                    "bg_to_en": dict(stats.get("bg_to_en", {})) if stats.get("bg_to_en") else None,
-                    "en_to_bg": dict(stats.get("en_to_bg", {})) if stats.get("en_to_bg") else None,
+                    "bg_to_en": dict(bg_to_en) if isinstance(bg_to_en, dict) else None,
+                    "en_to_bg": dict(en_to_bg) if isinstance(en_to_bg, dict) else None,
                 }
         except Exception:
             pass
@@ -465,11 +468,107 @@ def _get_cache_stats(pipeline) -> dict:
     # Medical model (MedGemma) cache stats
     if pipeline._medical_model is not None and hasattr(pipeline._medical_model, 'get_cache_stats'):
         try:
-            result["medical_reasoning"] = pipeline._medical_model.get_cache_stats()
+            stats = pipeline._medical_model.get_cache_stats()
+            # Verify it's a real dict (not a Mock)
+            if isinstance(stats, dict):
+                result["medical_reasoning"] = stats
         except Exception:
             pass
 
     return result if result else None
+
+
+@app.get("/metrics/prometheus")
+async def prometheus_metrics():
+    """
+    Export metrics in Prometheus format for monitoring systems.
+
+    Standard Prometheus text format compatible with:
+    - Prometheus server
+    - Grafana
+    - DataDog
+    - Other monitoring tools
+    """
+    pipeline = get_pipeline()
+
+    lines = [
+        "# HELP viapharma_requests_total Total number of requests",
+        "# TYPE viapharma_requests_total counter",
+        f'viapharma_requests_total{{status="success"}} {metrics_store["requests_success"]}',
+        f'viapharma_requests_total{{status="failed"}} {metrics_store["requests_failed"]}',
+        "",
+        "# HELP viapharma_requests_by_type Requests by type",
+        "# TYPE viapharma_requests_by_type counter",
+        f'viapharma_requests_by_type{{type="medical"}} {metrics_store["requests_medical"]}',
+        f'viapharma_requests_by_type{{type="non_medical"}} {metrics_store["requests_non_medical"]}',
+        f'viapharma_requests_by_type{{type="red_flag"}} {metrics_store["requests_red_flag"]}',
+        "",
+        "# HELP viapharma_latency_total_ms Total latency in milliseconds",
+        "# TYPE viapharma_latency_total_ms counter",
+        f'viapharma_latency_total_ms {metrics_store["total_latency_ms"]:.2f}',
+        "",
+        "# HELP viapharma_latency_avg_ms Average latency in milliseconds",
+        "# TYPE viapharma_latency_avg_ms gauge",
+    ]
+
+    avg_latency = (
+        metrics_store["total_latency_ms"] / metrics_store["requests_total"]
+        if metrics_store["requests_total"] > 0
+        else 0.0
+    )
+    lines.append(f'viapharma_latency_avg_ms {avg_latency:.2f}')
+    lines.append("")
+
+    # Products count
+    try:
+        products_count = pipeline.product_store.collection.count()
+    except Exception:
+        products_count = 0
+
+    lines.extend([
+        "# HELP viapharma_products_total Total products in catalog",
+        "# TYPE viapharma_products_total gauge",
+        f'viapharma_products_total {products_count}',
+        "",
+    ])
+
+    # Cache metrics - Medical reasoning
+    if pipeline._medical_model is not None and hasattr(pipeline._medical_model, 'get_cache_stats'):
+        try:
+            cache_stats = pipeline._medical_model.get_cache_stats()
+            lines.extend([
+                "# HELP viapharma_cache_size Current cache size",
+                "# TYPE viapharma_cache_size gauge",
+                f'viapharma_cache_size{{cache="medical_reasoning"}} {cache_stats["size"]}',
+                "",
+                "# HELP viapharma_cache_hits_total Cache hits",
+                "# TYPE viapharma_cache_hits_total counter",
+                f'viapharma_cache_hits_total{{cache="medical_reasoning"}} {cache_stats["hits"]}',
+                "",
+                "# HELP viapharma_cache_misses_total Cache misses",
+                "# TYPE viapharma_cache_misses_total counter",
+                f'viapharma_cache_misses_total{{cache="medical_reasoning"}} {cache_stats["misses"]}',
+                "",
+            ])
+        except Exception:
+            pass
+
+    # Uptime
+    lines.extend([
+        "# HELP viapharma_uptime_seconds Server uptime in seconds",
+        "# TYPE viapharma_uptime_seconds gauge",
+        f'viapharma_uptime_seconds {time.time() - startup_time:.2f}' if startup_time else 'viapharma_uptime_seconds 0',
+        "",
+    ])
+
+    # Rate limiting
+    lines.extend([
+        "# HELP viapharma_rate_limit_ips_tracked Number of IPs being rate limited",
+        "# TYPE viapharma_rate_limit_ips_tracked gauge",
+        f'viapharma_rate_limit_ips_tracked {len(rate_limit_store)}',
+    ])
+
+    return PlainTextResponse(content="\n".join(lines), media_type="text/plain; charset=utf-8")
 
 
 @app.get("/v1/models", response_model=ModelsResponse)

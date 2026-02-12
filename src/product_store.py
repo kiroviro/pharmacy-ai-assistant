@@ -2,9 +2,10 @@
 Product vector store using ChromaDB.
 
 Provides semantic search over the product catalogue using
-multilingual embeddings.
+multilingual embeddings. Includes async wrappers for non-blocking operations.
 """
 
+import asyncio
 from pathlib import Path
 from typing import Optional
 
@@ -384,6 +385,77 @@ class ProductStore:
             "db_path": str(self.db_path),
             "embedding_model": self.embedding_model_name,
         }
+
+    # =========================================================================
+    # ASYNC METHODS (non-blocking wrappers)
+    # =========================================================================
+
+    async def search_async(
+        self,
+        query: str,
+        n_results: int = 10,
+        where: Optional[dict] = None,
+        min_score: float = MIN_SIMILARITY_THRESHOLD,
+    ) -> list[dict]:
+        """
+        Async version of search - runs in thread pool to avoid blocking event loop.
+
+        Args:
+            query: Search query (Bulgarian or English)
+            n_results: Number of results to return
+            where: Optional filter conditions
+            min_score: Minimum similarity threshold
+
+        Returns:
+            List of product dictionaries
+        """
+        return await asyncio.to_thread(
+            self.search, query, n_results, where, min_score
+        )
+
+    async def hybrid_search_async(
+        self,
+        query: str,
+        n_results: int = 10,
+        where: Optional[dict] = None,
+        keyword_boost: float = KEYWORD_BOOST_PER_MATCH,
+    ) -> list[dict]:
+        """
+        Async version of hybrid_search - runs in thread pool.
+
+        Args:
+            query: Search query
+            n_results: Number of results
+            where: Optional filter conditions
+            keyword_boost: Score boost per keyword match
+
+        Returns:
+            List of products with combined scores
+        """
+        return await asyncio.to_thread(
+            self.hybrid_search, query, n_results, where, keyword_boost
+        )
+
+    async def search_by_category_async(
+        self,
+        query: str,
+        treatment_type: str,
+        n_results: int = 10,
+    ) -> list[dict]:
+        """
+        Async version of search_by_category - runs in thread pool.
+
+        Args:
+            query: Search query
+            treatment_type: Treatment type for category mapping
+            n_results: Number of results
+
+        Returns:
+            List of matching products
+        """
+        return await asyncio.to_thread(
+            self.search_by_category, query, treatment_type, n_results
+        )
 
 
 # Global store instance

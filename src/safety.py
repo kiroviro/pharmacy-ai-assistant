@@ -4,9 +4,11 @@ Safety Layer for detecting red-flag symptoms and enforcing OTC-only recommendati
 Uses a hybrid approach:
 - Fast keyword matching for known dangerous phrases
 - Semantic embedding matching for paraphrasing/typos/transliteration
+- Unicode normalization to prevent bypass via lookalike characters
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Optional
 
@@ -14,6 +16,63 @@ from src.logging_config import get_logger
 from src.safety_embeddings import get_embedding_safety_classifier
 
 logger = get_logger("viapharma.safety")
+
+
+# =============================================================================
+# UNICODE NORMALIZATION
+# =============================================================================
+
+# Characters to remove (invisible/zero-width that could hide dangerous content)
+INVISIBLE_CHARS = {
+    '\u200b',  # Zero-width space
+    '\u200c',  # Zero-width non-joiner
+    '\u200d',  # Zero-width joiner
+    '\ufeff',  # BOM / zero-width no-break space
+    '\u00ad',  # Soft hyphen
+    '\u2060',  # Word joiner
+    '\u180e',  # Mongolian vowel separator
+}
+
+
+def normalize_text_for_safety(text: str) -> str:
+    """
+    Normalize text to prevent safety check bypass via unicode tricks.
+
+    Handles:
+    - Unicode normalization (NFKC form) - normalizes ligatures, fullwidth chars
+    - Zero-width/invisible character removal
+    - Excessive whitespace normalization
+
+    Note: Does NOT convert Cyrillic to Latin - we support Bulgarian keywords.
+
+    Args:
+        text: Input text that may contain bypass attempts
+
+    Returns:
+        Normalized text safe for keyword matching
+    """
+    if not text:
+        return ""
+
+    # Step 1: Unicode normalization (NFKC - compatibility decomposition + canonical composition)
+    # This normalizes things like ﬁ -> fi, ² -> 2, fullwidth -> ASCII, etc.
+    # Importantly, it does NOT convert Cyrillic to Latin
+    normalized = unicodedata.normalize('NFKC', text)
+
+    # Step 2: Remove invisible/zero-width characters that could hide content
+    normalized = ''.join(char for char in normalized if char not in INVISIBLE_CHARS)
+
+    # Step 3: Remove remaining control characters (but keep newlines/tabs)
+    normalized = ''.join(
+        char for char in normalized
+        if unicodedata.category(char) not in ('Cc', 'Cf') or char in '\n\t'
+    )
+
+    # Step 4: Normalize whitespace (but preserve newlines)
+    normalized = re.sub(r'[^\S\n]+', ' ', normalized)
+    normalized = re.sub(r'\n\s*\n', '\n\n', normalized)
+
+    return normalized.strip()
 
 
 @dataclass
@@ -180,11 +239,16 @@ class SafetyLayer:
         self._warning_pattern = make_pattern(self.warning_symptoms)
 
     def check_safety(self, text: str, include_medical_reasoning: bool = True) -> SafetyCheckResult:
-        """Check text for red-flag symptoms."""
+        """Check text for red-flag symptoms.
+
+        Applies unicode normalization to prevent bypass via lookalike characters.
+        """
         if not text:
             return self._safe_result()
 
-        text_lower = text.lower()
+        # Normalize text to prevent bypass via unicode tricks
+        normalized_text = normalize_text_for_safety(text)
+        text_lower = normalized_text.lower()
 
         # Check each severity level in order of priority
         for severity, pattern, is_red_flag in [
@@ -227,18 +291,20 @@ class SafetyLayer:
         """
         Hybrid safety check: fast keywords + semantic embeddings.
 
-        Returns the most severe result from either method.
+        Applies unicode normalization and returns the most severe result from either method.
         """
-        keyword_result = self.check_safety(text)
+        # Normalize before checking (check_safety also normalizes, but we need it for embedding too)
+        normalized_text = normalize_text_for_safety(text)
+        keyword_result = self.check_safety(normalized_text)
 
         # If keywords found emergency/urgent, return immediately
         if keyword_result.severity in ("emergency", "urgent"):
             return keyword_result
 
-        # Run embedding check for semantic matching
+        # Run embedding check for semantic matching (use normalized text)
         try:
             embedding_classifier = get_embedding_safety_classifier()
-            embedding_result = embedding_classifier.classify(text)
+            embedding_result = embedding_classifier.classify(normalized_text)
         except Exception as e:
             logger.error(f"Embedding classifier failed: {e}")
             return keyword_result
