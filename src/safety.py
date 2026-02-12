@@ -324,6 +324,84 @@ class SafetyLayer:
 
         return keyword_result
 
+    def check_safety_with_llm_result(
+        self,
+        text: str,
+        llm_safety_level: str = "safe",
+        llm_detected_flags: list = None,
+    ) -> SafetyCheckResult:
+        """
+        Hybrid safety check: hard-coded fast-path + LLM augmentation.
+
+        The hard-coded patterns ALWAYS run first (non-negotiable for safety).
+        LLM results augment by catching paraphrases and semantic variations
+        that keyword matching might miss.
+
+        Args:
+            text: User query text
+            llm_safety_level: Safety level from unified LLM processor
+                ("safe", "warning", "urgent", "emergency")
+            llm_detected_flags: List of symptoms/flags detected by LLM
+
+        Returns:
+            SafetyCheckResult with the most severe finding from either source
+        """
+        if llm_detected_flags is None:
+            llm_detected_flags = []
+
+        # ALWAYS run hard-coded check first (non-negotiable)
+        keyword_result = self.check_safety(text)
+
+        # If hard-coded found emergency, return immediately
+        if keyword_result.severity == "emergency":
+            logger.info(
+                "Hard-coded safety detected EMERGENCY",
+                extra={"matched": keyword_result.matched_symptoms}
+            )
+            return keyword_result
+
+        # If hard-coded found urgent, return immediately
+        if keyword_result.severity == "urgent":
+            logger.info(
+                "Hard-coded safety detected URGENT",
+                extra={"matched": keyword_result.matched_symptoms}
+            )
+            return keyword_result
+
+        # Compare with LLM result - take the more severe
+        llm_is_red_flag = llm_safety_level in ("emergency", "urgent")
+
+        if llm_is_red_flag:
+            # LLM detected something keywords missed (e.g., paraphrase)
+            logger.info(
+                "LLM safety augmentation detected red flag",
+                extra={
+                    "llm_level": llm_safety_level,
+                    "llm_flags": llm_detected_flags,
+                    "keyword_level": keyword_result.severity,
+                }
+            )
+            return SafetyCheckResult(
+                is_red_flag=True,
+                severity=llm_safety_level,
+                matched_symptoms=llm_detected_flags,
+                message=self._get_message_for_severity(llm_safety_level),
+                should_refer_to_doctor=True,
+            )
+
+        # LLM detected warning but keywords didn't
+        if llm_safety_level == "warning" and keyword_result.severity == "none":
+            return SafetyCheckResult(
+                is_red_flag=False,
+                severity="warning",
+                matched_symptoms=llm_detected_flags,
+                message=self._get_message_for_severity("warning"),
+                should_refer_to_doctor=True,
+            )
+
+        # Return keyword result (could be warning or safe)
+        return keyword_result
+
     # Pre-defined messages for each severity level
     _MESSAGES = {
         "emergency": """🚨 **СПЕШНО: Моля, потърсете незабавна медицинска помощ!**

@@ -4,6 +4,24 @@ Translation module for Bulgarian ↔ English using MarianMT.
 Uses Helsinki-NLP's MarianMT models:
 - BG → EN: Helsinki-NLP/opus-mt-bg-en
 - EN → BG: Helsinki-NLP/opus-mt-en-bg
+
+DEPRECATION NOTICE:
+    The translate_to_english() method is being replaced by the unified
+    LLM processor (src/unified_processor.py) which handles translation
+    as part of its single-call processing.
+
+    When unified_processor_enabled=True:
+    - Query translation (BG→EN) is done by the unified processor
+    - Response translation (EN→BG) still uses this module
+    - The medical dictionary is still used for product descriptions
+
+    The module will NOT be fully deprecated as it's still needed for:
+    - Response formatting and translation back to Bulgarian
+    - Product description translation
+    - Symptom term translation
+
+    Migration: Set VIAPHARMA_UNIFIED_PROCESSOR_ENABLED=true to use
+    LLM-driven query translation.
 """
 
 from collections import OrderedDict

@@ -18,6 +18,7 @@ from src.medical_model import MedicalReasoning, get_medical_model
 from src.product_store import get_product_store
 from src.safety import get_safety_layer
 from src.translator import get_translator
+from src.unified_processor import get_unified_processor, UnifiedProcessorResult
 
 logger = get_logger("viapharma.pipeline")
 
@@ -503,12 +504,19 @@ class Pipeline:
         # Models (lazy loaded by default for faster startup)
         self._medical_model = None
         self._translator = None
+        self._unified_processor = None
         self._lazy_load = lazy_load
+
+        # Feature flag for unified processor
+        settings = get_settings()
+        self._use_unified_processor = getattr(settings, 'unified_processor_enabled', False)
 
         if not lazy_load:
             self._load_medical_model()
             self._load_translator()
             self._load_product_store()
+            if self._use_unified_processor:
+                self._load_unified_processor()
 
     @property
     def product_store(self):
@@ -531,6 +539,20 @@ class Pipeline:
             self._medical_model = get_medical_model()
             self._medical_model.load()
         return self._medical_model
+
+    @property
+    def unified_processor(self):
+        """Get the unified processor, loading lazily if necessary."""
+        if self._unified_processor is None:
+            self._unified_processor = get_unified_processor()
+            self._unified_processor.load()
+        return self._unified_processor
+
+    def _load_unified_processor(self):
+        """Load the unified processor."""
+        if self._unified_processor is None:
+            self._unified_processor = get_unified_processor()
+            self._unified_processor.load()
 
     def _load_product_store(self):
         """Load the product store."""
@@ -728,18 +750,41 @@ class Pipeline:
         5b. Product Refinement (LLM) - pick best matches [ACCURATE]
         6. Translate EN → BG
         7. Format Response
+
+        If unified_processor_enabled=True, uses LLM-driven processing instead.
         """
         start_time = time.perf_counter()
         logger.info(f"Processing query", extra={
             "query_length": len(user_input),
-            "query_preview": user_input[:50] + "..." if len(user_input) > 50 else user_input
+            "query_preview": user_input[:50] + "..." if len(user_input) > 50 else user_input,
+            "unified_processor": self._use_unified_processor,
         })
 
-        # Step 0: Check for catalog queries (skip medical reasoning)
+        # Step 0: Hard-coded safety fast-path (ALWAYS runs - non-negotiable)
+        fast_safety = self.safety_layer.check_safety(user_input)
+        if fast_safety.severity == "emergency":
+            logger.warning("Emergency detected by fast-path safety check")
+            return PipelineResult(
+                response=fast_safety.message,
+                is_medical=True,
+                is_red_flag=True,
+                original_text=user_input,
+            )
+
+        # Step 0b: Check for catalog queries (skip medical reasoning)
         is_catalog, search_term = self._is_catalog_query(user_input)
         if is_catalog:
             return self._process_catalog_query(user_input, search_term)
 
+        # Route to unified processor if enabled
+        if self._use_unified_processor:
+            try:
+                return self._process_with_unified_processor(user_input, start_time)
+            except Exception as e:
+                logger.error(f"Unified processor failed, falling back to legacy: {e}", exc_info=True)
+                # Fall through to legacy processing
+
+        # Legacy processing path (or fallback if unified processor fails)
         # Step 1: Intent Classification
         is_medical, confidence, reason = self.intent_classifier.is_medical_query(user_input)
         logger.debug(f"Intent classification", extra={
@@ -874,6 +919,248 @@ class Pipeline:
             user_conditions=all_conditions,
             contraindicated_products=contraindicated_products
         )
+
+    # =========================================================================
+    # UNIFIED PROCESSOR PATH (LLM-driven)
+    # =========================================================================
+
+    def _process_with_unified_processor(self, user_input: str, start_time: float) -> PipelineResult:
+        """
+        Process query using the unified LLM processor.
+
+        This replaces the legacy multi-step flow with a single LLM call that handles:
+        - Intent classification
+        - Safety detection (augments hard-coded fast-path)
+        - Condition extraction
+        - Translation
+        - Medical reasoning
+
+        Args:
+            user_input: User query (Bulgarian or English)
+            start_time: Start time for duration tracking
+
+        Returns:
+            PipelineResult
+        """
+        logger.info("Using unified LLM processor")
+
+        # Get unified processing result
+        llm_result = self.unified_processor.process(user_input)
+
+        # Check intent (replaces intent_classifier)
+        if not llm_result.intent.is_pharmacy_related:
+            logger.debug("Query rejected by unified processor", extra={
+                "confidence": llm_result.intent.confidence,
+                "reason": llm_result.intent.rejection_reason,
+            })
+            return PipelineResult(
+                response=self.intent_classifier.get_rejection_message(
+                    "bg", llm_result.intent.rejection_reason or ""
+                ),
+                is_medical=False,
+                original_text=user_input,
+            )
+
+        # Hybrid safety check (hard-coded + LLM)
+        safety_result = self.safety_layer.check_safety_with_llm_result(
+            text=user_input,
+            llm_safety_level=llm_result.safety.level,
+            llm_detected_flags=llm_result.safety.detected_flags,
+        )
+
+        if safety_result.is_red_flag:
+            logger.warning("Red flag detected by hybrid safety check", extra={
+                "severity": safety_result.severity,
+                "matched": safety_result.matched_symptoms,
+            })
+            return PipelineResult(
+                response=safety_result.message,
+                is_medical=True,
+                is_red_flag=True,
+                original_text=user_input,
+                translated_text=llm_result.extraction.query_translated,
+            )
+
+        # Build MedicalReasoning from unified result (for compatibility)
+        medical_reasoning = self._build_medical_reasoning_from_unified(llm_result)
+
+        # Product retrieval (unchanged - uses vector DB)
+        candidate_products = self._retrieve_product_candidates(medical_reasoning)
+        candidate_products = self.safety_layer.filter_otc_only(candidate_products)
+
+        # Filter by contraindications
+        contraindicated_products = []
+        if llm_result.extraction.user_conditions:
+            candidate_products, contraindicated_products = filter_by_contraindications(
+                products=candidate_products,
+                user_conditions=llm_result.extraction.user_conditions,
+                strict=True,
+            )
+
+        # Product refinement (uses existing LLM-based refinement)
+        selected_products = self._refine_product_selection(
+            user_query=llm_result.extraction.query_translated,
+            medical_reasoning=medical_reasoning,
+            candidates=candidate_products,
+        )
+
+        # Format response using unified result's Bulgarian translations
+        final_response = self._format_response_from_unified(llm_result, selected_products)
+
+        # Add disclaimers based on conditions detected by LLM
+        if "child" in llm_result.extraction.user_conditions or llm_result.extraction.age_group in ("infant", "child"):
+            final_response = self._add_child_disclaimer(final_response)
+
+        if llm_result.reasoning and llm_result.reasoning.see_doctor:
+            # Add general doctor recommendation if not already in response
+            if "консултация с лекар" not in final_response.lower():
+                final_response = self.safety_layer.add_safety_disclaimer(final_response, safety_result)
+
+        if contraindicated_products:
+            final_response = self._add_contraindication_warning(
+                final_response,
+                contraindicated_products,
+                llm_result.extraction.user_conditions,
+            )
+
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        logger.info("Unified processor pipeline completed", extra={
+            "duration_ms": round(duration_ms, 2),
+            "llm_time_ms": round(llm_result.processing_time_ms, 2),
+            "candidates": len(candidate_products),
+            "selected": len(selected_products),
+            "conditions": llm_result.extraction.user_conditions,
+        })
+
+        return PipelineResult(
+            response=final_response,
+            is_medical=True,
+            is_red_flag=False,
+            original_text=user_input,
+            translated_text=llm_result.extraction.query_translated,
+            medical_reasoning=medical_reasoning,
+            candidate_products=candidate_products,
+            selected_products=selected_products,
+            user_conditions=llm_result.extraction.user_conditions,
+            contraindicated_products=contraindicated_products,
+        )
+
+    def _build_medical_reasoning_from_unified(self, llm_result: UnifiedProcessorResult) -> MedicalReasoning:
+        """Convert UnifiedProcessorResult to MedicalReasoning for compatibility."""
+        reasoning = llm_result.reasoning
+        if not reasoning:
+            return MedicalReasoning(
+                symptoms=llm_result.extraction.symptoms,
+                likely_cause="",
+                treatment_type="",
+                warnings=[],
+                see_doctor=False,
+            )
+
+        return MedicalReasoning(
+            symptoms=llm_result.extraction.symptoms,
+            likely_cause=reasoning.explanation,
+            treatment_type=reasoning.treatment_category,
+            warnings=reasoning.warnings,
+            see_doctor=reasoning.see_doctor,
+            explanation=reasoning.explanation,
+            how_treatment_helps="",
+            self_care_tips=reasoning.self_care_tips,
+            duration_guidance="",
+            user_conditions=llm_result.extraction.user_conditions,
+        )
+
+    def _format_response_from_unified(
+        self,
+        llm_result: UnifiedProcessorResult,
+        products: list,
+    ) -> str:
+        """
+        Format response using Bulgarian translations from unified processor.
+
+        This avoids the separate translation step since the LLM already
+        provided Bulgarian translations.
+        """
+        parts = ["## 🔍 Медицински анализ\n"]
+        reasoning = llm_result.reasoning
+
+        if not reasoning:
+            parts.append("*Не можах да анализирам запитването.*")
+            return "\n".join(parts)
+
+        # Symptoms (from extraction)
+        if llm_result.extraction.symptoms:
+            # Use translator for symptoms if no Bulgarian provided
+            translated_symptoms = []
+            for symptom in llm_result.extraction.symptoms[:5]:
+                translated = self.translator.translate_symptom(symptom)
+                if translated:
+                    translated_symptoms.append(translated)
+            if translated_symptoms:
+                parts.append(f"**🩺 Симптоми:** {', '.join(translated_symptoms)}\n")
+
+        # Explanation (use Bulgarian from LLM if available)
+        if reasoning.explanation_bg:
+            parts.append(f"**🔬 Какво се случва:** {reasoning.explanation_bg}\n")
+        elif reasoning.explanation:
+            # Fallback to translation
+            translated = self.translator.translate_to_bulgarian(reasoning.explanation)
+            if translated and self._calculate_bulgarian_ratio(translated) > 0.3:
+                parts.append(f"**🔬 Какво се случва:** {translated}\n")
+
+        # Treatment category
+        if reasoning.treatment_category:
+            translated_treatment = self.translator.translate_to_bulgarian(reasoning.treatment_category)
+            parts.append(f"**💊 Препоръчано лечение:** {translated_treatment}\n")
+
+        # Self-care tips (use Bulgarian from LLM if available)
+        tips_bg = reasoning.self_care_tips_bg or []
+        if tips_bg:
+            parts.append("**🏠 Домашни грижи:**")
+            for tip in tips_bg[:3]:
+                parts.append(f"• {tip}")
+            parts.append("")
+        elif reasoning.self_care_tips:
+            # Fallback to translation
+            parts.append("**🏠 Домашни грижи:**")
+            for tip in reasoning.self_care_tips[:3]:
+                translated = self.translator.translate_to_bulgarian(tip)
+                if translated and self._calculate_bulgarian_ratio(translated) > 0.3:
+                    parts.append(f"• {translated}")
+            parts.append("")
+
+        # Warnings (use Bulgarian from LLM if available)
+        warnings_bg = reasoning.warnings_bg or []
+        if warnings_bg:
+            parts.append("**⚠️ Кога да потърсите лекар:**")
+            for warning in warnings_bg[:3]:
+                parts.append(f"• {warning}")
+            parts.append("")
+        elif reasoning.warnings:
+            parts.append("**⚠️ Кога да потърсите лекар:**")
+            for warning in reasoning.warnings[:3]:
+                translated = self.translator.translate_to_bulgarian(warning)
+                if translated and self._calculate_bulgarian_ratio(translated) > 0.3:
+                    parts.append(f"• {translated}")
+            parts.append("")
+
+        # Product recommendations
+        parts.append("\n## 💊 Препоръчани продукти\n")
+        if products:
+            for i, product in enumerate(products, 1):
+                display = product.to_display_string() if isinstance(product, Product) else str(product)
+                parts.append(f"### {i}. {display}\n")
+        else:
+            parts.append("*Съжалявам, не намерих подходящи продукти в каталога.*")
+
+        if reasoning.see_doctor:
+            parts.append("\n🏥 **Важно:** Препоръчваме консултация с лекар за вашите симптоми.")
+
+        parts.append("\n---")
+        parts.append("*Това е информационна услуга, не медицински съвет. "
+                    "Консултирайте се с фармацевт за повече информация.*")
+
+        return "\n".join(parts)
 
     # Phrases indicating the model refused to help (English and Bulgarian)
     _REFUSAL_PHRASES = {

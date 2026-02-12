@@ -12,12 +12,27 @@ sys.path.insert(0, str(project_root))
 
 from src.safety import SafetyLayer
 from src.intent_classifier import IntentClassifier
+from src.unified_processor import (
+    UnifiedProcessor,
+    UnifiedProcessorResult,
+    IntentResult,
+    SafetyResult,
+    ExtractionResult,
+    ReasoningResult,
+    ProcessorCache,
+)
 
 
 @pytest.fixture
 def safety_layer():
     """Create a fresh SafetyLayer instance for testing."""
     return SafetyLayer()
+
+
+@pytest.fixture
+def processor_cache():
+    """Create a fresh ProcessorCache instance for testing."""
+    return ProcessorCache(max_size=100)
 
 
 @pytest.fixture

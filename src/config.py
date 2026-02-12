@@ -108,6 +108,34 @@ class Settings(BaseSettings):
     enable_request_logging: bool = Field(default=True, description="Log all requests")
     prewarm_models: bool = Field(default=True, description="Pre-load models on startup")
 
+    # ==========================================================================
+    # Unified Processor (LLM-driven architecture)
+    # ==========================================================================
+    unified_processor_enabled: bool = Field(
+        default=False,
+        description="Enable unified LLM processor (replaces hard-coded patterns)"
+    )
+    unified_processor_temperature: float = Field(
+        default=0.1,
+        description="Temperature for unified processor (low for consistency)"
+    )
+    unified_processor_max_tokens: int = Field(
+        default=800,
+        description="Max tokens for unified processor response"
+    )
+    unified_processor_cache_size: int = Field(
+        default=500,
+        description="Cache size for unified processor results"
+    )
+    unified_processor_timeout_ms: int = Field(
+        default=5000,
+        description="Timeout for unified processor inference"
+    )
+    fallback_to_hardcoded: bool = Field(
+        default=True,
+        description="Fall back to hard-coded patterns if unified processor fails"
+    )
+
     if PYDANTIC_SETTINGS_AVAILABLE:
         model_config = {
             "env_prefix": "VIAPHARMA_",

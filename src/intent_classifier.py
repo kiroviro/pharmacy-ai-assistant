@@ -3,9 +3,21 @@ Intent Classifier for filtering non-medical queries.
 
 Uses keyword-based classification with medical terms in Bulgarian and English.
 Fast and efficient - no ML model needed for this use case.
+
+DEPRECATION NOTICE:
+    This module is being replaced by the unified LLM processor
+    (src/unified_processor.py) which provides semantic understanding
+    instead of keyword matching.
+
+    When unified_processor_enabled=True in config, this module is only
+    used as a fallback. It will be fully deprecated in a future release.
+
+    Migration: Set VIAPHARMA_UNIFIED_PROCESSOR_ENABLED=true to use the
+    new LLM-driven intent classification.
 """
 
 import re
+import warnings
 from typing import Optional
 
 
