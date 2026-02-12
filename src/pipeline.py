@@ -708,23 +708,105 @@ class Pipeline:
         # Medical analysis section - show MedGemma's reasoning
         response_parts.append("## 🔍 Медицински анализ\n")
 
-        # Translate medical reasoning to Bulgarian if requested
-        if translate_reasoning and (medical_reasoning.symptoms or medical_reasoning.likely_cause):
-            english_reasoning = medical_reasoning.format_english()
-            if english_reasoning:
-                try:
-                    translated = self._translate_to_bulgarian(english_reasoning)
-                    formatted_reasoning = medical_reasoning.format_bulgarian(translated)
-                    response_parts.append(formatted_reasoning)
-                except Exception as e:
-                    logger.warning(f"Failed to translate reasoning: {e}")
-                    # Fallback to English content with Bulgarian labels
-                    response_parts.append(medical_reasoning.format_bulgarian())
-            else:
-                response_parts.append(medical_reasoning.format_bulgarian())
+        # Build English text for translation
+        english_parts = []
+        if medical_reasoning.symptoms:
+            english_parts.append(f"Symptoms: {', '.join(medical_reasoning.symptoms)}")
+        if medical_reasoning.likely_cause:
+            english_parts.append(f"Probable cause: {medical_reasoning.likely_cause}")
+        if medical_reasoning.explanation:
+            english_parts.append(f"Explanation: {medical_reasoning.explanation}")
+        if medical_reasoning.how_treatment_helps:
+            english_parts.append(f"How treatment helps: {medical_reasoning.how_treatment_helps}")
+        if medical_reasoning.self_care_tips:
+            english_parts.append(f"Self-care tips: {'; '.join(medical_reasoning.self_care_tips)}")
+        if medical_reasoning.duration_guidance:
+            english_parts.append(f"Recovery time: {medical_reasoning.duration_guidance}")
+        if medical_reasoning.warnings:
+            english_parts.append(f"Warnings: {'; '.join(medical_reasoning.warnings)}")
+
+        english_text = ". ".join(english_parts)
+
+        # Translate to Bulgarian
+        if translate_reasoning and english_text:
+            try:
+                bulgarian_text = self._translate_to_bulgarian(english_text)
+            except Exception as e:
+                logger.warning(f"Failed to translate reasoning: {e}")
+                bulgarian_text = english_text
         else:
-            # Use Bulgarian labels with English content
-            response_parts.append(medical_reasoning.format_bulgarian())
+            bulgarian_text = english_text
+
+        # Format the analysis sections
+        if medical_reasoning.symptoms:
+            response_parts.append(f"**🩺 Идентифицирани симптоми:** {', '.join(medical_reasoning.symptoms)}\n")
+
+        if medical_reasoning.likely_cause or medical_reasoning.explanation:
+            cause_text = medical_reasoning.likely_cause
+            if translate_reasoning and cause_text:
+                try:
+                    cause_text = self._translate_to_bulgarian(cause_text)
+                except Exception:
+                    pass
+            response_parts.append(f"**🔬 Вероятна причина:** {cause_text}\n")
+
+            if medical_reasoning.explanation:
+                explanation = medical_reasoning.explanation
+                if translate_reasoning:
+                    try:
+                        explanation = self._translate_to_bulgarian(explanation)
+                    except Exception:
+                        pass
+                response_parts.append(f"📋 {explanation}\n")
+
+        if medical_reasoning.treatment_type or medical_reasoning.how_treatment_helps:
+            treatment = medical_reasoning.treatment_type
+            if translate_reasoning and treatment:
+                try:
+                    treatment = self._translate_to_bulgarian(treatment)
+                except Exception:
+                    pass
+            response_parts.append(f"**💉 Препоръчано лечение:** {treatment}\n")
+
+            if medical_reasoning.how_treatment_helps:
+                how_helps = medical_reasoning.how_treatment_helps
+                if translate_reasoning:
+                    try:
+                        how_helps = self._translate_to_bulgarian(how_helps)
+                    except Exception:
+                        pass
+                response_parts.append(f"📋 {how_helps}\n")
+
+        if medical_reasoning.self_care_tips:
+            response_parts.append("**🏠 Съвети за домашна грижа:**")
+            for tip in medical_reasoning.self_care_tips:
+                if translate_reasoning:
+                    try:
+                        tip = self._translate_to_bulgarian(tip)
+                    except Exception:
+                        pass
+                response_parts.append(f"• {tip}")
+            response_parts.append("")
+
+        if medical_reasoning.duration_guidance:
+            duration = medical_reasoning.duration_guidance
+            if translate_reasoning:
+                try:
+                    duration = self._translate_to_bulgarian(duration)
+                except Exception:
+                    pass
+            response_parts.append(f"**⏱️ Очаквано възстановяване:** {duration}\n")
+
+        if medical_reasoning.warnings:
+            response_parts.append("**⚠️ Важни предупреждения:**")
+            for warning in medical_reasoning.warnings:
+                if translate_reasoning:
+                    try:
+                        warning = self._translate_to_bulgarian(warning)
+                    except Exception:
+                        pass
+                response_parts.append(f"• {warning}")
+            response_parts.append("")
 
         # Product recommendations section
         response_parts.append("\n## 💊 Препоръчани продукти\n")
@@ -740,7 +822,7 @@ class Pipeline:
 
         # Add see doctor warning if needed
         if medical_reasoning.see_doctor:
-            response_parts.append("\n⚠️ **Важно:** Препоръчваме консултация с лекар за вашите симптоми.")
+            response_parts.append("\n🏥 **Важно:** Препоръчваме консултация с лекар за вашите симптоми.")
 
         # Disclaimer (always shown)
         response_parts.append("\n---")

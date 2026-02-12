@@ -25,18 +25,46 @@ class MedicalReasoning:
     treatment_type: str  # Recommended OTC treatment category
     warnings: list[str]  # Important cautions
     see_doctor: bool = False  # Whether to recommend seeing a doctor
+    # Extended fields for richer analysis
+    explanation: str = ""  # Detailed explanation of what's happening
+    how_treatment_helps: str = ""  # Why the treatment works
+    self_care_tips: list[str] = None  # Home care suggestions
+    duration_guidance: str = ""  # Expected recovery timeline
+
+    def __post_init__(self):
+        if self.self_care_tips is None:
+            self.self_care_tips = []
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict) -> "MedicalReasoning":
+        # Helper to ensure list fields are actually lists
+        def ensure_list(value, default=None):
+            if default is None:
+                default = []
+            if value is None:
+                return default
+            if isinstance(value, list):
+                return value
+            if isinstance(value, str):
+                # If it's a comma-separated string, split it
+                if "," in value:
+                    return [s.strip() for s in value.split(",") if s.strip()]
+                return [value] if value.strip() else default
+            return default
+
         return cls(
-            symptoms=data.get("symptoms", []),
-            likely_cause=data.get("likely_cause", ""),
-            treatment_type=data.get("treatment_type", ""),
-            warnings=data.get("warnings", []),
-            see_doctor=data.get("see_doctor", False),
+            symptoms=ensure_list(data.get("symptoms")),
+            likely_cause=str(data.get("likely_cause", "") or ""),
+            treatment_type=str(data.get("treatment_type", "") or ""),
+            warnings=ensure_list(data.get("warnings")),
+            see_doctor=bool(data.get("see_doctor", False)),
+            explanation=str(data.get("explanation", "") or ""),
+            how_treatment_helps=str(data.get("how_treatment_helps", "") or ""),
+            self_care_tips=ensure_list(data.get("self_care_tips")),
+            duration_guidance=str(data.get("duration_guidance", "") or ""),
         )
 
     def format_english(self) -> str:
@@ -50,12 +78,25 @@ class MedicalReasoning:
         if self.likely_cause:
             parts.append(f"Probable cause: {self.likely_cause}.")
 
+        if self.explanation:
+            parts.append(f"What is happening: {self.explanation}")
+
         if self.treatment_type:
             parts.append(f"Recommended treatment: {self.treatment_type}.")
 
+        if self.how_treatment_helps:
+            parts.append(f"How treatment helps: {self.how_treatment_helps}")
+
+        if self.self_care_tips:
+            tips_str = "; ".join(self.self_care_tips)
+            parts.append(f"Self-care tips: {tips_str}.")
+
+        if self.duration_guidance:
+            parts.append(f"Expected recovery: {self.duration_guidance}")
+
         if self.warnings:
-            warnings_str = ". ".join(self.warnings)
-            parts.append(f"Warnings: {warnings_str}.")
+            warnings_str = "; ".join(self.warnings)
+            parts.append(f"Important warnings: {warnings_str}.")
 
         if self.see_doctor:
             parts.append("We recommend consulting a doctor.")
@@ -102,38 +143,54 @@ class MedicalReasoning:
         if self.likely_cause:
             parts.append(f"**Вероятна причина:** {self.likely_cause}")
 
+        if self.explanation:
+            parts.append(f"**Какво се случва:** {self.explanation}")
+
         if self.treatment_type:
             parts.append(f"**Препоръчано лечение:** {self.treatment_type}")
 
+        if self.how_treatment_helps:
+            parts.append(f"**Как помага лечението:** {self.how_treatment_helps}")
+
+        if self.self_care_tips:
+            tips_formatted = "\n".join(f"• {tip}" for tip in self.self_care_tips)
+            parts.append(f"**Съвети за домашна грижа:**\n{tips_formatted}")
+
+        if self.duration_guidance:
+            parts.append(f"**Очаквано възстановяване:** {self.duration_guidance}")
+
         if self.warnings:
             warnings_str = "; ".join(self.warnings)
-            parts.append(f"**Предупреждения:** {warnings_str}")
+            parts.append(f"⚠️ **Предупреждения:** {warnings_str}")
 
         if self.see_doctor:
-            parts.append("\n⚠️ **Препоръчваме консултация с лекар.**")
+            parts.append("\n🏥 **Препоръчваме консултация с лекар.**")
 
         return "\n\n".join(parts)
 
 
 # System prompt for medical reasoning with JSON output
-MEDICAL_SYSTEM_PROMPT = """You are a pharmacy product recommendation system. Your ONLY job is to analyze symptoms and output JSON.
+MEDICAL_SYSTEM_PROMPT = """You are a pharmacy medical advisor. Analyze symptoms and provide detailed medical reasoning in JSON format.
 
 IMPORTANT RULES:
 - DO NOT ask follow-up questions
 - DO NOT have a conversation
-- DO NOT say "I need more information"
-- ALWAYS provide a recommendation based on the symptoms given
+- ALWAYS provide a thorough analysis based on the symptoms given
 - Output ONLY valid JSON, nothing else
 - For infants/children: ALWAYS set see_doctor=true and include pediatric warning
-- For chronic conditions (diabetes, thyroid, etc.): ALWAYS mention prescription requirement
-- For drug interactions or safety queries: ALWAYS include safety warnings
+- For chronic conditions: ALWAYS mention prescription requirement
+- For drug interactions: ALWAYS include safety warnings
 
-For the given symptoms, respond with this exact JSON format:
+Respond with this JSON format:
 {
   "symptoms": ["symptom1", "symptom2"],
-  "likely_cause": "most common cause for these symptoms",
-  "treatment_type": "OTC category (analgesics, antipyretics, antihistamines, antacids, etc.)",
-  "warnings": ["when to see a doctor"],
+  "likely_cause": "most probable cause",
+  "explanation": "detailed explanation of why these symptoms occur and what is happening in the body",
+  "treatment_type": "OTC category (analgesics, antipyretics, etc.)",
+  "how_treatment_helps": "explanation of how the recommended treatment addresses the symptoms",
+  "self_care_tips": ["tip1", "tip2", "tip3"],
+  "duration_guidance": "expected recovery time and when improvement should be noticed",
+  "warnings": ["warning1", "warning2"],
   "see_doctor": false
 }
 
@@ -141,23 +198,19 @@ EXAMPLES:
 
 Example 1 - Simple symptom:
 Input: "headache"
-Output: {"symptoms": ["headache"], "likely_cause": "tension or stress", "treatment_type": "analgesics", "warnings": ["See doctor if severe or persistent"], "see_doctor": false}
+Output: {"symptoms": ["headache"], "likely_cause": "tension headache from stress or muscle tension", "explanation": "Tension headaches occur when muscles in the head, neck and scalp contract and tighten. This is often caused by stress, poor posture, eye strain, or lack of sleep. The pain is usually a dull, constant ache on both sides of the head.", "treatment_type": "analgesics", "how_treatment_helps": "Pain relievers like paracetamol or ibuprofen block pain signals and reduce inflammation, providing relief within 30-60 minutes.", "self_care_tips": ["Rest in a quiet, dark room", "Apply a cold or warm compress to your forehead", "Stay hydrated and avoid caffeine", "Gently massage your temples and neck"], "duration_guidance": "Most tension headaches improve within 2-4 hours with treatment. If headaches occur more than 15 days per month, consult a doctor.", "warnings": ["See doctor if headache is sudden and severe", "Seek help if accompanied by confusion, fever, or stiff neck"], "see_doctor": false}
 
-Example 2 - Child/infant (MUST recommend pediatric consultation):
+Example 2 - Child/infant:
 Input: "my 6 month old baby has fever"
-Output: {"symptoms": ["fever", "infant"], "likely_cause": "viral infection", "treatment_type": "pediatric antipyretics", "warnings": ["Always consult pediatrician for infants under 1 year", "Monitor for dehydration", "Seek immediate care if fever exceeds 38.5C"], "see_doctor": true}
+Output: {"symptoms": ["fever", "infant 6 months"], "likely_cause": "viral infection (most common in infants)", "explanation": "Fever in infants is usually the body's natural response to fighting infection. At 6 months, babies are losing maternal antibodies and becoming more susceptible to common viruses. The immune system raises body temperature to create an unfavorable environment for pathogens.", "treatment_type": "pediatric antipyretics (infant paracetamol)", "how_treatment_helps": "Infant paracetamol reduces fever by acting on the brain's temperature control center, making the baby more comfortable. Always use age-appropriate dosing based on weight.", "self_care_tips": ["Keep baby lightly dressed", "Offer frequent breastfeeding or formula to prevent dehydration", "Monitor wet diapers (at least 4-6 per day)", "Use a lukewarm sponge bath if fever is high"], "duration_guidance": "Viral fevers typically last 2-3 days. You should see improvement within 1 hour of giving medication.", "warnings": ["ALWAYS consult pediatrician for infants under 1 year", "Seek immediate care if fever exceeds 38.5°C", "Watch for signs of dehydration, lethargy, or rash"], "see_doctor": true}
 
 Example 3 - Multiple symptoms:
 Input: "sore throat with fever and body aches for 3 days"
-Output: {"symptoms": ["sore throat", "fever", "body aches"], "likely_cause": "viral infection possibly flu", "treatment_type": "antipyretics and throat lozenges", "warnings": ["See doctor if fever persists beyond 3 days", "Watch for difficulty swallowing"], "see_doctor": false}
+Output: {"symptoms": ["sore throat", "fever", "body aches", "3 days duration"], "likely_cause": "viral upper respiratory infection, possibly influenza", "explanation": "The combination of sore throat, fever, and body aches strongly suggests a viral infection. Your immune system is actively fighting the virus, causing inflammation in the throat and releasing chemicals called cytokines that cause the fever and muscle aches. The 3-day duration is typical for the acute phase.", "treatment_type": "antipyretics, throat lozenges, and pain relievers", "how_treatment_helps": "Antipyretics reduce fever and relieve body aches. Throat lozenges coat and soothe the irritated throat lining, while some contain mild anesthetics for pain relief. Combined treatment addresses multiple symptoms.", "self_care_tips": ["Gargle with warm salt water 3-4 times daily", "Drink warm liquids like tea with honey", "Get plenty of rest to support immune function", "Use a humidifier to keep throat moist"], "duration_guidance": "Most viral infections resolve within 7-10 days. Fever should break within 3-4 days. Sore throat may linger for up to a week.", "warnings": ["See doctor if fever persists beyond 4 days", "Seek help if you have difficulty swallowing or breathing", "Watch for white patches on tonsils (may indicate strep)"], "see_doctor": false}
 
-Example 4 - Chronic condition (MUST flag prescription needs):
-Input: "I have diabetes and need medication"
-Output: {"symptoms": ["diabetes management"], "likely_cause": "chronic condition", "treatment_type": "consult physician - prescription required", "warnings": ["Diabetes medications require prescription", "Regular monitoring needed", "OTC supplements may help but consult doctor first"], "see_doctor": true}
-
-Example 5 - Drug interaction/safety query:
+Example 4 - Drug interaction:
 Input: "can I take ibuprofen with alcohol"
-Output: {"symptoms": ["drug interaction query"], "likely_cause": "safety concern", "treatment_type": "avoid combination", "warnings": ["Ibuprofen and alcohol increase stomach bleeding risk", "Wait at least 24 hours between use", "Consider paracetamol as safer alternative"], "see_doctor": false}
+Output: {"symptoms": ["drug interaction query"], "likely_cause": "safety concern about combining substances", "explanation": "Ibuprofen and alcohol both irritate the stomach lining. Together, they significantly increase the risk of gastric bleeding and ulcers. Alcohol also affects how your liver processes ibuprofen, potentially increasing its concentration in your blood.", "treatment_type": "avoid combination - use alternatives", "how_treatment_helps": "Paracetamol (acetaminophen) is a safer alternative for occasional use with moderate alcohol, though it should not be used regularly with heavy alcohol consumption due to liver concerns.", "self_care_tips": ["Wait at least 24 hours after drinking before taking ibuprofen", "If you need pain relief after drinking, use paracetamol sparingly", "Stay hydrated to reduce hangover symptoms naturally", "Consider non-medication approaches like rest and hydration"], "duration_guidance": "Alcohol is typically cleared from your system within 12-24 hours depending on amount consumed.", "warnings": ["Never take ibuprofen on an empty stomach", "Risk increases with higher doses and frequent use", "Seek help if you experience stomach pain, dark stools, or vomiting blood"], "see_doctor": false}
 
 Now analyze the symptoms and output JSON:"""
 
@@ -278,6 +331,10 @@ class MedicalModel:
             treatment_type=self._sanitize_text(reasoning.treatment_type),
             warnings=[self._sanitize_text(w) for w in reasoning.warnings if self._sanitize_text(w)],
             see_doctor=reasoning.see_doctor,
+            explanation=self._sanitize_text(reasoning.explanation),
+            how_treatment_helps=self._sanitize_text(reasoning.how_treatment_helps),
+            self_care_tips=[self._sanitize_text(t) for t in (reasoning.self_care_tips or []) if self._sanitize_text(t)],
+            duration_guidance=self._sanitize_text(reasoning.duration_guidance),
         )
 
     def _parse_medical_response(self, response: str) -> MedicalReasoning:
