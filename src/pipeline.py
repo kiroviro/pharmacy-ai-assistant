@@ -689,29 +689,58 @@ class Pipeline:
     # =========================================================================
     # Step 7: Response Formatting
     # =========================================================================
-    def _format_response(self, medical_reasoning: MedicalReasoning, products: list) -> str:
-        """Format the final response as a friendly pharmacy assistant."""
+    def _format_response(
+        self,
+        medical_reasoning: MedicalReasoning,
+        products: list,
+        translate_reasoning: bool = True
+    ) -> str:
+        """
+        Format the final response as a friendly pharmacy assistant.
 
+        Args:
+            medical_reasoning: The medical analysis from MedGemma
+            products: List of recommended products
+            translate_reasoning: Whether to translate reasoning to Bulgarian (default: True)
+        """
         response_parts = []
 
-        # Simple friendly intro
-        response_parts.append("Въз основа на вашите симптоми, ето какво препоръчвам:")
+        # Medical analysis section - show MedGemma's reasoning
+        response_parts.append("## 🔍 Медицински анализ\n")
 
-        # Product recommendations
+        # Translate medical reasoning to Bulgarian if requested
+        if translate_reasoning and (medical_reasoning.symptoms or medical_reasoning.likely_cause):
+            english_reasoning = medical_reasoning.format_english()
+            if english_reasoning:
+                try:
+                    translated = self._translate_to_bulgarian(english_reasoning)
+                    formatted_reasoning = medical_reasoning.format_bulgarian(translated)
+                    response_parts.append(formatted_reasoning)
+                except Exception as e:
+                    logger.warning(f"Failed to translate reasoning: {e}")
+                    # Fallback to English content with Bulgarian labels
+                    response_parts.append(medical_reasoning.format_bulgarian())
+            else:
+                response_parts.append(medical_reasoning.format_bulgarian())
+        else:
+            # Use Bulgarian labels with English content
+            response_parts.append(medical_reasoning.format_bulgarian())
+
+        # Product recommendations section
+        response_parts.append("\n## 💊 Препоръчани продукти\n")
+
         if products:
-            response_parts.append("")  # Empty line
             for i, product in enumerate(products, 1):
                 if isinstance(product, Product):
                     response_parts.append(f"### {i}. {product.to_display_string()}\n")
                 else:
                     response_parts.append(f"### {i}. {product}\n")
         else:
-            response_parts.append("\n*Съжалявам, не намерих подходящи продукти в каталога.*")
+            response_parts.append("*Съжалявам, не намерих подходящи продукти в каталога.*")
 
         # Add see doctor warning if needed
         if medical_reasoning.see_doctor:
-            response_parts.append("\n⚠️ **Важно:** Ако симптомите продължат или се влошат, "
-                                "моля консултирайте се с лекар.")
+            response_parts.append("\n⚠️ **Важно:** Препоръчваме консултация с лекар за вашите симптоми.")
 
         # Disclaimer (always shown)
         response_parts.append("\n---")
