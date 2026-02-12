@@ -15,6 +15,7 @@ from src.evaluation import (
     CATEGORY_THRESHOLDS,
 )
 from src.metrics import calculate_metrics, MetricsSnapshot
+from src.query_collector import collect_query
 
 
 # =============================================================================
@@ -270,6 +271,9 @@ class TestQualityThresholds:
             response = get_mock_response(query, category)
             result = evaluate_response(query, response, category)
             results.append(result)
+            # Collect failing queries for analysis
+            if not result.passed:
+                collect_query(query, result)
 
         metrics = calculate_metrics(results)
 

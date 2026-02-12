@@ -70,3 +70,6 @@ htmlcov/
 
 # Logs
 logs/
+
+# Development artifacts (generated improvement plans, stale docs)
+IMPROVEMENT_PLAN.md
