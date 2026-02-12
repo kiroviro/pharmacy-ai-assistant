@@ -1,11 +1,12 @@
 """
 ViaPharma OTC Chatbot - OpenAI-Compatible API Server
 
-This server exposes the pipeline as an OpenAI-compatible API,
-allowing integration with Open WebUI and other OpenAI-compatible clients.
+Exposes the pipeline as an OpenAI-compatible API for integration
+with Open WebUI and other OpenAI-compatible clients.
 """
 
 import asyncio
+import json
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -14,15 +15,18 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
 
-from src.pipeline import get_pipeline
 from src.config import get_settings
 from src.logging_config import (
-    init_default_logger, get_logger, set_request_id,
-    log_medical_query, hash_for_audit
+    get_logger,
+    hash_for_audit,
+    init_default_logger,
+    log_medical_query,
+    set_request_id,
 )
+from src.pipeline import get_pipeline
 
 # Load settings
 settings = get_settings()
@@ -54,23 +58,9 @@ metrics_store = {
 # =============================================================================
 
 def validate_message(message: str) -> str:
-    """
-    Validate and sanitize user message.
-
-    Args:
-        message: Raw user message
-
-    Returns:
-        Sanitized message
-
-    Raises:
-        HTTPException: If message is invalid
-    """
+    """Validate and sanitize user message, raising HTTPException if invalid."""
     if not message:
-        raise HTTPException(
-            status_code=400,
-            detail="Съобщението е празно"
-        )
+        raise HTTPException(status_code=400, detail="Съобщението е празно")
 
     message = message.strip()
 
@@ -87,45 +77,26 @@ def validate_message(message: str) -> str:
         )
 
     # Strip control characters (keep newlines and tabs)
-    message = ''.join(
-        char for char in message
-        if char.isprintable() or char in '\n\t'
-    )
-
-    return message
+    return ''.join(char for char in message if char.isprintable() or char in '\n\t')
 
 
 def check_rate_limit(client_ip: str) -> bool:
-    """
-    Check if client has exceeded rate limit.
-
-    Args:
-        client_ip: Client IP address
-
-    Returns:
-        True if within limit, False if exceeded
-    """
+    """Check if client has exceeded rate limit. Returns True if within limit."""
     if not settings.enable_rate_limiting:
         return True
 
     now = time.time()
-    window_start = now - 60  # 1 minute window
+    window_start = now - 60
 
-    # Get or create request history for this IP
     if client_ip not in rate_limit_store:
         rate_limit_store[client_ip] = []
 
-    # Remove old entries
-    rate_limit_store[client_ip] = [
-        ts for ts in rate_limit_store[client_ip]
-        if ts > window_start
-    ]
+    # Remove old entries and check limit
+    rate_limit_store[client_ip] = [ts for ts in rate_limit_store[client_ip] if ts > window_start]
 
-    # Check limit
     if len(rate_limit_store[client_ip]) >= settings.rate_limit_per_minute:
         return False
 
-    # Add current request
     rate_limit_store[client_ip].append(now)
     return True
 
@@ -308,26 +279,29 @@ app.add_middleware(
 )
 
 
+def _is_chat_endpoint(path: str) -> bool:
+    """Check if path is a chat endpoint."""
+    return "/chat/" in path or "/completions" in path
+
+
 @app.middleware("http")
 async def request_middleware(request: Request, call_next):
     """Log requests and handle rate limiting."""
     request_id = set_request_id()
     client_ip = get_client_ip(request)
     start_time = time.time()
+    is_chat = _is_chat_endpoint(request.url.path)
 
     # Check rate limit for chat endpoints
-    if "/chat/" in request.url.path or "/completions" in request.url.path:
-        if not check_rate_limit(client_ip):
-            logger.warning(f"Rate limit exceeded", extra={"client_ip": client_ip})
-            from fastapi.responses import JSONResponse
-            return JSONResponse(
-                status_code=429,
-                content={"detail": "Твърде много заявки. Моля, изчакайте минута."}
-            )
+    if is_chat and not check_rate_limit(client_ip):
+        logger.warning("Rate limit exceeded", extra={"client_ip": client_ip})
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Твърде много заявки. Моля, изчакайте минута."}
+        )
 
-    # Log request
     if settings.enable_request_logging:
-        logger.info(f"Request started", extra={
+        logger.info("Request started", extra={
             "method": request.method,
             "path": request.url.path,
             "client_ip": client_ip,
@@ -335,16 +309,13 @@ async def request_middleware(request: Request, call_next):
         })
 
     response = await call_next(request)
-
-    # Log response
     duration_ms = (time.time() - start_time) * 1000
 
-    # Track latency for chat endpoints
-    if "/chat/" in request.url.path or "/completions" in request.url.path:
+    if is_chat:
         metrics_store["total_latency_ms"] += duration_ms
 
     if settings.enable_request_logging:
-        logger.info(f"Request completed", extra={
+        logger.info("Request completed", extra={
             "method": request.method,
             "path": request.url.path,
             "status_code": response.status_code,
@@ -352,7 +323,6 @@ async def request_middleware(request: Request, call_next):
             "request_id": request_id
         })
 
-    # Add headers
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Response-Time"] = f"{duration_ms:.2f}ms"
     return response
@@ -376,80 +346,42 @@ async def root():
 
 @app.get("/health/live")
 async def liveness():
-    """
-    Kubernetes liveness probe.
-
-    Returns 200 if the process is alive. Does NOT check model status.
-    Use this for liveness probes to avoid restart loops during model loading.
-    """
+    """Kubernetes liveness probe. Returns 200 if process is alive."""
     return {"status": "alive"}
 
 
 @app.get("/health/ready")
 async def readiness():
-    """
-    Kubernetes readiness probe.
-
-    Returns 200 only if models are loaded and ready to serve requests.
-    Returns 503 if still initializing.
-    """
+    """Kubernetes readiness probe. Returns 200 if models loaded, 503 otherwise."""
     pipeline = get_pipeline()
 
-    # Check if medical model is loaded
-    medgemma_ready = (
-        pipeline._medical_model is not None and
-        pipeline._medical_model._loaded
-    )
+    medgemma_ready = pipeline._medical_model is not None and pipeline._medical_model._loaded
+    if not medgemma_ready:
+        raise HTTPException(status_code=503, detail="MedGemma model not loaded")
 
-    # Check if product store has products
     try:
         products_count = pipeline.product_store.collection.count()
-        products_ready = products_count > 0
+        if products_count == 0:
+            raise HTTPException(status_code=503, detail="Product store empty or not initialized")
+    except HTTPException:
+        raise
     except Exception:
-        products_ready = False
+        raise HTTPException(status_code=503, detail="Product store empty or not initialized")
 
-    if not medgemma_ready:
-        raise HTTPException(
-            status_code=503,
-            detail="MedGemma model not loaded"
-        )
-
-    if not products_ready:
-        raise HTTPException(
-            status_code=503,
-            detail="Product store empty or not initialized"
-        )
-
-    return {
-        "status": "ready",
-        "models": {"medgemma": medgemma_ready},
-        "products_count": products_count
-    }
+    return {"status": "ready", "models": {"medgemma": medgemma_ready}, "products_count": products_count}
 
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """
-    Detailed health check with model status.
-
-    Returns information about loaded models, product count, and uptime.
-    """
+    """Detailed health check with model status."""
     pipeline = get_pipeline()
 
-    # Check which models are loaded
     models_loaded = {
         "medgemma": pipeline._medical_model is not None and pipeline._medical_model._loaded,
-        "translator_bg_en": (
-            pipeline._translator is not None and
-            pipeline._translator._bg_to_en_model is not None
-        ),
-        "translator_en_bg": (
-            pipeline._translator is not None and
-            pipeline._translator._en_to_bg_model is not None
-        ),
+        "translator_bg_en": pipeline._translator is not None and pipeline._translator._bg_to_en_model is not None,
+        "translator_en_bg": pipeline._translator is not None and pipeline._translator._en_to_bg_model is not None,
     }
 
-    # Get product count
     try:
         products_count = pipeline.product_store.collection.count()
     except Exception:
@@ -467,11 +399,7 @@ async def health_check():
 
 @app.get("/hints")
 async def get_hints():
-    """
-    Get suggested medical queries in Bulgarian.
-
-    These hints can be displayed in the UI to help users know what to ask.
-    """
+    """Get suggested medical queries in Bulgarian for UI display."""
     return {
         "hints": MODEL_HINTS,
         "placeholder": "Опишете вашите симптоми...",
@@ -482,41 +410,22 @@ async def get_hints():
 
 @app.get("/metrics")
 async def get_metrics():
-    """
-    Get application metrics for monitoring.
-
-    Returns request counts, latencies, cache stats, and model status.
-    """
-    from fastapi.responses import JSONResponse
-
+    """Get application metrics for monitoring."""
     pipeline = get_pipeline()
 
-    # Calculate average latency
-    avg_latency = 0.0
-    if metrics_store["requests_total"] > 0:
-        avg_latency = metrics_store["total_latency_ms"] / metrics_store["requests_total"]
+    avg_latency = (
+        metrics_store["total_latency_ms"] / metrics_store["requests_total"]
+        if metrics_store["requests_total"] > 0
+        else 0.0
+    )
 
-    # Get cache stats if translator is loaded and has the method
-    cache_stats = None
-    if pipeline._translator is not None and hasattr(pipeline._translator, 'get_cache_stats'):
-        try:
-            stats = pipeline._translator.get_cache_stats()
-            # Ensure it's a plain dict with primitive types
-            if isinstance(stats, dict):
-                cache_stats = {
-                    "bg_to_en": dict(stats.get("bg_to_en", {})) if stats.get("bg_to_en") else None,
-                    "en_to_bg": dict(stats.get("en_to_bg", {})) if stats.get("en_to_bg") else None,
-                }
-        except Exception:
-            cache_stats = None
+    cache_stats = _get_cache_stats(pipeline)
 
-    # Get product count
     try:
         products_count = pipeline.product_store.collection.count()
     except Exception:
         products_count = 0
 
-    # Build response with explicit JSONResponse to avoid serialization issues
     return JSONResponse(content={
         "requests": {
             "total": int(metrics_store["requests_total"]),
@@ -535,6 +444,22 @@ async def get_metrics():
         "uptime_seconds": round(time.time() - startup_time, 2) if startup_time else 0,
         "rate_limit_ips_tracked": len(rate_limit_store),
     })
+
+
+def _get_cache_stats(pipeline) -> dict | None:
+    """Get translator cache stats if available."""
+    if pipeline._translator is None or not hasattr(pipeline._translator, 'get_cache_stats'):
+        return None
+    try:
+        stats = pipeline._translator.get_cache_stats()
+        if isinstance(stats, dict):
+            return {
+                "bg_to_en": dict(stats.get("bg_to_en", {})) if stats.get("bg_to_en") else None,
+                "en_to_bg": dict(stats.get("en_to_bg", {})) if stats.get("en_to_bg") else None,
+            }
+    except Exception:
+        pass
+    return None
 
 
 @app.get("/v1/models", response_model=ModelsResponse)
@@ -561,40 +486,49 @@ async def list_models():
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
 @app.post("/chat/completions", response_model=ChatCompletionResponse)
 async def chat_completions(request: ChatCompletionRequest, req: Request):
-    """
-    OpenAI-compatible chat completions endpoint.
-
-    Processes messages through the ViaPharma pipeline and returns
-    a response in OpenAI's format.
-    """
-    # Extract the last user message
-    user_message = None
-    for msg in reversed(request.messages):
-        if msg.role == "user":
-            user_message = msg.content
-            break
-
+    """OpenAI-compatible chat completions endpoint."""
+    user_message = _extract_user_message(request.messages)
     if not user_message:
         logger.warning("No user message in request")
         raise HTTPException(status_code=400, detail="Няма съобщение от потребителя")
 
-    # Validate and sanitize input
     user_message = validate_message(user_message)
-
-    logger.info(f"Chat request", extra={
+    logger.info("Chat request", extra={
         "model": request.model,
         "message_length": len(user_message),
         "stream": request.stream
     })
 
-    # Handle streaming
     if request.stream:
         return await _stream_response(user_message, request.model)
 
-    # Process through pipeline in thread pool (non-blocking)
+    result = await _process_with_timeout(user_message)
+
+    logger.debug("Pipeline result", extra={
+        "is_medical": result.is_medical,
+        "is_red_flag": result.is_red_flag,
+        "response_length": len(result.response)
+    })
+
+    _update_metrics(result)
+    _log_audit(user_message, result, get_client_ip(req))
+
+    return _build_chat_response(request, result)
+
+
+def _extract_user_message(messages: list[Message]) -> str | None:
+    """Extract the last user message from the message list."""
+    for msg in reversed(messages):
+        if msg.role == "user":
+            return msg.content
+    return None
+
+
+async def _process_with_timeout(user_message: str):
+    """Process message through pipeline with timeout handling."""
     loop = asyncio.get_event_loop()
     try:
-        result = await asyncio.wait_for(
+        return await asyncio.wait_for(
             loop.run_in_executor(executor, _process_message, user_message),
             timeout=settings.request_timeout_seconds
         )
@@ -607,13 +541,9 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
             detail="Заявката отне твърде дълго. Моля, опитайте отново."
         )
 
-    logger.debug(f"Pipeline result", extra={
-        "is_medical": result.is_medical,
-        "is_red_flag": result.is_red_flag,
-        "response_length": len(result.response)
-    })
 
-    # Track metrics
+def _update_metrics(result) -> None:
+    """Update metrics based on pipeline result."""
     metrics_store["requests_total"] += 1
     metrics_store["requests_success"] += 1
     if result.is_medical:
@@ -623,8 +553,9 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
     if result.is_red_flag:
         metrics_store["requests_red_flag"] += 1
 
-    # Audit log for compliance (privacy-preserving)
-    client_ip = get_client_ip(req)
+
+def _log_audit(user_message: str, result, client_ip: str) -> None:
+    """Log medical query for compliance audit."""
     product_skus = []
     if hasattr(result, 'selected_products') and result.selected_products:
         for p in result.selected_products:
@@ -642,17 +573,15 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
         client_ip_hash=hash_for_audit(client_ip),
     )
 
-    # Build response
-    response_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
-    created = int(time.time())
 
-    # Estimate token counts (rough approximation)
+def _build_chat_response(request: ChatCompletionRequest, result) -> ChatCompletionResponse:
+    """Build OpenAI-compatible chat completion response."""
     prompt_tokens = sum(len(m.content.split()) * 2 for m in request.messages)
     completion_tokens = len(result.response.split()) * 2
 
     return ChatCompletionResponse(
-        id=response_id,
-        created=created,
+        id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
+        created=int(time.time()),
         model=request.model,
         choices=[
             Choice(
@@ -676,16 +605,9 @@ def _process_message(user_message: str):
 
 
 async def _stream_response(user_message: str, model: str):
-    """
-    Stream response in SSE format (OpenAI streaming format).
-
-    Note: This is a simplified implementation that generates the full
-    response first, then streams it in chunks.
-    """
-    import json
+    """Stream response in SSE format (OpenAI streaming format)."""
 
     async def generate():
-        # Process through pipeline in thread pool
         loop = asyncio.get_event_loop()
         try:
             result = await asyncio.wait_for(
@@ -693,40 +615,25 @@ async def _stream_response(user_message: str, model: str):
                 timeout=settings.request_timeout_seconds
             )
         except asyncio.TimeoutError:
-            error_chunk = {
-                "error": {
-                    "message": "Заявката отне твърде дълго",
-                    "type": "timeout_error"
-                }
-            }
-            yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'error': {'message': 'Заявката отне твърде дълго', 'type': 'timeout_error'}}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
             return
 
         response_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
         created = int(time.time())
 
-        # Stream the response in chunks
         words = result.response.split(" ")
         for i, word in enumerate(words):
             chunk_content = word + (" " if i < len(words) - 1 else "")
-
             chunk = {
                 "id": response_id,
                 "object": "chat.completion.chunk",
                 "created": created,
                 "model": model,
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {"content": chunk_content},
-                        "finish_reason": None,
-                    }
-                ],
+                "choices": [{"index": 0, "delta": {"content": chunk_content}, "finish_reason": None}],
             }
             yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
-        # Send final chunk with finish_reason
         final_chunk = {
             "id": response_id,
             "object": "chat.completion.chunk",

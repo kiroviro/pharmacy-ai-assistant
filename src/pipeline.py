@@ -256,6 +256,171 @@ class Pipeline:
             self._medical_model = get_medical_model()
             self._medical_model.load()
 
+    # =========================================================================
+    # Catalog Query Detection & Processing
+    # =========================================================================
+    def _is_catalog_query(self, text: str) -> tuple[bool, str]:
+        """
+        Detect if query is a product catalog inquiry (not a medical symptom query).
+
+        Returns:
+            Tuple of (is_catalog, search_term)
+            - is_catalog: True if this is a catalog/product listing query
+            - search_term: Extracted product category for search
+        """
+        text_lower = text.lower().strip()
+
+        # Check Bulgarian patterns
+        for pattern in self._CATALOG_PATTERNS_BG:
+            if pattern.search(text_lower):
+                # Extract the product category from the query
+                search_term = self._extract_catalog_search_term(text)
+                if search_term:
+                    logger.debug(f"Catalog query detected (BG pattern)", extra={"search_term": search_term})
+                    return True, search_term
+
+        # Check English patterns
+        for pattern in self._CATALOG_PATTERNS_EN:
+            if pattern.search(text_lower):
+                search_term = self._extract_catalog_search_term(text)
+                if search_term:
+                    logger.debug(f"Catalog query detected (EN pattern)", extra={"search_term": search_term})
+                    return True, search_term
+
+        # Check if query contains catalog category keywords without symptom words
+        has_category = any(cat in text_lower for cat in self._CATALOG_CATEGORIES)
+        has_symptom = self._has_symptom_words(text_lower)
+
+        if has_category and not has_symptom:
+            search_term = self._extract_catalog_search_term(text)
+            if search_term:
+                logger.debug(f"Catalog query detected (category keyword)", extra={"search_term": search_term})
+                return True, search_term
+
+        return False, ""
+
+    def _extract_catalog_search_term(self, text: str) -> str:
+        """Extract the product category/search term from a catalog query."""
+        text_lower = text.lower()
+
+        # Remove common question words to get the product term
+        remove_patterns = [
+            r'какви\s+марки?\s+(на\s+)?',
+            r'какви\s+',
+            r'имате\s+ли\s+',
+            r'предлагате\s+ли\s+',
+            r'продавате\s+ли\s+',
+            r'покажи\s+(ми\s+)?',
+            r'търся\s+',
+            r'списък\s+(с|на)\s+',
+            r'всички\s+',
+            r'продукти\s+(на|от)\s+',
+            r'\s+(имате|предлагате|продавате)\s*\??$',
+            r'^what\s+brands?\s+of\s+',
+            r'^show\s+me\s+',
+            r'^looking\s+for\s+',
+            r'^do\s+you\s+(have|sell|offer)\s+',
+            r'^list\s+(of\s+)?',
+            r'\s+(do you have|do you offer|are available)\s*\??$',
+        ]
+
+        result = text_lower
+        for pattern in remove_patterns:
+            result = re.sub(pattern, '', result, flags=re.IGNORECASE)
+
+        # Clean up
+        result = result.strip(' ?.,!').strip()
+        return result if len(result) > 2 else ""
+
+    _SYMPTOM_WORDS = {
+        'болка', 'боли', 'болки', 'температура', 'треска', 'кашлица',
+        'хрема', 'гадене', 'повръщане', 'диария', 'запек', 'сърбеж',
+        'обрив', 'подуване', 'възпаление', 'инфекция', 'алергия',
+        'pain', 'ache', 'fever', 'cough', 'nausea', 'rash', 'swelling',
+    }
+
+    def _has_symptom_words(self, text: str) -> bool:
+        """Check if text contains symptom-related words."""
+        return any(symptom in text for symptom in self._SYMPTOM_WORDS)
+
+    def _process_catalog_query(self, user_input: str, search_term: str) -> PipelineResult:
+        """
+        Process a catalog query without medical reasoning.
+
+        This is the fast path for "What brands of X do you have?" type queries.
+        """
+        start_time = time.perf_counter()
+        logger.info(f"Processing catalog query", extra={"search_term": search_term})
+
+        # Direct product search - no medical reasoning needed
+        if self.product_store.collection.count() == 0:
+            logger.warning("Product store is empty")
+            return PipelineResult(
+                response="Съжалявам, каталогът с продукти не е зареден.",
+                is_medical=True,
+                original_text=user_input
+            )
+
+        # Search products directly
+        results = self.product_store.search(search_term, n_results=6)
+        products = self._convert_to_products(results)
+
+        # Filter OTC only
+        products = self.safety_layer.filter_otc_only(products)
+
+        # Format catalog response (simpler than medical response)
+        response = self._format_catalog_response(search_term, products)
+
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(f"Catalog query completed", extra={
+            "duration_ms": round(duration_ms, 2),
+            "products_found": len(products)
+        })
+
+        return PipelineResult(
+            response=response,
+            is_medical=True,  # Still pharmacy-related
+            is_red_flag=False,
+            original_text=user_input,
+            candidate_products=products,
+            selected_products=products[:3]
+        )
+
+    def _format_catalog_response(self, search_term: str, products: list) -> str:
+        """Format a simple catalog response without medical analysis."""
+        parts = []
+
+        # Header
+        parts.append(f"## 🛒 Продукти: {search_term.title()}\n")
+
+        if products:
+            # Group by brand if multiple products
+            brands = set()
+            for product in products:
+                if isinstance(product, Product) and product.brand:
+                    brands.add(product.brand)
+
+            if brands:
+                parts.append(f"**Налични марки:** {', '.join(sorted(brands))}\n")
+
+            parts.append("### Продукти в наличност:\n")
+
+            for i, product in enumerate(products[:5], 1):
+                if isinstance(product, Product):
+                    parts.append(f"**{i}. {product.to_display_string()}**\n")
+                else:
+                    parts.append(f"**{i}.** {product}\n")
+
+            # Prompt for more specific needs
+            parts.append("\n---")
+            parts.append("*Имате ли специфични изисквания (SPF фактор, тип кожа, за деца)?*")
+            parts.append("*Опишете ги и ще ви препоръчам най-подходящия продукт.*")
+        else:
+            parts.append(f"*Съжалявам, не намерих продукти за „{search_term}" в каталога.*")
+            parts.append("\n*Опитайте с друга ключова дума или опишете за какво ви е нужен продуктът.*")
+
+        return "\n".join(parts)
+
     def process(self, user_input: str) -> PipelineResult:
         """
         Process user input through the full pipeline.
@@ -275,6 +440,11 @@ class Pipeline:
             "query_length": len(user_input),
             "query_preview": user_input[:50] + "..." if len(user_input) > 50 else user_input
         })
+
+        # Step 0: Check for catalog queries (skip medical reasoning)
+        is_catalog, search_term = self._is_catalog_query(user_input)
+        if is_catalog:
+            return self._process_catalog_query(user_input, search_term)
 
         # Step 1: Intent Classification
         is_medical, confidence, reason = self.intent_classifier.is_medical_query(user_input)

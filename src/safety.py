@@ -1,22 +1,17 @@
 """
 Safety Layer for detecting red-flag symptoms and enforcing OTC-only recommendations.
 
-Ensures user safety by:
-1. Detecting serious symptoms that require medical attention (keyword + semantic)
-2. Filtering to only OTC (over-the-counter) products
-3. Adding appropriate warnings and disclaimers
-
 Uses a hybrid approach:
 - Fast keyword matching for known dangerous phrases
 - Semantic embedding matching for paraphrasing/typos/transliteration
 """
 
 import re
-from typing import Optional
 from dataclasses import dataclass
+from typing import Optional
 
 from src.logging_config import get_logger
-from src.safety_embeddings import get_embedding_safety_classifier, EmbeddingSafetyResult
+from src.safety_embeddings import get_embedding_safety_classifier
 
 logger = get_logger("viapharma.safety")
 
@@ -185,68 +180,38 @@ class SafetyLayer:
         self._warning_pattern = make_pattern(self.warning_symptoms)
 
     def check_safety(self, text: str, include_medical_reasoning: bool = True) -> SafetyCheckResult:
-        """
-        Check text for red-flag symptoms.
-
-        Args:
-            text: User query or medical reasoning to check
-            include_medical_reasoning: Whether to also check medical reasoning
-
-        Returns:
-            SafetyCheckResult with severity and recommendations
-        """
+        """Check text for red-flag symptoms."""
         if not text:
-            return SafetyCheckResult(
-                is_red_flag=False,
-                severity="none",
-                matched_symptoms=[],
-                message="",
-                should_refer_to_doctor=False
-            )
+            return self._safe_result()
 
         text_lower = text.lower()
 
-        # Check for emergency symptoms
-        emergency_matches = self._emergency_pattern.findall(text_lower)
-        if emergency_matches:
-            logger.warning(f"EMERGENCY symptoms detected", extra={
-                "severity": "emergency",
-                "matched": list(set(emergency_matches))
-            })
-            return SafetyCheckResult(
-                is_red_flag=True,
-                severity="emergency",
-                matched_symptoms=list(set(emergency_matches)),
-                message=self._get_emergency_message(),
-                should_refer_to_doctor=True
-            )
+        # Check each severity level in order of priority
+        for severity, pattern, is_red_flag in [
+            ("emergency", self._emergency_pattern, True),
+            ("urgent", self._urgent_pattern, True),
+            ("warning", self._warning_pattern, False),
+        ]:
+            matches = pattern.findall(text_lower)
+            if matches:
+                unique_matches = list(set(matches))
+                if is_red_flag:
+                    logger.warning(f"{severity.upper()} symptoms detected", extra={
+                        "severity": severity,
+                        "matched": unique_matches
+                    })
+                return SafetyCheckResult(
+                    is_red_flag=is_red_flag,
+                    severity=severity,
+                    matched_symptoms=unique_matches,
+                    message=self._get_message_for_severity(severity),
+                    should_refer_to_doctor=True
+                )
 
-        # Check for urgent symptoms
-        urgent_matches = self._urgent_pattern.findall(text_lower)
-        if urgent_matches:
-            logger.warning(f"URGENT symptoms detected", extra={
-                "severity": "urgent",
-                "matched": list(set(urgent_matches))
-            })
-            return SafetyCheckResult(
-                is_red_flag=True,
-                severity="urgent",
-                matched_symptoms=list(set(urgent_matches)),
-                message=self._get_urgent_message(),
-                should_refer_to_doctor=True
-            )
+        return self._safe_result()
 
-        # Check for warning symptoms
-        warning_matches = self._warning_pattern.findall(text_lower)
-        if warning_matches:
-            return SafetyCheckResult(
-                is_red_flag=False,  # Not a hard stop, but add warning
-                severity="warning",
-                matched_symptoms=list(set(warning_matches)),
-                message=self._get_warning_message(),
-                should_refer_to_doctor=True
-            )
-
+    def _safe_result(self) -> SafetyCheckResult:
+        """Return a safe (no issues) result."""
         return SafetyCheckResult(
             is_red_flag=False,
             severity="none",
@@ -255,42 +220,34 @@ class SafetyLayer:
             should_refer_to_doctor=False
         )
 
+    # Severity rankings for comparing results
+    _SEVERITY_RANK = {"emergency": 4, "urgent": 3, "warning": 2, "none": 1, "safe": 1}
+
     def check_safety_hybrid(self, text: str) -> SafetyCheckResult:
         """
         Hybrid safety check: fast keywords + semantic embeddings.
 
-        Runs keyword check first (instant), then embedding check if needed.
         Returns the most severe result from either method.
-
-        Args:
-            text: User query to check
-
-        Returns:
-            SafetyCheckResult with the highest severity detected
         """
-        # 1. Fast keyword check (existing)
         keyword_result = self.check_safety(text)
 
-        # 2. If keywords found emergency/urgent, return immediately
+        # If keywords found emergency/urgent, return immediately
         if keyword_result.severity in ("emergency", "urgent"):
             return keyword_result
 
-        # 3. Run embedding check for semantic matching
+        # Run embedding check for semantic matching
         try:
             embedding_classifier = get_embedding_safety_classifier()
             embedding_result = embedding_classifier.classify(text)
         except Exception as e:
             logger.error(f"Embedding classifier failed: {e}")
-            # Fall back to keyword result
             return keyword_result
 
-        # 4. Compare severities, take the more severe
-        severity_rank = {"emergency": 4, "urgent": 3, "warning": 2, "none": 1, "safe": 1}
-        keyword_rank = severity_rank.get(keyword_result.severity, 0)
-        embedding_rank = severity_rank.get(embedding_result.severity, 0)
+        # Compare severities, take the more severe
+        keyword_rank = self._SEVERITY_RANK.get(keyword_result.severity, 0)
+        embedding_rank = self._SEVERITY_RANK.get(embedding_result.severity, 0)
 
         if embedding_rank > keyword_rank:
-            # Embedding found something more severe
             return SafetyCheckResult(
                 is_red_flag=embedding_result.severity in ("emergency", "urgent"),
                 severity=embedding_result.severity,
@@ -301,19 +258,9 @@ class SafetyLayer:
 
         return keyword_result
 
-    def _get_message_for_severity(self, severity: str) -> str:
-        """Get appropriate message for a severity level."""
-        message_handlers = {
-            "emergency": self._get_emergency_message,
-            "urgent": self._get_urgent_message,
-            "warning": self._get_warning_message,
-        }
-        handler = message_handlers.get(severity)
-        return handler() if handler else ""
-
-    def _get_emergency_message(self) -> str:
-        """Get emergency response message in Bulgarian."""
-        return """🚨 **СПЕШНО: Моля, потърсете незабавна медицинска помощ!**
+    # Pre-defined messages for each severity level
+    _MESSAGES = {
+        "emergency": """🚨 **СПЕШНО: Моля, потърсете незабавна медицинска помощ!**
 
 Описаните симптоми изискват спешна медицинска намеса.
 
@@ -322,11 +269,9 @@ class SafetyLayer:
 - Отидете в най-близкото спешно отделение
 - Не шофирайте сами, ако е възможно
 
-⚠️ Този чатбот НЕ може да помогне при спешни медицински състояния."""
+⚠️ Този чатбот НЕ може да помогне при спешни медицински състояния.""",
 
-    def _get_urgent_message(self) -> str:
-        """Get urgent response message in Bulgarian."""
-        return """⚠️ **ВАЖНО: Препоръчваме консултация с лекар**
+        "urgent": """⚠️ **ВАЖНО: Препоръчваме консултация с лекар**
 
 Описаните симптоми изискват медицински преглед в рамките на 24-48 часа.
 
@@ -335,36 +280,22 @@ class SafetyLayer:
 - Ако симптомите се влошат, потърсете спешна помощ
 - Не отлагайте прегледа
 
-ℹ️ Не препоръчваме самолечение при тези симптоми."""
+ℹ️ Не препоръчваме самолечение при тези симптоми.""",
 
-    def _get_warning_message(self) -> str:
-        """Get warning response message in Bulgarian."""
-        return """ℹ️ **Забележка:** Ако симптомите продължат повече от няколко дни или се влошат,
-моля консултирайте се с лекар."""
+        "warning": """ℹ️ **Забележка:** Ако симптомите продължат повече от няколко дни или се влошат,
+моля консултирайте се с лекар.""",
+    }
+
+    def _get_message_for_severity(self, severity: str) -> str:
+        """Get appropriate message for a severity level."""
+        return self._MESSAGES.get(severity, "")
 
     def filter_otc_only(self, products: list) -> list:
-        """
-        Filter products to only include OTC (over-the-counter) items.
-
-        Args:
-            products: List of Product objects
-
-        Returns:
-            List of only OTC products
-        """
+        """Filter products to only include OTC (over-the-counter) items."""
         return [p for p in products if getattr(p, 'is_otc', True)]
 
     def add_safety_disclaimer(self, response: str, safety_result: SafetyCheckResult) -> str:
-        """
-        Add appropriate safety disclaimer to response.
-
-        Args:
-            response: The chatbot response
-            safety_result: Result from safety check
-
-        Returns:
-            Response with safety disclaimer added
-        """
+        """Add appropriate safety disclaimer to response if needed."""
         if safety_result.severity == "warning" and safety_result.message:
             return f"{response}\n\n{safety_result.message}"
         return response
