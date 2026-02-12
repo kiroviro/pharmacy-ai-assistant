@@ -1,6 +1,6 @@
 # ViaPharma OTC Chatbot
 
-[![CI](https://github.com/YOUR_USERNAME/medgemma/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/medgemma/actions/workflows/ci.yml)
+[![CI](https://github.com/kiril/medgemma/actions/workflows/ci.yml/badge.svg)](https://github.com/kiril/medgemma/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -157,4 +157,4 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system design.
 
 ## License
 
-Proprietary - ViaPharma
+MIT License - See [LICENSE](LICENSE) for details.
