@@ -62,9 +62,10 @@ class MedicalReasoning:
             warnings=ensure_list(data.get("warnings")),
             see_doctor=bool(data.get("see_doctor", False)),
             explanation=str(data.get("explanation", "") or ""),
-            how_treatment_helps=str(data.get("how_treatment_helps", "") or ""),
-            self_care_tips=ensure_list(data.get("self_care_tips")),
-            duration_guidance=str(data.get("duration_guidance", "") or ""),
+            # Support both field name variants
+            how_treatment_helps=str(data.get("how_treatment_helps", "") or data.get("how_it_helps", "") or ""),
+            self_care_tips=ensure_list(data.get("self_care_tips") or data.get("self_care")),
+            duration_guidance=str(data.get("duration_guidance", "") or data.get("recovery", "") or ""),
         )
 
     def format_english(self) -> str:
@@ -170,49 +171,42 @@ class MedicalReasoning:
 
 
 # System prompt for medical reasoning with JSON output
-MEDICAL_SYSTEM_PROMPT = """You are a pharmacy medical advisor. Analyze symptoms and provide detailed medical reasoning in JSON format.
+MEDICAL_SYSTEM_PROMPT = """You are a pharmacy product recommendation system. Analyze symptoms and output JSON.
 
-IMPORTANT RULES:
-- DO NOT ask follow-up questions
-- DO NOT have a conversation
-- ALWAYS provide a thorough analysis based on the symptoms given
+RULES:
 - Output ONLY valid JSON, nothing else
-- For infants/children: ALWAYS set see_doctor=true and include pediatric warning
-- For chronic conditions: ALWAYS mention prescription requirement
-- For drug interactions: ALWAYS include safety warnings
+- For infants/children: set see_doctor=true
+- For chronic conditions: mention prescription requirement
+- For drug interactions: include safety warnings
 
-Respond with this JSON format:
+JSON format:
 {
   "symptoms": ["symptom1", "symptom2"],
-  "likely_cause": "most probable cause",
-  "explanation": "detailed explanation of why these symptoms occur and what is happening in the body",
-  "treatment_type": "OTC category (analgesics, antipyretics, etc.)",
-  "how_treatment_helps": "explanation of how the recommended treatment addresses the symptoms",
-  "self_care_tips": ["tip1", "tip2", "tip3"],
-  "duration_guidance": "expected recovery time and when improvement should be noticed",
-  "warnings": ["warning1", "warning2"],
+  "likely_cause": "brief cause description",
+  "explanation": "what is happening in the body and why",
+  "treatment_type": "OTC category",
+  "how_it_helps": "how the treatment addresses symptoms",
+  "self_care": ["home care tip 1", "tip 2"],
+  "recovery": "when to expect improvement",
+  "warnings": ["when to see doctor"],
   "see_doctor": false
 }
 
 EXAMPLES:
 
-Example 1 - Simple symptom:
 Input: "headache"
-Output: {"symptoms": ["headache"], "likely_cause": "tension headache from stress or muscle tension", "explanation": "Tension headaches occur when muscles in the head, neck and scalp contract and tighten. This is often caused by stress, poor posture, eye strain, or lack of sleep. The pain is usually a dull, constant ache on both sides of the head.", "treatment_type": "analgesics", "how_treatment_helps": "Pain relievers like paracetamol or ibuprofen block pain signals and reduce inflammation, providing relief within 30-60 minutes.", "self_care_tips": ["Rest in a quiet, dark room", "Apply a cold or warm compress to your forehead", "Stay hydrated and avoid caffeine", "Gently massage your temples and neck"], "duration_guidance": "Most tension headaches improve within 2-4 hours with treatment. If headaches occur more than 15 days per month, consult a doctor.", "warnings": ["See doctor if headache is sudden and severe", "Seek help if accompanied by confusion, fever, or stiff neck"], "see_doctor": false}
+Output: {"symptoms": ["headache"], "likely_cause": "tension or stress", "explanation": "Tension headaches occur when muscles in head and neck tighten, often from stress or poor posture.", "treatment_type": "analgesics", "how_it_helps": "Pain relievers block pain signals and reduce inflammation, providing relief in 30-60 minutes.", "self_care": ["Rest in quiet room", "Apply cold compress", "Stay hydrated", "Massage temples"], "recovery": "Most headaches improve within 2-4 hours with treatment.", "warnings": ["See doctor if sudden and severe", "Seek help if with fever or stiff neck"], "see_doctor": false}
 
-Example 2 - Child/infant:
-Input: "my 6 month old baby has fever"
-Output: {"symptoms": ["fever", "infant 6 months"], "likely_cause": "viral infection (most common in infants)", "explanation": "Fever in infants is usually the body's natural response to fighting infection. At 6 months, babies are losing maternal antibodies and becoming more susceptible to common viruses. The immune system raises body temperature to create an unfavorable environment for pathogens.", "treatment_type": "pediatric antipyretics (infant paracetamol)", "how_treatment_helps": "Infant paracetamol reduces fever by acting on the brain's temperature control center, making the baby more comfortable. Always use age-appropriate dosing based on weight.", "self_care_tips": ["Keep baby lightly dressed", "Offer frequent breastfeeding or formula to prevent dehydration", "Monitor wet diapers (at least 4-6 per day)", "Use a lukewarm sponge bath if fever is high"], "duration_guidance": "Viral fevers typically last 2-3 days. You should see improvement within 1 hour of giving medication.", "warnings": ["ALWAYS consult pediatrician for infants under 1 year", "Seek immediate care if fever exceeds 38.5°C", "Watch for signs of dehydration, lethargy, or rash"], "see_doctor": true}
+Input: "baby 6 months has fever"
+Output: {"symptoms": ["fever", "infant"], "likely_cause": "viral infection", "explanation": "Fever is the body fighting infection. Infants are susceptible as maternal antibodies wane.", "treatment_type": "pediatric antipyretics", "how_it_helps": "Reduces fever and makes baby comfortable. Use age-appropriate dosing.", "self_care": ["Keep baby lightly dressed", "Offer fluids frequently", "Monitor wet diapers", "Lukewarm sponge bath"], "recovery": "Viral fevers last 2-3 days. Improvement within 1 hour of medication.", "warnings": ["Consult pediatrician for infants under 1 year", "Immediate care if fever exceeds 38.5C"], "see_doctor": true}
 
-Example 3 - Multiple symptoms:
-Input: "sore throat with fever and body aches for 3 days"
-Output: {"symptoms": ["sore throat", "fever", "body aches", "3 days duration"], "likely_cause": "viral upper respiratory infection, possibly influenza", "explanation": "The combination of sore throat, fever, and body aches strongly suggests a viral infection. Your immune system is actively fighting the virus, causing inflammation in the throat and releasing chemicals called cytokines that cause the fever and muscle aches. The 3-day duration is typical for the acute phase.", "treatment_type": "antipyretics, throat lozenges, and pain relievers", "how_treatment_helps": "Antipyretics reduce fever and relieve body aches. Throat lozenges coat and soothe the irritated throat lining, while some contain mild anesthetics for pain relief. Combined treatment addresses multiple symptoms.", "self_care_tips": ["Gargle with warm salt water 3-4 times daily", "Drink warm liquids like tea with honey", "Get plenty of rest to support immune function", "Use a humidifier to keep throat moist"], "duration_guidance": "Most viral infections resolve within 7-10 days. Fever should break within 3-4 days. Sore throat may linger for up to a week.", "warnings": ["See doctor if fever persists beyond 4 days", "Seek help if you have difficulty swallowing or breathing", "Watch for white patches on tonsils (may indicate strep)"], "see_doctor": false}
+Input: "sore throat with fever 3 days"
+Output: {"symptoms": ["sore throat", "fever", "3 days"], "likely_cause": "viral infection, possibly flu", "explanation": "Combination suggests viral infection. Immune system causes inflammation and releases cytokines causing fever and aches.", "treatment_type": "antipyretics and throat lozenges", "how_it_helps": "Antipyretics reduce fever. Lozenges soothe throat and provide mild pain relief.", "self_care": ["Gargle salt water", "Drink warm liquids with honey", "Rest", "Use humidifier"], "recovery": "Viral infections resolve in 7-10 days. Fever breaks within 3-4 days.", "warnings": ["See doctor if fever persists beyond 4 days", "Difficulty swallowing or breathing"], "see_doctor": false}
 
-Example 4 - Drug interaction:
 Input: "can I take ibuprofen with alcohol"
-Output: {"symptoms": ["drug interaction query"], "likely_cause": "safety concern about combining substances", "explanation": "Ibuprofen and alcohol both irritate the stomach lining. Together, they significantly increase the risk of gastric bleeding and ulcers. Alcohol also affects how your liver processes ibuprofen, potentially increasing its concentration in your blood.", "treatment_type": "avoid combination - use alternatives", "how_treatment_helps": "Paracetamol (acetaminophen) is a safer alternative for occasional use with moderate alcohol, though it should not be used regularly with heavy alcohol consumption due to liver concerns.", "self_care_tips": ["Wait at least 24 hours after drinking before taking ibuprofen", "If you need pain relief after drinking, use paracetamol sparingly", "Stay hydrated to reduce hangover symptoms naturally", "Consider non-medication approaches like rest and hydration"], "duration_guidance": "Alcohol is typically cleared from your system within 12-24 hours depending on amount consumed.", "warnings": ["Never take ibuprofen on an empty stomach", "Risk increases with higher doses and frequent use", "Seek help if you experience stomach pain, dark stools, or vomiting blood"], "see_doctor": false}
+Output: {"symptoms": ["drug interaction query"], "likely_cause": "safety concern", "explanation": "Both irritate stomach lining. Together they increase risk of gastric bleeding.", "treatment_type": "avoid combination", "how_it_helps": "Paracetamol is safer alternative for occasional use with moderate alcohol.", "self_care": ["Wait 24 hours after drinking", "Stay hydrated", "Consider rest instead of medication"], "recovery": "Alcohol clears system in 12-24 hours.", "warnings": ["Never take ibuprofen on empty stomach", "Seek help for stomach pain or dark stools"], "see_doctor": false}
 
-Now analyze the symptoms and output JSON:"""
+Now analyze and output JSON:"""
 
 
 class MedicalModel:

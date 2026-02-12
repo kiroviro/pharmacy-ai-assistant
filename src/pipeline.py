@@ -328,6 +328,21 @@ class Pipeline:
             selected_products=selected_products
         )
 
+    # Phrases indicating the model refused to help (English and Bulgarian)
+    _REFUSAL_PHRASES = {
+        # English
+        "i cannot", "i can't", "i'm not able to", "i am not able to",
+        "i will not", "i won't", "cannot fulfill", "can't fulfill",
+        "cannot help with", "can't help with", "not appropriate",
+        "inappropriate request", "decline to", "refuse to",
+        "against my guidelines", "violates my guidelines",
+        "not a medical", "isn't a medical", "is not a medical",
+        # Bulgarian
+        "не мога", "не съм в състояние", "не е възможно",
+        "не е подходящо", "неподходящ", "отказвам",
+        "не е медицински", "това не е",
+    }
+
     def _is_refusal_response(self, reasoning: MedicalReasoning) -> bool:
         """
         Check if MedGemma's response indicates it cannot or will not help.
@@ -335,52 +350,11 @@ class Pipeline:
         This catches cases where inappropriate queries slip through the intent
         classifier but MedGemma refuses to respond.
         """
-        if not reasoning:
+        if not reasoning or not reasoning.likely_cause:
             return False
 
-        # Check if the likely_cause indicates a refusal
-        response_lower = reasoning.likely_cause.lower() if reasoning.likely_cause else ""
-
-        # Refusal phrases in English
-        refusal_phrases_en = [
-            "i cannot",
-            "i can't",
-            "i'm not able to",
-            "i am not able to",
-            "i will not",
-            "i won't",
-            "cannot fulfill",
-            "can't fulfill",
-            "cannot help with",
-            "can't help with",
-            "not appropriate",
-            "inappropriate request",
-            "decline to",
-            "refuse to",
-            "against my guidelines",
-            "violates my guidelines",
-            "not a medical",
-            "isn't a medical",
-            "is not a medical",
-        ]
-
-        # Refusal phrases in Bulgarian
-        refusal_phrases_bg = [
-            "не мога",
-            "не съм в състояние",
-            "не е възможно",
-            "не е подходящо",
-            "неподходящ",
-            "отказвам",
-            "не е медицински",
-            "това не е",
-        ]
-
-        for phrase in refusal_phrases_en + refusal_phrases_bg:
-            if phrase in response_lower:
-                return True
-
-        return False
+        response_lower = reasoning.likely_cause.lower()
+        return any(phrase in response_lower for phrase in self._REFUSAL_PHRASES)
 
     # =========================================================================
     # Step 2 & 6: Translation
@@ -705,67 +679,89 @@ class Pipeline:
         """
         response_parts = []
 
-        # Helper function to translate text safely
-        def translate(text: str) -> str:
+        # Garbage patterns to filter out (from product side effects, etc.)
+        garbage_patterns = {
+            "нежелани реакции", "странични ефекти", "неизвестна честота",
+            "side effects", "unknown frequency", "семенна течност",
+            "мускулно- скелетната", "съединителната тъкан"
+        }
+
+        def contains_garbage(text: str) -> bool:
+            """Check if text contains garbage patterns."""
+            if not text:
+                return True
+            text_lower = text.lower()
+            return any(pattern in text_lower for pattern in garbage_patterns)
+
+        def safe_translate(text: str) -> str:
+            """Translate text to Bulgarian, falling back to original if garbage detected."""
             if not translate_reasoning or not text:
                 return text
             try:
-                return self._translate_to_bulgarian(text)
+                translated = self._translate_to_bulgarian(text)
+                return text if contains_garbage(translated) else translated
             except Exception:
                 return text
+
+        def is_valid_text(text: str, min_length: int = 3) -> bool:
+            """Check if text is valid (non-empty, meets min length, no garbage)."""
+            return bool(text) and len(text) > min_length and not contains_garbage(text)
+
+        def translate_if_valid(text: str, min_length: int = 3) -> str | None:
+            """Translate text and return it only if valid, otherwise None."""
+            if not is_valid_text(text, min_length):
+                return None
+            translated = safe_translate(text)
+            return translated if is_valid_text(translated, min_length) else None
 
         # Medical analysis section
         response_parts.append("## 🔍 Медицински анализ\n")
 
-        # Symptoms - format nicely whether list or single string
+        # Symptoms - only show if they look like actual symptom keywords (not long explanations)
         if medical_reasoning.symptoms:
-            symptoms_list = medical_reasoning.symptoms
-            # If it's a list with one long item, it's probably an explanation - skip it
-            if len(symptoms_list) == 1 and len(symptoms_list[0]) > 50:
-                # Model returned explanation as symptom - use likely_cause instead
-                pass
-            else:
-                symptoms_str = ", ".join(symptoms_list)
-                response_parts.append(f"**🩺 Симптоми:** {symptoms_str}\n")
+            valid_symptoms = [s for s in medical_reasoning.symptoms if len(s) < 40]
+            if valid_symptoms:
+                response_parts.append(f"**🩺 Симптоми:** {', '.join(valid_symptoms)}\n")
 
         # Probable cause with explanation
-        if medical_reasoning.likely_cause:
-            cause = translate(medical_reasoning.likely_cause)
+        if cause := translate_if_valid(medical_reasoning.likely_cause):
             response_parts.append(f"**🔬 Вероятна причина:** {cause}\n")
 
-        if medical_reasoning.explanation:
-            explanation = translate(medical_reasoning.explanation)
+        if explanation := translate_if_valid(medical_reasoning.explanation, min_length=10):
             response_parts.append(f"{explanation}\n")
 
         # Treatment recommendation
-        if medical_reasoning.treatment_type:
-            treatment = translate(medical_reasoning.treatment_type)
+        if treatment := translate_if_valid(medical_reasoning.treatment_type):
             response_parts.append(f"**💊 Препоръчано лечение:** {treatment}\n")
 
-        if medical_reasoning.how_treatment_helps:
-            how_helps = translate(medical_reasoning.how_treatment_helps)
+        if how_helps := translate_if_valid(medical_reasoning.how_treatment_helps, min_length=10):
             response_parts.append(f"*{how_helps}*\n")
 
         # Self-care tips
         if medical_reasoning.self_care_tips:
-            response_parts.append("**🏠 Домашни грижи:**")
-            for tip in medical_reasoning.self_care_tips:
-                tip_translated = translate(tip)
-                response_parts.append(f"• {tip_translated}")
-            response_parts.append("")
+            valid_tips = [
+                translated for tip in medical_reasoning.self_care_tips
+                if (translated := translate_if_valid(tip, min_length=5))
+            ]
+            if valid_tips:
+                response_parts.append("**🏠 Домашни грижи:**")
+                response_parts.extend(f"• {tip}" for tip in valid_tips)
+                response_parts.append("")
 
         # Recovery timeline
-        if medical_reasoning.duration_guidance:
-            duration = translate(medical_reasoning.duration_guidance)
+        if duration := translate_if_valid(medical_reasoning.duration_guidance):
             response_parts.append(f"**⏱️ Възстановяване:** {duration}\n")
 
         # Warnings
         if medical_reasoning.warnings:
-            response_parts.append("**⚠️ Кога да потърсите лекар:**")
-            for warning in medical_reasoning.warnings:
-                warning_translated = translate(warning)
-                response_parts.append(f"• {warning_translated}")
-            response_parts.append("")
+            valid_warnings = [
+                translated for warning in medical_reasoning.warnings
+                if (translated := translate_if_valid(warning, min_length=10))
+            ]
+            if valid_warnings:
+                response_parts.append("**⚠️ Кога да потърсите лекар:**")
+                response_parts.extend(f"• {warning}" for warning in valid_warnings)
+                response_parts.append("")
 
         # Product recommendations section
         response_parts.append("\n## 💊 Препоръчани продукти\n")

@@ -303,13 +303,13 @@ class SafetyLayer:
 
     def _get_message_for_severity(self, severity: str) -> str:
         """Get appropriate message for a severity level."""
-        if severity == "emergency":
-            return self._get_emergency_message()
-        elif severity == "urgent":
-            return self._get_urgent_message()
-        elif severity == "warning":
-            return self._get_warning_message()
-        return ""
+        message_handlers = {
+            "emergency": self._get_emergency_message,
+            "urgent": self._get_urgent_message,
+            "warning": self._get_warning_message,
+        }
+        handler = message_handlers.get(severity)
+        return handler() if handler else ""
 
     def _get_emergency_message(self) -> str:
         """Get emergency response message in Bulgarian."""
