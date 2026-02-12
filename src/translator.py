@@ -147,6 +147,63 @@ class Translator:
 
         return result
 
+    # Common medical terms that often fail to translate
+    _MEDICAL_TERM_TRANSLATIONS = {
+        "viral infection": "вирусна инфекция",
+        "bacterial infection": "бактериална инфекция",
+        "sore throat": "болки в гърлото",
+        "headache": "главоболие",
+        "fever": "температура",
+        "cough": "кашлица",
+        "runny nose": "хрема",
+        "cold": "настинка",
+        "flu": "грип",
+        "pain": "болка",
+        "inflammation": "възпаление",
+        "allergy": "алергия",
+        "dizziness": "световъртеж",
+        "fatigue": "умора",
+        "nausea": "гадене",
+        "vomiting": "повръщане",
+        "diarrhea": "диария",
+        "constipation": "запек",
+        "rash": "обрив",
+        "swelling": "подуване",
+        "itching": "сърбеж",
+        "drink plenty of fluids": "пийте много течности",
+        "rest": "почивка",
+        "see doctor": "посетете лекар",
+        "consult a doctor": "консултирайте се с лекар",
+        "analgesics": "аналгетици",
+        "antipyretics": "антипиретици",
+        "anti-inflammatory": "противовъзпалително",
+        "decongestant": "деконгестант",
+        "antihistamine": "антихистамин",
+        "symptoms": "симптоми",
+        "treatment": "лечение",
+        "self-care": "домашни грижи",
+        "recovery": "възстановяване",
+    }
+
+    def _calculate_bulgarian_ratio(self, text: str) -> float:
+        """Calculate the ratio of Bulgarian characters in text."""
+        if not text:
+            return 0.0
+        bulgarian_chars = set("абвгдежзийклмнопрстуфхцчшщъьюя")
+        text_lower = text.lower()
+        bg_count = sum(1 for c in text_lower if c in bulgarian_chars)
+        total_alpha = sum(1 for c in text_lower if c.isalpha())
+        return bg_count / total_alpha if total_alpha > 0 else 0.0
+
+    def _apply_medical_dictionary(self, text: str) -> str:
+        """Replace common English medical terms with Bulgarian translations."""
+        result = text
+        for eng, bg in self._MEDICAL_TERM_TRANSLATIONS.items():
+            # Case-insensitive replacement
+            import re
+            result = re.sub(re.escape(eng), bg, result, flags=re.IGNORECASE)
+        return result
+
     def translate_to_bulgarian(self, text: str) -> str:
         """
         Translate English text to Bulgarian.
@@ -172,6 +229,35 @@ class Translator:
         inputs = self._en_to_bg_tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512)
         translated = self._en_to_bg_model.generate(**inputs)
         result = self._en_to_bg_tokenizer.decode(translated[0], skip_special_tokens=True)
+
+        # Check Bulgarian ratio and try fallback if too low
+        bg_ratio = self._calculate_bulgarian_ratio(result)
+        if bg_ratio < 0.6:
+            # Try applying medical dictionary first
+            result_with_dict = self._apply_medical_dictionary(result)
+            new_ratio = self._calculate_bulgarian_ratio(result_with_dict)
+
+            if new_ratio > bg_ratio:
+                result = result_with_dict
+                bg_ratio = new_ratio
+
+            # If still low, try sentence-by-sentence translation
+            if bg_ratio < 0.6 and '.' in text:
+                sentences = [s.strip() for s in text.split('.') if s.strip()]
+                if len(sentences) > 1:
+                    translated_sentences = []
+                    for sentence in sentences:
+                        inputs = self._en_to_bg_tokenizer(
+                            sentence, return_tensors="pt", padding=True, truncation=True, max_length=512
+                        )
+                        trans = self._en_to_bg_model.generate(**inputs)
+                        trans_text = self._en_to_bg_tokenizer.decode(trans[0], skip_special_tokens=True)
+                        # Apply dictionary to each sentence
+                        trans_text = self._apply_medical_dictionary(trans_text)
+                        translated_sentences.append(trans_text)
+                    sentence_result = '. '.join(translated_sentences)
+                    if self._calculate_bulgarian_ratio(sentence_result) > bg_ratio:
+                        result = sentence_result
 
         # Cache result
         self._cache_en_to_bg.set(text, result)

@@ -971,19 +971,35 @@ class Pipeline:
 
         Checks both original Bulgarian and translated English text for safety patterns,
         plus MedGemma's see_doctor recommendation.
+
+        Returns (is_red_flag, message):
+        - True means STOP and return safety message (no products)
+        - False means CONTINUE with product search (may still add warnings later)
         """
-        # Check original Bulgarian text
+        # Check original Bulgarian text for actual emergencies
         result = self.safety_layer.check_safety(original_query)
         if result.is_red_flag:
             return True, result.message
 
-        # Check translated English text
+        # Check translated English text for actual emergencies
         result_en = self.safety_layer.check_safety(translated_query)
         if result_en.is_red_flag:
             return True, result_en.message
 
-        # Check MedGemma's recommendation
+        # For MedGemma's see_doctor recommendation, handle differently based on query type
         if medical_reasoning.see_doctor:
+            # For child-related queries, DON'T block - continue to find products
+            # but add pediatric warnings (handled by _add_child_disclaimer later)
+            if self._is_child_related_query(original_query):
+                logger.info("Child query with see_doctor=True - proceeding with pediatric warnings")
+                return False, ""  # Continue to product search
+
+            # For pregnancy-related queries, DON'T block - continue with warnings
+            if self._is_pregnancy_related_query(original_query):
+                logger.info("Pregnancy query with see_doctor=True - proceeding with warnings")
+                return False, ""  # Continue to product search
+
+            # For other queries, use the generic doctor recommendation
             return True, (
                 "⚠️ **Препоръчваме консултация с лекар.**\n\n"
                 "Базирано на вашите симптоми, препоръчваме да се консултирате "
@@ -991,6 +1007,16 @@ class Pipeline:
             )
 
         return False, ""
+
+    def _is_pregnancy_related_query(self, text: str) -> bool:
+        """Check if query mentions pregnancy or breastfeeding."""
+        text_lower = text.lower()
+        pregnancy_keywords = {
+            'бременна', 'бременност', 'бременни', 'бременността',
+            'кърмя', 'кърмене', 'кърмачка', 'кърмещи',
+            'pregnant', 'pregnancy', 'breastfeeding', 'nursing', 'lactating',
+        }
+        return any(kw in text_lower for kw in pregnancy_keywords)
 
     def _retrieve_product_candidates(self, medical_reasoning: MedicalReasoning, top_k: int = 10) -> list:
         """
@@ -1197,10 +1223,23 @@ class Pipeline:
         """Add child-specific safety disclaimer to response."""
         disclaimer = """
 ⚠️ **Важно за деца и бебета:**
+- **Консултирайте се с педиатър** за правилната диагноза и лечение
 - Винаги проверявайте възрастовите ограничения на опаковката
 - Дозировката зависи от възрастта и теглото на детето
-- Консултирайте се с педиатър преди даване на лекарства на бебета под 6 месеца
-- При съмнение, попитайте фармацевт за подходящата доза"""
+- За бебета под 6 месеца - винаги консултация с педиатър преди лекарства
+- При съмнение, попитайте фармацевт за подходящата доза
+
+🏠 **Общи съвети за грижа:**
+- Следете температурата на детето редовно
+- Осигурете достатъчно течности (вода, чай, бульон)
+- Осигурете покой и почивка
+- Наблюдавайте за влошаване на симптомите
+
+🚨 **Потърсете незабавна помощ ако:**
+- Температурата е над 39°C и не спада
+- Детето отказва да пие течности
+- Има затруднено дишане
+- Появи се обрив или петна"""
         return response + "\n" + disclaimer
 
     def _add_safety_info_disclaimer(self, response: str) -> str:
@@ -1340,6 +1379,34 @@ class Pipeline:
         # Vague filler text
         "както и да е, трябва", "както и да е",
         "в зависимост от състоянието",
+        # Repeated/duplicate text from translation
+        "човешки рекомбинантен човешки рекомбинантен",
+        "рекомбинантен еритропоетин",
+        # Truncated/garbled text
+        "(сърх)", "(Сърх)", "( сърх", "сърх)",
+        # Medical jargon that shouldn't appear
+        "забрана за употреба при пациенти",
+        "лекувани с човешки",
+        # Instruction text fragments
+        "да се избягва свързването",
+        "по- малко от 6 месеца",
+        "(по- малко от",
+        # Random pharmaceutical codes
+        "mg/ml", "мг/мл", "таблетки x",
+        # Industrial/legal text garbage
+        "специални условия на труд",
+        "стоманодобивната промишленост",
+        "техниките средства за подпомагане",
+        "препоръчителни че",
+        # Truncated/incomplete bullet points
+        "мои_____",
+        "ст ст ст",
+        "таблетка на",
+        "(д възможно най-",
+        "нетно вещество",
+        # Translation artifacts
+        "през последните три години",
+        "cuts обикновено",
     }
 
     def _format_response(
