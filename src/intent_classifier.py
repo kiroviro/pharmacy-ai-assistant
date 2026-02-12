@@ -125,6 +125,38 @@ class IntentClassifier:
             'цена на доставка', 'цената на доставката', 'безплатна доставка',
             'работно време', 'адрес на аптека', 'къде се намирате',
 
+            # Bulgarian - prices / promotions
+            'промоции', 'колко струва', 'цена', 'цени', 'ценово',
+            'програма за лоялни', 'лоялни клиенти', 'промо код', 'промокод',
+            'ддс', 'разпродажба', 'абонамент', 'абонаментни',
+            'по-скъпо', 'по-евтино', 'струва', 'скъп', 'евтин',
+
+            # Bulgarian - account management
+            'акаунт', 'парола', 'имейл адрес', 'регистрация',
+            'вход', 'профил', 'история на поръчките', 'любими',
+            'изтрия акаунт', 'данни', 'защитени', 'лични данни',
+            'забравих парола', 'възстановя парола', 'променя имейл',
+
+            # Bulgarian - navigation / site
+            'сайт', 'уебсайт', 'страница', 'приложение', 'мобилно',
+            'не зарежда', 'свържа', 'контакт', 'работно време',
+            'физически аптеки', 'ревю', 'рецензия', 'блог',
+            'намеря продукт', 'търсачка', 'категории',
+
+            # Bulgarian - legal / regulatory
+            'лиценз', 'контролира', 'gdpr', 'политика',
+            'иал', 'разрешение', 'регулация',
+
+            # Bulgarian - returns (additional)
+            'повреден', 'повреда', 'дефект', 'рекламация',
+            'грешен продукт', 'изтекъл срок', 'възстановяване на парите',
+
+            # Bulgarian - meta / about chatbot
+            'чатбот', 'бот', 'робот', 'жив човек',
+            'направил', 'създал', 'разработил',
+            'политическа', 'ориентация',
+            'кафене', 'магазин',
+
             # English - general
             'weather', 'forecast', 'news', 'sports', 'football',
             'recipe', 'cooking', 'restaurant', 'food',
@@ -143,6 +175,12 @@ class IntentClassifier:
             'invoice', 'receipt',
             'discount', 'promotion', 'sale',
             'free shipping', 'delivery cost', 'shipping cost',
+
+            # English - account / meta
+            'password', 'email address', 'registration', 'login',
+            'profile', 'order history', 'favorites', 'wishlist',
+            'chatbot', 'bot', 'robot', 'human', 'real person',
+            'who made', 'who created', 'political',
         }
 
         # Profanity/inappropriate language (Bulgarian and English)

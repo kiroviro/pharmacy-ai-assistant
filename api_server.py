@@ -319,9 +319,10 @@ async def request_middleware(request: Request, call_next):
     if "/chat/" in request.url.path or "/completions" in request.url.path:
         if not check_rate_limit(client_ip):
             logger.warning(f"Rate limit exceeded", extra={"client_ip": client_ip})
-            return HTTPException(
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
                 status_code=429,
-                detail="Твърде много заявки. Моля, изчакайте минута."
+                content={"detail": "Твърде много заявки. Моля, изчакайте минута."}
             )
 
     # Log request
