@@ -149,16 +149,21 @@ class Translator:
 
     # Common medical terms that often fail to translate
     _MEDICAL_TERM_TRANSLATIONS = {
-        # Symptoms
+        # Symptoms (plural first for correct matching)
         "viral infection": "вирусна инфекция",
         "bacterial infection": "бактериална инфекция",
         "sore throat": "болки в гърлото",
+        "headaches": "главоболия",
         "headache": "главоболие",
+        "fevers": "температури",
         "fever": "температура",
+        "high fever": "висока температура",
         "cough": "кашлица",
         "runny nose": "хрема",
         "cold": "настинка",
+        "common cold": "настинка",
         "flu": "грип",
+        "influenza": "грип",
         "pain": "болка",
         "inflammation": "възпаление",
         "allergy": "алергия",
@@ -183,6 +188,25 @@ class Translator:
         "ear pain": "болка в ухото",
         "chest pain": "болка в гърдите",
         "joint pain": "болка в ставите",
+        "teething": "никнене на зъби",
+        "teething pain": "болка при никнене на зъби",
+        # Infant/Baby related
+        "infant": "бебе",
+        "infants": "бебета",
+        "baby": "бебе",
+        "babies": "бебета",
+        "newborn": "новородено",
+        "newborns": "новородени",
+        "child": "дете",
+        "children": "деца",
+        "toddler": "малко дете",
+        "pediatric": "детски",
+        "infant fever": "температура при бебе",
+        "baby fever": "температура при бебе",
+        "6 month old": "6-месечно",
+        "6 months old": "на 6 месеца",
+        "months old": "месеца",
+        "years old": "години",
         # Causes
         "poor posture": "лоша стойка",
         "dehydration": "дехидратация",
@@ -190,49 +214,138 @@ class Translator:
         "eye strain": "напрежение на очите",
         # Treatments
         "analgesics": "болкоуспокояващи",
-        "antipyretics": "антипиретици",
+        "antipyretics": "антипиретици (за сваляне на температура)",
+        "antipyretic": "антипиретик (за температура)",
         "anti-inflammatory": "противовъзпалително",
         "decongestant": "деконгестант",
         "antihistamine": "антихистамин",
         "pain relievers": "болкоуспокояващи",
         "painkiller": "болкоуспокояващо",
         "painkillers": "болкоуспокояващи",
+        "fever reducer": "лекарство за сваляне на температура",
+        "fever reducers": "лекарства за сваляне на температура",
+        "acetaminophen": "парацетамол",
+        "paracetamol": "парацетамол",
+        "ibuprofen": "ибупрофен",
         # Self-care phrases
         "drink plenty of fluids": "пийте много течности",
         "stay hydrated": "пийте достатъчно течности",
         "get plenty of rest": "почивайте достатъчно",
         "rest in a quiet room": "почивайте в тиха стая",
+        "rest in quiet room": "почивайте в тиха стая",
         "apply cold compress": "приложете студен компрес",
         "apply warm compress": "приложете топъл компрес",
+        "cold compress": "студен компрес",
+        "warm compress": "топъл компрес",
         "avoid bright lights": "избягвайте ярка светлина",
         "reduce screen time": "намалете времето пред екран",
         "rest": "почивка",
+        "elevate head": "повдигнете главата",
+        "keep hydrated": "поддържайте хидратация",
+        "gargle with salt water": "гаргара със солена вода",
+        "use humidifier": "използвайте овлажнител",
+        "avoid caffeine": "избягвайте кофеин",
+        "avoid alcohol": "избягвайте алкохол",
+        "take breaks": "правете почивки",
+        "gentle massage": "лек масаж",
+        # Baby/infant self-care
+        "keep baby lightly dressed": "облечете бебето леко",
+        "keep the baby lightly dressed": "облечете бебето леко",
+        "dress baby lightly": "облечете бебето леко",
+        "dress lightly": "облечете леко",
+        "lightly dressed": "облечете леко",
+        "offer fluids frequently": "давайте течности често",
+        "offer fluids often": "давайте течности често",
+        "offer fluids": "давайте течности",
+        "offer plenty of fluids": "давайте много течности",
+        "give fluids": "давайте течности",
+        "monitor temperature": "следете температурата",
+        "monitor the temperature": "следете температурата",
+        "check temperature regularly": "проверявайте температурата редовно",
+        "lukewarm bath": "хладка вана",
+        "cool bath": "хладка вана",
+        "sponge bath": "разтриване с мокра кърпа",
+        "cool compress on forehead": "хладен компрес на челото",
+        "cool compress": "хладен компрес",
+        "breastfeed frequently": "кърмете често",
+        "breastfeed often": "кърмете често",
+        "keep room cool": "поддържайте стаята хладна",
+        "keep the room cool": "поддържайте стаята хладна",
+        "ensure adequate rest": "осигурете достатъчна почивка",
+        "adequate rest": "достатъчна почивка",
+        "plenty of rest": "достатъчна почивка",
         # Doctor recommendations
         "see doctor": "посетете лекар",
         "see a doctor": "посетете лекар",
+        "see a pediatrician": "посетете педиатър",
         "consult a doctor": "консултирайте се с лекар",
         "consult your doctor": "консултирайте се с лекар",
+        "consult a pediatrician": "консултирайте се с педиатър",
         "seek medical help": "потърсете медицинска помощ",
+        "seek medical attention": "потърсете медицинска помощ",
         "seek help": "потърсете помощ",
         "seek immediate help": "потърсете незабавна помощ",
+        "seek immediate medical attention": "потърсете незабавна медицинска помощ",
         "if symptoms persist": "ако симптомите продължават",
         "if symptoms worsen": "ако симптомите се влошат",
+        "if fever persists": "ако температурата продължава",
+        "if fever exceeds": "ако температурата надвиши",
         "with fever": "с температура",
         "stiff neck": "скован врат",
         "with fever or stiff neck": "с температура или скован врат",
+        "immediate care": "незабавна грижа",
+        "emergency care": "спешна помощ",
         # Recovery
         "usually resolves": "обикновено преминава",
+        "typically resolves": "обикновено преминава",
         "within a few hours": "в рамките на няколко часа",
         "within 24 hours": "в рамките на 24 часа",
         "within 2-4 hours": "в рамките на 2-4 часа",
+        "within 2-3 days": "в рамките на 2-3 дни",
+        "within 3-5 days": "в рамките на 3-5 дни",
         "symptoms": "симптоми",
         "treatment": "лечение",
         "self-care": "домашни грижи",
+        "home care": "домашни грижи",
         "recovery": "възстановяване",
-        # Common phrases
+        "most viral fevers": "повечето вирусни температури",
+        "viral fevers": "вирусни температури",
+        # Common phrases - full sentences for better translation
         "tension headaches occur when": "тензионното главоболие се появява когато",
         "muscles in head and neck tighten": "мускулите на главата и врата се стягат",
         "often from stress": "често от стрес",
+        "often from stress or poor posture": "често от стрес или лоша стойка",
+        "occur when": "се появява когато",
+        "from stress or": "от стрес или",
+        "or poor posture": "или лоша стойка",
+        # Common explanations - full phrases
+        "tension headaches occur when muscles in head and neck tighten, often from stress or poor posture": "Тензионното главоболие се появява, когато мускулите на главата и врата се стягат, често от стрес или лоша стойка",
+        "analgesics block pain signals and reduce inflammation, providing relief within 30-60 minutes": "Болкоуспокояващите блокират болковите сигнали и намаляват възпалението, като осигуряват облекчение в рамките на 30-60 минути",
+        "block pain signals": "блокират болковите сигнали",
+        "reduce inflammation": "намаляват възпалението",
+        "providing relief": "осигурявайки облекчение",
+        "within 30-60 minutes": "в рамките на 30-60 минути",
+        # Recovery phrases
+        "most headaches improve": "повечето главоболия се подобряват",
+        "most headaches improve within 2-4 hours with treatment": "Повечето главоболия се подобряват в рамките на 2-4 часа с лечение",
+        "improve within": "се подобряват в рамките на",
+        "with treatment": "с лечение",
+        "with rest and treatment": "с почивка и лечение",
+        # Warning phrases
+        "see doctor if severe or persistent": "посетете лекар ако е силно или продължително",
+        "if severe or persistent": "ако е силно или продължително",
+        "see doctor if persists beyond": "посетете лекар ако продължава повече от",
+        "if persists beyond": "ако продължава повече от",
+        "if persists": "ако продължава",
+        "if worsens": "ако се влоши",
+        "if persists beyond 3 days": "ако продължава повече от 3 дни",
+        "severe": "силно",
+        "persistent": "продължително",
+        "seek medical help if": "потърсете медицинска помощ ако",
+        "consult your doctor if needed": "консултирайте се с Вашия лекар при нужда",
+        "consult your doctor if necessary": "консултирайте се с Вашия лекар ако е необходимо",
+        "if needed": "при нужда",
+        "if necessary": "ако е необходимо",
     }
 
     def _calculate_bulgarian_ratio(self, text: str) -> float:
@@ -246,11 +359,20 @@ class Translator:
         return bg_count / total_alpha if total_alpha > 0 else 0.0
 
     def _apply_medical_dictionary(self, text: str) -> str:
-        """Replace common English medical terms with Bulgarian translations."""
+        """Replace common English medical terms with Bulgarian translations.
+
+        Sorts by length (longest first) to ensure proper phrase matching.
+        """
+        import re
         result = text
-        for eng, bg in self._MEDICAL_TERM_TRANSLATIONS.items():
+        # Sort by length (longest first) to match longer phrases before shorter ones
+        sorted_items = sorted(
+            self._MEDICAL_TERM_TRANSLATIONS.items(),
+            key=lambda x: len(x[0]),
+            reverse=True
+        )
+        for eng, bg in sorted_items:
             # Case-insensitive replacement
-            import re
             result = re.sub(re.escape(eng), bg, result, flags=re.IGNORECASE)
         return result
 
@@ -267,10 +389,18 @@ class Translator:
         if not text or not text.strip():
             return text
 
+        # First, try to translate using dictionary for short/common phrases
+        # This catches common medical terms that the model often fails to translate
+        dict_result = self._apply_medical_dictionary(text)
+        if dict_result != text and self._calculate_bulgarian_ratio(dict_result) > 0.5:
+            # Dictionary made significant changes, use it
+            return dict_result
+
         # Check cache
         cached = self._cache_en_to_bg.get(text)
         if cached is not None:
-            return cached
+            # Always apply dictionary to cached results too
+            return self._apply_medical_dictionary(cached)
 
         # Load model if needed
         self._load_en_to_bg()
@@ -280,36 +410,30 @@ class Translator:
         translated = self._en_to_bg_model.generate(**inputs)
         result = self._en_to_bg_tokenizer.decode(translated[0], skip_special_tokens=True)
 
-        # Check Bulgarian ratio and try fallback if too low
+        # Always apply dictionary to model output (catches terms model missed)
+        result = self._apply_medical_dictionary(result)
+
+        # Check Bulgarian ratio and try additional fallbacks if still low
         bg_ratio = self._calculate_bulgarian_ratio(result)
-        if bg_ratio < 0.6:
-            # Try applying medical dictionary first
-            result_with_dict = self._apply_medical_dictionary(result)
-            new_ratio = self._calculate_bulgarian_ratio(result_with_dict)
+        if bg_ratio < 0.6 and '.' in text:
+            # Try sentence-by-sentence translation
+            sentences = [s.strip() for s in text.split('.') if s.strip()]
+            if len(sentences) > 1:
+                translated_sentences = []
+                for sentence in sentences:
+                    inputs = self._en_to_bg_tokenizer(
+                        sentence, return_tensors="pt", padding=True, truncation=True, max_length=512
+                    )
+                    trans = self._en_to_bg_model.generate(**inputs)
+                    trans_text = self._en_to_bg_tokenizer.decode(trans[0], skip_special_tokens=True)
+                    # Apply dictionary to each sentence
+                    trans_text = self._apply_medical_dictionary(trans_text)
+                    translated_sentences.append(trans_text)
+                sentence_result = '. '.join(translated_sentences)
+                if self._calculate_bulgarian_ratio(sentence_result) > bg_ratio:
+                    result = sentence_result
 
-            if new_ratio > bg_ratio:
-                result = result_with_dict
-                bg_ratio = new_ratio
-
-            # If still low, try sentence-by-sentence translation
-            if bg_ratio < 0.6 and '.' in text:
-                sentences = [s.strip() for s in text.split('.') if s.strip()]
-                if len(sentences) > 1:
-                    translated_sentences = []
-                    for sentence in sentences:
-                        inputs = self._en_to_bg_tokenizer(
-                            sentence, return_tensors="pt", padding=True, truncation=True, max_length=512
-                        )
-                        trans = self._en_to_bg_model.generate(**inputs)
-                        trans_text = self._en_to_bg_tokenizer.decode(trans[0], skip_special_tokens=True)
-                        # Apply dictionary to each sentence
-                        trans_text = self._apply_medical_dictionary(trans_text)
-                        translated_sentences.append(trans_text)
-                    sentence_result = '. '.join(translated_sentences)
-                    if self._calculate_bulgarian_ratio(sentence_result) > bg_ratio:
-                        result = sentence_result
-
-        # Cache result
+        # Cache result (without dictionary applied - we apply it on retrieval)
         self._cache_en_to_bg.set(text, result)
 
         return result
@@ -357,6 +481,8 @@ class Translator:
         """
         Translate multiple English texts to Bulgarian (more efficient).
 
+        Applies medical dictionary and validates Bulgarian content.
+
         Args:
             texts: List of English texts
 
@@ -373,8 +499,26 @@ class Translator:
         if not non_empty:
             return texts
 
-        # Translate non-empty texts
-        indices, valid_texts = zip(*non_empty)
+        # First pass: try dictionary translation for short/known phrases
+        output = list(texts)
+        needs_model_translation = []
+
+        for idx, text in non_empty:
+            dict_result = self._apply_medical_dictionary(text)
+            bg_ratio = self._calculate_bulgarian_ratio(dict_result)
+
+            if bg_ratio > 0.5:
+                # Dictionary made good translation
+                output[idx] = dict_result
+            else:
+                # Need model translation
+                needs_model_translation.append((idx, text))
+
+        if not needs_model_translation:
+            return output
+
+        # Second pass: model translation for remaining texts
+        indices, valid_texts = zip(*needs_model_translation)
         inputs = self._en_to_bg_tokenizer(
             list(valid_texts),
             return_tensors="pt",
@@ -385,12 +529,63 @@ class Translator:
         translated = self._en_to_bg_model.generate(**inputs)
         results = [self._en_to_bg_tokenizer.decode(t, skip_special_tokens=True) for t in translated]
 
-        # Reconstruct full list
-        output = list(texts)
-        for idx, result in zip(indices, results):
+        # Apply dictionary and validate each result
+        for idx, original, result in zip(indices, valid_texts, results):
+            # Apply dictionary to model output (catches terms model missed)
+            result = self._apply_medical_dictionary(result)
+            bg_ratio = self._calculate_bulgarian_ratio(result)
+
+            if bg_ratio < 0.4:
+                # Model failed - use dictionary result or original with dictionary applied
+                dict_fallback = self._apply_medical_dictionary(original)
+                if self._calculate_bulgarian_ratio(dict_fallback) > bg_ratio:
+                    result = dict_fallback
+
             output[idx] = result
 
         return output
+
+    def translate_symptom(self, symptom: str) -> str:
+        """
+        Translate a single symptom term from English to Bulgarian.
+
+        Uses dictionary lookup first, then falls back to model.
+        More reliable for short medical terms.
+
+        Args:
+            symptom: English symptom term (e.g., "fever", "headache")
+
+        Returns:
+            Bulgarian translation
+        """
+        if not symptom or not symptom.strip():
+            return symptom
+
+        symptom_clean = symptom.strip().lower()
+
+        # Direct dictionary lookup (exact match)
+        if symptom_clean in self._MEDICAL_TERM_TRANSLATIONS:
+            return self._MEDICAL_TERM_TRANSLATIONS[symptom_clean]
+
+        # Try case-insensitive lookup
+        for eng, bg in self._MEDICAL_TERM_TRANSLATIONS.items():
+            if eng.lower() == symptom_clean:
+                return bg
+
+        # Apply dictionary transformation
+        dict_result = self._apply_medical_dictionary(symptom)
+        if dict_result != symptom and self._calculate_bulgarian_ratio(dict_result) > 0.3:
+            return dict_result
+
+        # Fallback to model translation for unknown terms
+        translated = self.translate_to_bulgarian(symptom)
+        bg_ratio = self._calculate_bulgarian_ratio(translated)
+
+        if bg_ratio < 0.3:
+            # Model failed, return original (will be filtered as English)
+            return symptom
+
+        return translated
 
     def clear_cache(self) -> None:
         """Clear the translation cache."""

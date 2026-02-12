@@ -1506,6 +1506,31 @@ class Pipeline:
         "терапията с вирусите",
         "майчино- съдово лечение",
         "химикали и подобни форми",
+        "предразположени към",
+        "спадове в температурата",
+        "прави бебето удобно",
+        "определената за тази цел възраст",
+        "труд на човека",
+        "условия на труд",
+        "4. 7",  # EU regulation numbering
+        "4.7 специални",
+        # More truncated/garbled patterns
+        "_____", "____", "___",
+        " ст ", " ст,", ",ст,", "ст ст",
+        "мои___", "мои____", "мои_____",
+        # English fragments that shouldn't appear in BG output
+        "keep baby", "offer fluids", "lightly dressed",
+        "keep бебе", "keep дете",  # Mixed English/BG
+        "immediate care if fever", "immediate care if",
+        "if fever exceeds", "if temperature exceeds",
+        " if ", " exceeds ",  # English conjunctions in BG text
+        "lukewarm", "sponge bath",
+        "seek medical", "medical attention",
+        # Common English words that indicate bad translation
+        "keep ", "should ", "usually ", "avoid ",
+        "monitor ", "ensure ", "apply ",
+        # Numbers with spaces in wrong places
+        "38 . 5", "38. 5",
     }
 
     def _format_response(
@@ -1527,22 +1552,29 @@ class Pipeline:
         else:
             translated_texts = {}
 
-        # Helper to get translated text or original
+        # Helper to get translated text - returns None if translation fails/garbage
         def get_translated(key: str, original: str, min_length: int = 3) -> str | None:
-            if not original or len(original) <= min_length or self._contains_garbage(original):
+            if not original or len(original) <= min_length:
                 return None
             if not translate_reasoning:
                 return original
             translated = translated_texts.get(key, original)
+            # If translation is garbage or still English, skip the field entirely
             if self._contains_garbage(translated):
-                return original
+                return None  # Don't return English original - skip the field
             return translated
 
-        # Symptoms
+        # Symptoms (translate using dedicated symptom translation)
         if medical_reasoning.symptoms:
-            valid_symptoms = [s for s in medical_reasoning.symptoms if len(s) < 40]
-            if valid_symptoms:
-                parts.append(f"**🩺 Симптоми:** {', '.join(valid_symptoms)}\n")
+            translated_symptoms = []
+            for symptom in medical_reasoning.symptoms:
+                if symptom and len(symptom) < 40:
+                    # Use specialized symptom translation
+                    translated = self.translator.translate_symptom(symptom)
+                    if translated and not self._contains_garbage(translated):
+                        translated_symptoms.append(translated)
+            if translated_symptoms:
+                parts.append(f"**🩺 Симптоми:** {', '.join(translated_symptoms)}\n")
 
         # Probable cause with explanation
         if cause := get_translated("likely_cause", medical_reasoning.likely_cause):
@@ -1619,6 +1651,12 @@ class Pipeline:
         """Collect all texts from MedicalReasoning that need translation."""
         texts = {}
 
+        # Symptoms
+        if medical_reasoning.symptoms:
+            for symptom in medical_reasoning.symptoms:
+                if symptom and len(symptom) < 40:
+                    texts[f"symptom_{symptom}"] = symptom
+
         if medical_reasoning.likely_cause:
             texts["likely_cause"] = medical_reasoning.likely_cause
         if medical_reasoning.explanation:
@@ -1660,20 +1698,49 @@ class Pipeline:
             return texts
 
     def _contains_garbage(self, text: str) -> bool:
-        """Check if text contains garbage patterns or excessive repetition."""
+        """Check if text contains garbage patterns, low Bulgarian content, or excessive repetition."""
         if not text or len(text.strip()) < 3:
             return True
+
         text_lower = text.lower()
+
+        # Check for garbage patterns
         if any(pattern in text_lower for pattern in self._GARBAGE_PATTERNS):
             return True
-        # Check for excessive repetition
+
+        # Check Bulgarian content ratio (text should be mostly Bulgarian)
+        bg_ratio = self._calculate_bulgarian_ratio(text)
+        if bg_ratio < 0.3:  # Less than 30% Bulgarian = garbage for BG output
+            return True
+
+        # Check for excessive word repetition
         words = text_lower.split()
+        if len(words) >= 5:
+            from collections import Counter
+            word_counts = Counter(words)
+            # If any word appears more than 50% of the time, it's garbage
+            max_count = max(word_counts.values())
+            if max_count > len(words) * 0.5:
+                return True
+
+        # Check for 3-word phrase repetition
         if len(words) > 10:
             for i in range(len(words) - 5):
                 phrase = " ".join(words[i:i+3])
                 if text_lower.count(phrase) >= 3:
                     return True
+
         return False
+
+    def _calculate_bulgarian_ratio(self, text: str) -> float:
+        """Calculate the ratio of Bulgarian characters in text."""
+        if not text:
+            return 0.0
+        bulgarian_chars = set("абвгдежзийклмнопрстуфхцчшщъьюя")
+        text_lower = text.lower()
+        bg_count = sum(1 for c in text_lower if c in bulgarian_chars)
+        total_alpha = sum(1 for c in text_lower if c.isalpha())
+        return bg_count / total_alpha if total_alpha > 0 else 0.0
 
 
 # Global pipeline instance
