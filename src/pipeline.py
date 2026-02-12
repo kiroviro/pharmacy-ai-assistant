@@ -348,6 +348,7 @@ class Pipeline:
         Process a catalog query without medical reasoning.
 
         This is the fast path for "What brands of X do you have?" type queries.
+        Now uses hybrid search for better brand/product name matching.
         """
         start_time = time.perf_counter()
         logger.info(f"Processing catalog query", extra={"search_term": search_term})
@@ -361,8 +362,8 @@ class Pipeline:
                 original_text=user_input
             )
 
-        # Search products directly
-        results = self.product_store.search(search_term, n_results=6)
+        # Use hybrid search for better brand/product name matching
+        results = self.product_store.hybrid_search(search_term, n_results=6)
         products = self._convert_to_products(results)
 
         # Filter OTC only
@@ -620,13 +621,24 @@ class Pipeline:
         Stage 1: Fast vector similarity search to get top-K product candidates.
 
         Uses ChromaDB with multilingual embeddings based on MedGemma's analysis.
+        Now uses hybrid search (semantic + keyword) with category awareness.
         """
         if self.product_store.collection.count() == 0:
             logger.warning("Product store is empty. Run product_store.py --reload to load products.")
             return []
 
         search_query = self._build_search_query(medical_reasoning)
-        results = self.product_store.search(search_query, n_results=top_k)
+
+        # Use category-aware hybrid search for better results
+        if medical_reasoning.treatment_type:
+            results = self.product_store.search_by_category(
+                query=search_query,
+                treatment_type=medical_reasoning.treatment_type,
+                n_results=top_k,
+            )
+        else:
+            # Fallback to hybrid search without category
+            results = self.product_store.hybrid_search(search_query, n_results=top_k)
 
         return self._convert_to_products(results)
 
@@ -668,12 +680,85 @@ class Pipeline:
             f"Treatment type: {medical_reasoning.treatment_type}."
         )
 
-        return self.medical_model.refine_product_selection(
+        selected = self.medical_model.refine_product_selection(
             user_query=user_query,
             medical_reasoning=reasoning_str,
             candidate_products=candidates,
-            max_products=max_products
+            max_products=max_products + 2,  # Get extra for deduplication
         )
+
+        # Deduplicate by active ingredient to ensure variety
+        deduplicated = self._deduplicate_by_ingredient(selected, max_products)
+
+        return deduplicated
+
+    def _deduplicate_by_ingredient(
+        self,
+        products: list,
+        max_products: int,
+        max_per_ingredient: int = 1
+    ) -> list:
+        """
+        Deduplicate products by active ingredient to ensure recommendation variety.
+
+        Prevents recommending 3 versions of the same drug (e.g., 3 ibuprofen brands).
+
+        Args:
+            products: List of Product objects
+            max_products: Maximum products to return
+            max_per_ingredient: Maximum products per active ingredient
+
+        Returns:
+            Deduplicated list of products
+        """
+        if not products:
+            return []
+
+        # Common active ingredients to detect (Bulgarian + English)
+        INGREDIENT_PATTERNS = {
+            "ibuprofen": ["ибупрофен", "ibuprofen", "нурофен", "бруфен"],
+            "paracetamol": ["парацетамол", "paracetamol", "acetaminophen", "панадол", "ефералган"],
+            "aspirin": ["аспирин", "aspirin", "ацетилсалицилова"],
+            "diclofenac": ["диклофенак", "diclofenac", "волтарен"],
+            "naproxen": ["напроксен", "naproxen", "налгезин"],
+            "loratadine": ["лоратадин", "loratadine", "кларитин"],
+            "cetirizine": ["цетиризин", "cetirizine", "зиртек"],
+            "omeprazole": ["омепразол", "omeprazole"],
+            "dextromethorphan": ["декстрометорфан", "dextromethorphan"],
+            "pseudoephedrine": ["псевдоефедрин", "pseudoephedrine"],
+        }
+
+        def extract_ingredient(product: Product) -> str:
+            """Extract primary active ingredient from product."""
+            composition = (product.composition or "").lower()
+            title = (product.title or "").lower()
+            combined = f"{composition} {title}"
+
+            for ingredient, patterns in INGREDIENT_PATTERNS.items():
+                if any(pattern in combined for pattern in patterns):
+                    return ingredient
+
+            # Fallback: use first word of title as pseudo-ingredient
+            return title.split()[0] if title else "unknown"
+
+        seen_ingredients: dict[str, int] = {}
+        result = []
+
+        for product in products:
+            ingredient = extract_ingredient(product)
+            count = seen_ingredients.get(ingredient, 0)
+
+            if count < max_per_ingredient:
+                result.append(product)
+                seen_ingredients[ingredient] = count + 1
+                logger.debug(f"Selected '{product.title}' (ingredient: {ingredient})")
+
+                if len(result) >= max_products:
+                    break
+            else:
+                logger.debug(f"Skipped '{product.title}' (duplicate ingredient: {ingredient})")
+
+        return result
 
     # Child-related keywords for detection
     _CHILD_KEYWORDS = {
@@ -784,16 +869,27 @@ class Pipeline:
 - За предписани лекарства, моля консултирайте се с вашия лекар или фармацевт"""
         return response + "\n" + disclaimer
 
-    # Garbage patterns to filter from responses
+    # Garbage patterns to filter from responses (drug leaflets, EU regulations, nonsense)
     _GARBAGE_PATTERNS = {
+        # Drug leaflet side effects
         "нежелани реакции", "странични ефекти", "неизвестна честота",
         "side effects", "unknown frequency", "семенна течност",
         "мускулно- скелетната", "съединителната тъкан",
+        "нарушения на кожата", "подкожната тъкан",
+        "инфекции и ефекти", "мястото на приложение",
+        # EU regulations / legal text
+        "емисиите на парникови", "парникови газове", "регламент",
+        "европейския парламент", "европейски парламент", "съвета",
+        "в съответствие с изискванията",
+        # Repeated / incoherent phrases
         "болка в гърба, болка в гърба", "болка в корема, болка в корема",
         "не се препоръчва употребата", "да се каже, че",
         "консултирайте с вашия лекар или фармацевт",
         "този препарат", "лекарствен продукт",
         "от с", "обучение",
+        # Fragments / nonsense
+        "допринася за по-малко", "усили въздуха",
+        "трябва да се вземат мерки",
     }
 
     def _format_response(

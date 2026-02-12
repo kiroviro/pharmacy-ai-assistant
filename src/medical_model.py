@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass
 from typing import Optional
 
 from mlx_lm import generate, load
+from mlx_lm.sample_utils import make_sampler
 
 from src.logging_config import get_logger
 
@@ -283,11 +284,13 @@ class MedicalModel:
 
         prompt = self._format_prompt(symptoms, system_prompt)
 
+        sampler = make_sampler(temp=temperature)
         response = generate(
             self.model,
             self.tokenizer,
             prompt=prompt,
             max_tokens=max_tokens,
+            sampler=sampler,
         )
 
         # Clean up and parse JSON response
@@ -449,12 +452,16 @@ class MedicalModel:
         if not candidate_products:
             return []
 
-        # Build product list for prompt
+        # Build product list for prompt with similarity scores
         product_list = []
         for i, product in enumerate(candidate_products, 1):
             # Support both old (name) and new (title) field names
             name = getattr(product, 'title', None) or getattr(product, 'name', 'Unknown')
-            product_info = f"{i}. {name}"
+
+            # Include similarity score to help LLM factor in search confidence
+            score = getattr(product, 'score', 0.0)
+            relevance = "high" if score >= 0.5 else "medium" if score >= 0.35 else "low"
+            product_info = f"{i}. [{relevance} relevance] {name}"
 
             # Add description/indications
             desc = getattr(product, 'description', None) or getattr(product, 'indications', None)
@@ -476,46 +483,107 @@ Customer query: {user_query}
 
 Medical analysis: {medical_reasoning}
 
-Available products:
+Available products (with search relevance):
 {products_str}
 
 Select the {max_products} best products by their numbers. Consider:
+- Product relevance level (prefer high/medium over low)
 - How well the product matches the symptoms
 - Any contraindications mentioned
 - Effectiveness for the condition
 
-Respond with ONLY the product numbers separated by commas (e.g., "1, 3, 5").
+Respond with ONLY valid JSON in this exact format: {{"selected": [1, 3, 5]}}
+Replace the numbers with your chosen product numbers. Output nothing else.
 """
 
         prompt = self._format_prompt(refinement_prompt)
 
+        sampler = make_sampler(temp=0.0)  # Fully deterministic for product selection
         response = generate(
             self.model,
             self.tokenizer,
             prompt=prompt,
             max_tokens=50,
+            sampler=sampler,
         )
 
         # Parse the response to get product indices
+        selected_indices = self._parse_product_selection(
+            response, len(candidate_products), max_products
+        )
+
+        return [candidate_products[i] for i in selected_indices]
+
+    def _parse_product_selection(
+        self,
+        response: str,
+        num_candidates: int,
+        max_products: int
+    ) -> list[int]:
+        """
+        Parse product selection from LLM response.
+
+        Attempts JSON parsing first, then falls back to regex extraction.
+        Logs all fallback scenarios for debugging.
+
+        Args:
+            response: Raw LLM response
+            num_candidates: Number of candidate products available
+            max_products: Maximum products to select
+
+        Returns:
+            List of 0-indexed product indices
+        """
         selected_indices = []
+        response_stripped = response.strip()
+
+        # Attempt 1: JSON parsing (preferred)
         try:
-            # Extract numbers from response
-            numbers = re.findall(r'\d+', response)
+            json_match = re.search(r'\{[^{}]*\}', response_stripped)
+            if json_match:
+                data = json.loads(json_match.group())
+                if "selected" in data and isinstance(data["selected"], list):
+                    for num in data["selected"]:
+                        idx = int(num) - 1  # Convert to 0-indexed
+                        if 0 <= idx < num_candidates and idx not in selected_indices:
+                            selected_indices.append(idx)
+                        if len(selected_indices) >= max_products:
+                            break
+                    if selected_indices:
+                        logger.debug(
+                            "Product selection parsed via JSON",
+                            extra={"selected_indices": selected_indices, "response": response_stripped}
+                        )
+                        return selected_indices
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            logger.debug(f"JSON parsing failed: {e}", extra={"response": response_stripped})
+
+        # Attempt 2: Extract numbers at start of response (e.g., "1, 3, 5")
+        # Only look at first 20 chars to avoid extracting numbers from product descriptions
+        first_part = response_stripped[:20]
+        try:
+            numbers = re.findall(r'\d+', first_part)
             for num in numbers:
-                idx = int(num) - 1  # Convert to 0-indexed
-                if 0 <= idx < len(candidate_products):
+                idx = int(num) - 1
+                if 0 <= idx < num_candidates and idx not in selected_indices:
                     selected_indices.append(idx)
                 if len(selected_indices) >= max_products:
                     break
-        except Exception:
-            # Fallback: return first N products
-            selected_indices = list(range(min(max_products, len(candidate_products))))
+            if selected_indices:
+                logger.warning(
+                    "Product selection used regex fallback (JSON parsing failed)",
+                    extra={"selected_indices": selected_indices, "response": response_stripped}
+                )
+                return selected_indices
+        except (ValueError, TypeError) as e:
+            logger.debug(f"Regex extraction failed: {e}")
 
-        # If no valid indices found, return first N
-        if not selected_indices:
-            selected_indices = list(range(min(max_products, len(candidate_products))))
-
-        return [candidate_products[i] for i in selected_indices]
+        # Fallback: return first N products
+        logger.warning(
+            "Product selection fallback to first N products - LLM response could not be parsed",
+            extra={"response": response_stripped, "fallback_count": max_products}
+        )
+        return list(range(min(max_products, num_candidates)))
 
 
 # Global model instance (lazy loaded)
