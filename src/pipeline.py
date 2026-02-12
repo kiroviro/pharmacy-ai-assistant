@@ -999,6 +999,12 @@ class Pipeline:
                 logger.info("Pregnancy query with see_doctor=True - proceeding with warnings")
                 return False, ""  # Continue to product search
 
+            # For drug combination/interaction queries, DON'T block - these are valid OTC questions
+            # (e.g., "Can I take ibuprofen with paracetamol?")
+            if self._is_drug_combination_query(original_query):
+                logger.info("Drug combination query with see_doctor=True - proceeding with info")
+                return False, ""  # Continue to provide helpful information
+
             # For other queries, use the generic doctor recommendation
             return True, (
                 "⚠️ **Препоръчваме консултация с лекар.**\n\n"
@@ -1017,6 +1023,41 @@ class Pipeline:
             'pregnant', 'pregnancy', 'breastfeeding', 'nursing', 'lactating',
         }
         return any(kw in text_lower for kw in pregnancy_keywords)
+
+    def _is_drug_combination_query(self, text: str) -> bool:
+        """Check if query is about combining/taking multiple medications together.
+
+        These are valid OTC questions like "Can I take ibuprofen with paracetamol?"
+        """
+        text_lower = text.lower()
+
+        # Keywords indicating drug combination questions
+        combination_keywords = {
+            # Bulgarian
+            'заедно с', 'едновременно', 'комбинирам', 'комбиниране',
+            'смесвам', 'да взема с', 'взема с', 'приемам с',
+            'може ли да взема', 'мога ли да взема',
+            'може ли да приема', 'мога ли да приема',
+            'да пия с', 'пия с', 'съчетавам', 'съчетание',
+            # English
+            'together with', 'at the same time', 'combine', 'combining',
+            'mix', 'take with', 'can i take', 'can i use',
+            'along with', 'in combination',
+        }
+
+        # Check for combination keywords
+        has_combination_keyword = any(kw in text_lower for kw in combination_keywords)
+
+        # Also check for pattern: two drug names mentioned
+        common_otc_drugs = {
+            'ибупрофен', 'ibuprofen', 'парацетамол', 'paracetamol', 'acetaminophen',
+            'аспирин', 'aspirin', 'нурофен', 'nurofen', 'панадол', 'panadol',
+            'адвил', 'advil', 'тайленол', 'tylenol', 'аналгин', 'analgin',
+            'темпалгин', 'темпра', 'ефералган', 'efferalgan',
+        }
+        drugs_mentioned = sum(1 for drug in common_otc_drugs if drug in text_lower)
+
+        return has_combination_keyword or drugs_mentioned >= 2
 
     def _retrieve_product_candidates(self, medical_reasoning: MedicalReasoning, top_k: int = 10) -> list:
         """
@@ -1529,6 +1570,13 @@ class Pipeline:
         # Common English words that indicate bad translation
         "keep ", "should ", "usually ", "avoid ",
         "monitor ", "ensure ", "apply ",
+        " and ", "worsen after", "symptoms worsen",
+        "see doctor", "consult doctor",
+        # Malformed text patterns
+        "това е в.", "това е в,", "в. or", ", or ",
+        "крайни нарушения", "нарушения на вкуса",
+        "ставите инфекции", "инфекции, които",
+        "\" вижте", "[\"", "\"]",
         # Numbers with spaces in wrong places
         "38 . 5", "38. 5",
     }

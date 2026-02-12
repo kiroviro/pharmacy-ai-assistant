@@ -458,30 +458,91 @@ class MedicalModel:
     ]
 
     def _sanitize_text(self, text: str) -> str:
-        """Remove garbage phrases from text."""
+        """Remove garbage phrases and JSON artifacts from text."""
         if not text:
             return text
         result = text
+
+        # Remove JSON artifacts: leading/trailing quotes, commas, colons (multiple passes)
+        # Handle cases like: 'viral infection",' or '"cough"'
+        for _ in range(3):  # Multiple passes to handle nested artifacts
+            result = result.strip()
+            result = re.sub(r'^["\',;:\s]+', '', result)  # Leading artifacts
+            result = re.sub(r'["\',;:\s]+$', '', result)  # Trailing artifacts
+
+        # Remove escaped quotes within text
+        result = result.replace('\\"', '').replace("\\'", '')
+
+        # Remove garbage phrases
         for phrase in self.GARBAGE_PHRASES:
             result = result.replace(phrase, "").strip()
+
         # Clean up double spaces and punctuation
         result = re.sub(r'\s+', ' ', result)
         result = re.sub(r'[,;:]+\s*[,;:]+', '', result)
+
         return result.strip()
 
     def _sanitize_reasoning(self, reasoning: MedicalReasoning) -> MedicalReasoning:
         """Sanitize all fields in MedicalReasoning to remove garbage text."""
+        # Sanitize symptoms - filter out sentences and keep only symptom words
+        sanitized_symptoms = []
+        for s in reasoning.symptoms:
+            s = self._sanitize_text(s)
+            if s and self._is_valid_symptom(s):
+                sanitized_symptoms.append(s)
+
+        # Sanitize treatment_type - if it contains recovery info, move it
+        treatment = self._sanitize_text(reasoning.treatment_type)
+        duration = self._sanitize_text(reasoning.duration_guidance)
+
+        # Check if treatment_type contains recovery info (common MedGemma error)
+        if treatment and self._looks_like_recovery_info(treatment):
+            if not duration:
+                duration = treatment
+            treatment = ""
+
         return MedicalReasoning(
-            symptoms=[self._sanitize_text(s) for s in reasoning.symptoms if self._sanitize_text(s)],
+            symptoms=sanitized_symptoms,
             likely_cause=self._sanitize_text(reasoning.likely_cause),
-            treatment_type=self._sanitize_text(reasoning.treatment_type),
+            treatment_type=treatment,
             warnings=[self._sanitize_text(w) for w in reasoning.warnings if self._sanitize_text(w)],
             see_doctor=reasoning.see_doctor,
             explanation=self._sanitize_text(reasoning.explanation),
             how_treatment_helps=self._sanitize_text(reasoning.how_treatment_helps),
             self_care_tips=[self._sanitize_text(t) for t in (reasoning.self_care_tips or []) if self._sanitize_text(t)],
-            duration_guidance=self._sanitize_text(reasoning.duration_guidance),
+            duration_guidance=duration,
         )
+
+    def _is_valid_symptom(self, text: str) -> bool:
+        """Check if text is a valid symptom (not a sentence or garbage)."""
+        if not text:
+            return False
+        # Symptoms should be short (max 5-6 words typically)
+        word_count = len(text.split())
+        if word_count > 8:
+            return False
+        # Symptoms shouldn't contain these sentence indicators
+        sentence_indicators = [
+            " is ", " are ", " the ", " that ", " which ", " when ",
+            " because ", " affecting ", " common ", " symptoms of ",
+            "typically", "usually", "often", " or ", "worsen"
+        ]
+        text_lower = text.lower()
+        if any(indicator in text_lower for indicator in sentence_indicators):
+            return False
+        return True
+
+    def _looks_like_recovery_info(self, text: str) -> bool:
+        """Check if text looks like recovery/duration info rather than treatment type."""
+        if not text:
+            return False
+        recovery_indicators = [
+            "days", "hours", "week", "resolve", "improvement",
+            "typically", "usually", "within", "дни", "часа"
+        ]
+        text_lower = text.lower()
+        return any(indicator in text_lower for indicator in recovery_indicators)
 
     def _parse_medical_response(self, response: str) -> MedicalReasoning:
         """
