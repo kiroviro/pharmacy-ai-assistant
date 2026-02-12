@@ -2,9 +2,13 @@
 Safety Layer for detecting red-flag symptoms and enforcing OTC-only recommendations.
 
 Ensures user safety by:
-1. Detecting serious symptoms that require medical attention
+1. Detecting serious symptoms that require medical attention (keyword + semantic)
 2. Filtering to only OTC (over-the-counter) products
 3. Adding appropriate warnings and disclaimers
+
+Uses a hybrid approach:
+- Fast keyword matching for known dangerous phrases
+- Semantic embedding matching for paraphrasing/typos/transliteration
 """
 
 import re
@@ -12,6 +16,7 @@ from typing import Optional
 from dataclasses import dataclass
 
 from src.logging_config import get_logger
+from src.safety_embeddings import get_embedding_safety_classifier, EmbeddingSafetyResult
 
 logger = get_logger("viapharma.safety")
 
@@ -70,6 +75,11 @@ class SafetyLayer:
             'подуване на гърлото', 'оток на гърлото', 'подут език',
             'не мога да преглъщам', 'задушавам се от алергия',
             'обрив по цялото тяло', 'подуване на лицето',
+
+            # Bulgarian transliteration (latinica)
+            'ne moga da disham', 'zadushavam se', 'bolka v gardite',
+            'iskam da se ubiya', 'iskam da umra', 'samonaranyavane',
+            'deteto mi glatna', 'predozirah', 'otrovih se',
 
             # English
             "can't breathe", "cannot breathe", "difficulty breathing", "choking",
@@ -244,6 +254,62 @@ class SafetyLayer:
             message="",
             should_refer_to_doctor=False
         )
+
+    def check_safety_hybrid(self, text: str) -> SafetyCheckResult:
+        """
+        Hybrid safety check: fast keywords + semantic embeddings.
+
+        Runs keyword check first (instant), then embedding check if needed.
+        Returns the most severe result from either method.
+
+        Args:
+            text: User query to check
+
+        Returns:
+            SafetyCheckResult with the highest severity detected
+        """
+        # 1. Fast keyword check (existing)
+        keyword_result = self.check_safety(text)
+
+        # 2. If keywords found emergency/urgent, return immediately
+        if keyword_result.severity in ("emergency", "urgent"):
+            return keyword_result
+
+        # 3. Run embedding check for semantic matching
+        try:
+            embedding_classifier = get_embedding_safety_classifier()
+            embedding_result = embedding_classifier.classify(text)
+        except Exception as e:
+            logger.error(f"Embedding classifier failed: {e}")
+            # Fall back to keyword result
+            return keyword_result
+
+        # 4. Compare severities, take the more severe
+        severity_rank = {"emergency": 4, "urgent": 3, "warning": 2, "none": 1, "safe": 1}
+        keyword_rank = severity_rank.get(keyword_result.severity, 0)
+        embedding_rank = severity_rank.get(embedding_result.severity, 0)
+
+        if embedding_rank > keyword_rank:
+            # Embedding found something more severe
+            return SafetyCheckResult(
+                is_red_flag=embedding_result.severity in ("emergency", "urgent"),
+                severity=embedding_result.severity,
+                matched_symptoms=[embedding_result.matched_phrase] if embedding_result.matched_phrase else [],
+                message=self._get_message_for_severity(embedding_result.severity),
+                should_refer_to_doctor=embedding_result.severity != "safe"
+            )
+
+        return keyword_result
+
+    def _get_message_for_severity(self, severity: str) -> str:
+        """Get appropriate message for a severity level."""
+        if severity == "emergency":
+            return self._get_emergency_message()
+        elif severity == "urgent":
+            return self._get_urgent_message()
+        elif severity == "warning":
+            return self._get_warning_message()
+        return ""
 
     def _get_emergency_message(self) -> str:
         """Get emergency response message in Bulgarian."""

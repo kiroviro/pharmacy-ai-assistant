@@ -22,10 +22,19 @@ class MockMedicalReasoning:
     treatment_type: str
     see_doctor: bool = False
     red_flags: list = None
+    warnings: list = None
+    explanation: str = ""
+    how_treatment_helps: str = ""
+    self_care_tips: list = None
+    duration_guidance: str = ""
 
     def __post_init__(self):
         if self.red_flags is None:
             self.red_flags = []
+        if self.warnings is None:
+            self.warnings = []
+        if self.self_care_tips is None:
+            self.self_care_tips = []
 
 
 class MockTranslator:
@@ -53,7 +62,12 @@ class MockMedicalModel:
             symptoms=["headache", "fever"],
             likely_cause="viral infection",
             treatment_type="analgesic, antipyretic",
-            see_doctor=False
+            see_doctor=False,
+            warnings=["Consult doctor if symptoms persist"],
+            explanation="Common viral symptoms",
+            how_treatment_helps="Reduces pain and fever",
+            self_care_tips=["Rest", "Stay hydrated"],
+            duration_guidance="Usually resolves in 3-5 days"
         )
 
     def refine_product_selection(self, user_query, medical_reasoning, candidate_products, max_products=3):
