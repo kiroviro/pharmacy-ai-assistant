@@ -839,7 +839,7 @@ class Pipeline:
             )
 
         # Step 5a: Product Retrieval - Vector DB returns top-K candidates (FAST)
-        candidate_products = self._retrieve_product_candidates(medical_reasoning)
+        candidate_products = self._retrieve_product_candidates(medical_reasoning, user_input)
         logger.debug(f"Vector search returned {len(candidate_products)} candidates")
 
         # Filter to OTC-only products
@@ -985,7 +985,7 @@ class Pipeline:
         medical_reasoning = self._build_medical_reasoning_from_unified(llm_result)
 
         # Product retrieval (unchanged - uses vector DB)
-        candidate_products = self._retrieve_product_candidates(medical_reasoning)
+        candidate_products = self._retrieve_product_candidates(medical_reasoning, user_input)
         candidate_products = self.safety_layer.filter_otc_only(candidate_products)
 
         # Filter by contraindications
@@ -1346,7 +1346,12 @@ class Pipeline:
 
         return has_combination_keyword or drugs_mentioned >= 2
 
-    def _retrieve_product_candidates(self, medical_reasoning: MedicalReasoning, top_k: int = 10) -> list:
+    def _retrieve_product_candidates(
+        self,
+        medical_reasoning: MedicalReasoning,
+        original_query: str = "",
+        top_k: int = 10
+    ) -> list:
         """
         Stage 1: Fast vector similarity search to get top-K product candidates.
 
@@ -1357,7 +1362,7 @@ class Pipeline:
             logger.warning("Product store is empty. Run product_store.py --reload to load products.")
             return []
 
-        search_query = self._build_search_query(medical_reasoning)
+        search_query = self._build_search_query(medical_reasoning, original_query)
 
         # Use category-aware hybrid search for better results
         if medical_reasoning.treatment_type:
@@ -1372,16 +1377,67 @@ class Pipeline:
 
         return self._convert_to_products(results)
 
-    def _build_search_query(self, medical_reasoning: MedicalReasoning) -> str:
-        """Build search query from medical reasoning components."""
+    def _build_search_query(
+        self,
+        medical_reasoning: MedicalReasoning,
+        original_query: str = ""
+    ) -> str:
+        """Build search query from medical reasoning components.
+
+        For drug combination queries, extracts drug names from original query
+        since MedGemma returns generic terms like 'drug interaction query'.
+        """
         parts = []
+
+        # Add treatment type (e.g., "analgesics")
         if medical_reasoning.treatment_type:
             parts.append(medical_reasoning.treatment_type)
+
+        # Filter out non-useful symptoms for product search
+        non_useful_symptoms = {
+            "drug interaction query", "drug interaction", "safety concern",
+            "medication question", "dosage question", "combination query",
+        }
         if medical_reasoning.symptoms:
-            parts.extend(medical_reasoning.symptoms)
+            useful_symptoms = [
+                s for s in medical_reasoning.symptoms
+                if s.lower() not in non_useful_symptoms
+            ]
+            parts.extend(useful_symptoms)
+
+        # For drug combo queries, extract actual drug names from original query
+        if original_query and self._is_drug_combination_query(original_query):
+            drug_names = self._extract_drug_names(original_query)
+            if drug_names:
+                parts.extend(drug_names)
+
+        # Add likely cause only if it's useful
         if medical_reasoning.likely_cause:
-            parts.append(medical_reasoning.likely_cause)
+            cause_lower = medical_reasoning.likely_cause.lower()
+            if cause_lower not in {"safety concern", "unknown", "not specified"}:
+                parts.append(medical_reasoning.likely_cause)
+
         return " ".join(parts) if parts else "medicine"
+
+    # Common OTC drug names for extraction
+    _DRUG_NAME_PATTERNS = {
+        # Bulgarian names
+        'ибупрофен', 'парацетамол', 'аспирин', 'аналгин',
+        'нурофен', 'панадол', 'темпалгин', 'темпра', 'ефералган',
+        'адвил', 'цитрамон', 'пенталгин', 'солпадеин',
+        # English names
+        'ibuprofen', 'paracetamol', 'acetaminophen', 'aspirin',
+        'nurofen', 'panadol', 'advil', 'tylenol', 'analgin',
+    }
+
+    def _extract_drug_names(self, text: str) -> list[str]:
+        """Extract known drug names from text for product search."""
+        text_lower = text.lower()
+        found = []
+        for drug in self._DRUG_NAME_PATTERNS:
+            if drug in text_lower:
+                found.append(drug)
+        return found
 
     def _convert_to_products(self, results: list) -> list:
         """Convert ChromaDB results to Product objects."""
@@ -1727,6 +1783,11 @@ class Pipeline:
         "европейска комисия", "държави членки",
         "специални условия на труд", "стоманодобивната промишленост",
         "техниките средства за подпомагане",
+        # EU Official Journal citations (ОВ = Официален вестник)
+        "ов l", "ов c", "(ов l", "(ов c", "ов l 268", "ов l 269",
+        "18.10.2003", "стр.", "стр)", "(стр.",
+        "официален вестник на ес", "официален вестник на европейския съюз",
+        "директива 2001/83/", "регламент (ео)", "регламент (ес)",
 
         # -----------------------------------------------------------------
         # REPEATED / INCOHERENT PHRASES
