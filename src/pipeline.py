@@ -22,6 +22,296 @@ from src.translator import get_translator
 logger = get_logger("viapharma.pipeline")
 
 
+# =============================================================================
+# USER CONDITION EXTRACTION PATTERNS
+# =============================================================================
+# Maps user mentions to standardized condition identifiers
+
+USER_CONDITION_PATTERNS = {
+    # Pregnancy
+    "pregnancy": [
+        "бременна", "бременност", "pregnant", "pregnancy",
+        "чакам бебе", "очаквам бебе", "expecting",
+    ],
+    # Breastfeeding
+    "breastfeeding": [
+        "кърмя", "кърмене", "кърмеща", "breastfeeding", "nursing",
+        "кърмачка", "lactating",
+    ],
+    # Children
+    "child": [
+        "дете", "деца", "детето", "бебе", "child", "children", "kid",
+        "малък", "малка", "infant", "toddler", "pediatric",
+        r"\b[1-9]\s*годин", r"\b[1-9]\s*месец", r"\b[1-9]\s*year",
+    ],
+    # Elderly
+    "elderly": [
+        "възрастен", "пенсионер", "elderly", "senior",
+        r"\b[789]\d\s*годин", "над 65", "over 65",
+    ],
+    # Diabetes
+    "diabetes": [
+        "диабет", "диабетик", "diabetes", "diabetic",
+        "кръвна захар", "blood sugar", "инсулин",
+    ],
+    # Heart conditions
+    "heart": [
+        "сърце", "сърдечен", "heart", "cardiac",
+        "кръвно налягане", "blood pressure", "хипертония", "hypertension",
+        "аритмия", "arrhythmia",
+    ],
+    # Kidney issues
+    "kidney": [
+        "бъбрек", "бъбречен", "kidney", "renal",
+        "бъбречна недостатъчност", "kidney failure",
+    ],
+    # Liver issues
+    "liver": [
+        "черен дроб", "чернодробен", "liver", "hepatic",
+        "хепатит", "hepatitis",
+    ],
+    # Allergies
+    "allergy": [
+        "алергия", "алергичен", "allergy", "allergic",
+        "непоносимост", "intolerance",
+    ],
+    # Stomach/GI issues
+    "stomach": [
+        "стомах", "язва", "гастрит", "stomach", "ulcer", "gastritis",
+        "стомашни проблеми", "киселини",
+    ],
+    # Asthma
+    "asthma": [
+        "астма", "asthma", "астматик",
+    ],
+}
+
+
+# =============================================================================
+# CONTRAINDICATION PATTERNS
+# =============================================================================
+# Maps conditions to contraindication keywords to look for in product data
+
+CONTRAINDICATION_KEYWORDS = {
+    "pregnancy": [
+        # Bulgarian variations (all grammatical forms)
+        "бременност", "бременни", "бременна", "бременността",
+        "през бременност", "по време на бременност",
+        "в бременност", "при бременност",
+        # English
+        "pregnant", "pregnancy",
+    ],
+    "breastfeeding": [
+        # Bulgarian variations
+        "кърмене", "кърменето", "кърмачки", "кърмещи", "кърмачка",
+        "през кърмене", "по време на кърмене", "при кърмене",
+        # English
+        "breastfeeding", "lactation", "nursing",
+    ],
+    "child": [
+        # Bulgarian - age restrictions
+        "деца под", "деца до", "деца на възраст под",
+        "не се препоръчва за деца", "не давайте на деца",
+        "под 12 години", "под 6 години", "под 2 години",
+        "на възраст под",
+        # English
+        "children under", "pediatric", "not for children",
+    ],
+    "elderly": [
+        "възрастни хора", "пациенти в старческа възраст",
+        "над 65", "elderly", "старческа възраст",
+    ],
+    "diabetes": [
+        "диабет", "диабетици", "захарен диабет",
+        "diabetes", "diabetic", "кръвна захар",
+    ],
+    "heart": [
+        "сърдечна недостатъчност", "сърдечни заболявания",
+        "сърдечно-съдови", "сърдечен",
+        "heart disease", "cardiac", "cardiovascular",
+        "хипертония", "високо кръвно", "кръвно налягане",
+    ],
+    "kidney": [
+        "бъбречна недостатъчност", "бъбречни заболявания",
+        "бъбречна функция", "бъбречни проблеми",
+        "kidney disease", "renal impairment", "renal failure",
+    ],
+    "liver": [
+        "чернодробна недостатъчност", "чернодробни заболявания",
+        "чернодробна функция", "чернодробни проблеми",
+        "liver disease", "hepatic impairment", "hepatic failure",
+    ],
+    "allergy": [
+        "свръхчувствителност", "алергия към", "алергични реакции",
+        "алергични", "непоносимост",
+        "hypersensitivity", "allergic to", "allergy",
+    ],
+    "stomach": [
+        "стомашна язва", "пептична язва", "гастрит",
+        "язви", "стомашни проблеми", "стомашно-чревни",
+        "stomach ulcer", "peptic ulcer", "gastritis", "GI bleeding",
+    ],
+    "asthma": [
+        "астма", "астматик", "бронхоспазъм", "бронхиална астма",
+        "asthma", "bronchospasm", "asthmatic",
+    ],
+}
+
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+def extract_user_conditions(text: str) -> list[str]:
+    """
+    Extract user conditions from query text (Bulgarian or English).
+
+    Args:
+        text: User query or translated text
+
+    Returns:
+        List of standardized condition identifiers
+    """
+    text_lower = text.lower()
+    conditions = []
+
+    for condition, patterns in USER_CONDITION_PATTERNS.items():
+        for pattern in patterns:
+            # Handle regex patterns (start with \b or contain special chars)
+            if pattern.startswith(r"\b") or any(c in pattern for c in r"[]\d+*?"):
+                if re.search(pattern, text_lower):
+                    conditions.append(condition)
+                    break
+            else:
+                if pattern in text_lower:
+                    conditions.append(condition)
+                    break
+
+    if conditions:
+        logger.info(f"Extracted user conditions: {conditions}")
+
+    return conditions
+
+
+def check_contraindication(product_contraindications: str, user_conditions: list[str]) -> tuple[bool, list[str]]:
+    """
+    Check if a product has contraindications matching user conditions.
+
+    Args:
+        product_contraindications: Product's contraindications text
+        user_conditions: List of user condition identifiers
+
+    Returns:
+        Tuple of (has_contraindication, list of matching conditions)
+    """
+    if not product_contraindications or not user_conditions:
+        return False, []
+
+    contra_lower = product_contraindications.lower()
+    matching_conditions = []
+
+    for condition in user_conditions:
+        keywords = CONTRAINDICATION_KEYWORDS.get(condition, [])
+        for keyword in keywords:
+            if keyword.lower() in contra_lower:
+                matching_conditions.append(condition)
+                break
+
+    return len(matching_conditions) > 0, matching_conditions
+
+
+def filter_by_contraindications(
+    products: list,
+    user_conditions: list[str],
+    strict: bool = True
+) -> tuple[list, list]:
+    """
+    Filter products that have contraindications matching user conditions.
+
+    Args:
+        products: List of Product objects
+        user_conditions: List of user condition identifiers
+        strict: If True, completely exclude contraindicated products
+                If False, move them to end of list with warning
+
+    Returns:
+        Tuple of (safe_products, contraindicated_products)
+    """
+    if not user_conditions:
+        return products, []
+
+    safe_products = []
+    contraindicated = []
+
+    for product in products:
+        has_contra, matching = check_contraindication(
+            product.contraindications, user_conditions
+        )
+
+        if has_contra:
+            logger.warning(
+                f"Product '{product.title}' contraindicated for: {matching}",
+                extra={"product_id": product.id, "conditions": matching}
+            )
+            contraindicated.append((product, matching))
+        else:
+            safe_products.append(product)
+
+    logger.info(
+        f"Contraindication filter: {len(safe_products)} safe, {len(contraindicated)} filtered",
+        extra={"user_conditions": user_conditions}
+    )
+
+    return safe_products, contraindicated
+
+
+def parse_composition_ingredients(composition: str) -> list[str]:
+    """
+    Parse active ingredients from composition text.
+
+    Args:
+        composition: Product composition text (Състав)
+
+    Returns:
+        List of identified active ingredient names
+    """
+    if not composition:
+        return []
+
+    # Common active ingredients with their patterns
+    INGREDIENT_EXTRACTION = {
+        "ibuprofen": [r"ибупрофен\s*[\d,]+\s*mg", r"ibuprofen\s*[\d,]+\s*mg"],
+        "paracetamol": [r"парацетамол\s*[\d,]+\s*mg", r"paracetamol\s*[\d,]+\s*mg", r"acetaminophen"],
+        "aspirin": [r"ацетилсалицилова\s+киселина", r"acetylsalicylic acid", r"аспирин"],
+        "diclofenac": [r"диклофенак", r"diclofenac"],
+        "naproxen": [r"напроксен", r"naproxen"],
+        "loratadine": [r"лоратадин", r"loratadine"],
+        "cetirizine": [r"цетиризин", r"cetirizine"],
+        "pseudoephedrine": [r"псевдоефедрин", r"pseudoephedrine"],
+        "dextromethorphan": [r"декстрометорфан", r"dextromethorphan"],
+        "guaifenesin": [r"гвайфенезин", r"guaifenesin"],
+        "codeine": [r"кодеин", r"codeine"],
+        "caffeine": [r"кофеин", r"caffeine"],
+        "vitamin_c": [r"витамин\s*c", r"аскорбинова\s+киселина", r"ascorbic acid"],
+        "zinc": [r"цинк", r"zinc"],
+        "ambroxol": [r"амброксол", r"ambroxol"],
+        "bromhexine": [r"бромхексин", r"bromhexine"],
+        "phenylephrine": [r"фенилефрин", r"phenylephrine"],
+        "chlorpheniramine": [r"хлорфенирамин", r"chlorpheniramine"],
+    }
+
+    composition_lower = composition.lower()
+    found = []
+
+    for ingredient, patterns in INGREDIENT_EXTRACTION.items():
+        for pattern in patterns:
+            if re.search(pattern, composition_lower, re.IGNORECASE):
+                found.append(ingredient)
+                break
+
+    return found
+
+
 @dataclass
 class Product:
     """Represents a product from the catalogue."""
@@ -132,6 +422,9 @@ class PipelineResult:
     medical_reasoning: Optional[MedicalReasoning] = None
     candidate_products: list = field(default_factory=list)  # Stage 1: top-K from vector DB
     selected_products: list = field(default_factory=list)   # Stage 2: LLM-refined selection
+    # Contraindication filtering results
+    user_conditions: list = field(default_factory=list)  # Detected user conditions (pregnancy, diabetes, etc.)
+    contraindicated_products: list = field(default_factory=list)  # Products filtered due to contraindications
 
 
 class Pipeline:
@@ -467,6 +760,14 @@ class Pipeline:
         # Step 3: Medical Reasoning - understand symptoms and suggest treatment types
         medical_reasoning = self._get_medical_reasoning(translated)
 
+        # Step 3b: Extract user conditions from both BG and EN text
+        conditions_bg = extract_user_conditions(user_input)
+        conditions_en = extract_user_conditions(translated)
+        all_conditions = list(set(conditions_bg + conditions_en))
+        if all_conditions:
+            medical_reasoning.user_conditions = all_conditions
+            logger.info(f"User conditions detected: {all_conditions}")
+
         # Check if MedGemma refused to help (non-medical query slipped through)
         if self._is_refusal_response(medical_reasoning):
             return PipelineResult(
@@ -499,6 +800,19 @@ class Pipeline:
         # Filter to OTC-only products
         candidate_products = self.safety_layer.filter_otc_only(candidate_products)
 
+        # Step 5a2: Filter by contraindications based on user conditions
+        contraindicated_products = []
+        if medical_reasoning.user_conditions:
+            candidate_products, contraindicated_products = filter_by_contraindications(
+                products=candidate_products,
+                user_conditions=medical_reasoning.user_conditions,
+                strict=True  # Completely exclude contraindicated products
+            )
+            logger.info(
+                f"Contraindication filter: {len(candidate_products)} safe, "
+                f"{len(contraindicated_products)} removed"
+            )
+
         # Step 5b: Product Refinement - LLM picks best matches (ACCURATE)
         selected_products = self._refine_product_selection(
             user_query=translated,
@@ -530,11 +844,21 @@ class Pipeline:
         if self._is_chronic_disease_query(user_input):
             final_response = self._add_chronic_disease_disclaimer(final_response)
 
+        # Add contraindication warning if products were filtered
+        if contraindicated_products:
+            final_response = self._add_contraindication_warning(
+                final_response,
+                contraindicated_products,
+                all_conditions
+            )
+
         duration_ms = (time.perf_counter() - start_time) * 1000
         logger.info(f"Pipeline completed", extra={
             "duration_ms": round(duration_ms, 2),
             "candidates": len(candidate_products),
             "selected": len(selected_products),
+            "contraindicated": len(contraindicated_products),
+            "user_conditions": all_conditions,
             "is_red_flag": False
         })
 
@@ -546,7 +870,9 @@ class Pipeline:
             translated_text=translated,
             medical_reasoning=medical_reasoning,
             candidate_products=candidate_products,
-            selected_products=selected_products
+            selected_products=selected_products,
+            user_conditions=all_conditions,
+            contraindicated_products=contraindicated_products
         )
 
     # Phrases indicating the model refused to help (English and Bulgarian)
@@ -674,11 +1000,23 @@ class Pipeline:
         if not candidates:
             return []
 
-        reasoning_str = (
-            f"Symptoms: {', '.join(medical_reasoning.symptoms)}. "
-            f"Likely cause: {medical_reasoning.likely_cause}. "
-            f"Treatment type: {medical_reasoning.treatment_type}."
-        )
+        # Build comprehensive reasoning string with user conditions
+        reasoning_parts = [
+            f"Symptoms: {', '.join(medical_reasoning.symptoms)}",
+            f"Likely cause: {medical_reasoning.likely_cause}",
+            f"Treatment type: {medical_reasoning.treatment_type}",
+        ]
+
+        # Add user conditions if present
+        if medical_reasoning.user_conditions:
+            conditions_str = ", ".join(medical_reasoning.user_conditions)
+            reasoning_parts.append(f"User conditions: {conditions_str}")
+            reasoning_parts.append(
+                "IMPORTANT: Products must be safe for the user's conditions. "
+                "Avoid recommending anything that could be contraindicated."
+            )
+
+        reasoning_str = ". ".join(reasoning_parts) + "."
 
         selected = self.medical_model.refine_product_selection(
             user_query=user_query,
@@ -869,6 +1207,60 @@ class Pipeline:
 - За предписани лекарства, моля консултирайте се с вашия лекар или фармацевт"""
         return response + "\n" + disclaimer
 
+    # Condition name translations for user-friendly messages
+    _CONDITION_NAMES_BG = {
+        "pregnancy": "бременност",
+        "breastfeeding": "кърмене",
+        "child": "деца",
+        "elderly": "възрастни хора",
+        "diabetes": "диабет",
+        "heart": "сърдечни заболявания",
+        "kidney": "бъбречни проблеми",
+        "liver": "чернодробни проблеми",
+        "allergy": "алергии",
+        "stomach": "стомашни проблеми",
+        "asthma": "астма",
+    }
+
+    def _add_contraindication_warning(
+        self,
+        response: str,
+        contraindicated_products: list[tuple],
+        user_conditions: list[str]
+    ) -> str:
+        """
+        Add warning about products filtered due to user's conditions.
+
+        Args:
+            response: Current response text
+            contraindicated_products: List of (Product, matching_conditions) tuples
+            user_conditions: List of detected user conditions
+
+        Returns:
+            Response with contraindication warning added
+        """
+        if not contraindicated_products or not user_conditions:
+            return response
+
+        # Translate conditions to Bulgarian
+        conditions_bg = [
+            self._CONDITION_NAMES_BG.get(c, c) for c in user_conditions
+        ]
+        conditions_str = ", ".join(conditions_bg)
+
+        # Get product names that were filtered
+        filtered_names = [p[0].title for p in contraindicated_products[:3]]
+        if len(contraindicated_products) > 3:
+            filtered_names.append(f"и още {len(contraindicated_products) - 3}")
+
+        disclaimer = f"""
+⚠️ **Внимание за вашето състояние ({conditions_str}):**
+- Изключени са {len(contraindicated_products)} продукт(а) с противопоказания за вас
+- Показваме само безопасни алтернативи
+- Винаги консултирайте фармацевт преди употреба"""
+
+        return response + "\n" + disclaimer
+
     # Garbage patterns to filter from responses (drug leaflets, EU regulations, nonsense)
     _GARBAGE_PATTERNS = {
         # Drug leaflet side effects
@@ -890,6 +1282,14 @@ class Pipeline:
         # Fragments / nonsense
         "допринася за по-малко", "усили въздуха",
         "трябва да се вземат мерки",
+        # Dental/appliance garbage
+        "сметки и апарати", "зъбни протези", "трикотажни",
+        "тарифен номер", "тарифна позиция",
+        # Repeated syllables / nonsense
+        "тол- сол", "сол- сол", "- сол-", "тол-сол",
+        # Vague filler text
+        "както и да е, трябва", "както и да е",
+        "в зависимост от състоянието",
     }
 
     def _format_response(

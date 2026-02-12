@@ -32,10 +32,14 @@ class MedicalReasoning:
     how_treatment_helps: str = ""  # Why the treatment works
     self_care_tips: list[str] = None  # Home care suggestions
     duration_guidance: str = ""  # Expected recovery timeline
+    # User conditions for contraindication filtering
+    user_conditions: list[str] = None  # Pregnancy, allergies, age, chronic diseases
 
     def __post_init__(self):
         if self.self_care_tips is None:
             self.self_care_tips = []
+        if self.user_conditions is None:
+            self.user_conditions = []
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -52,6 +56,7 @@ class MedicalReasoning:
             how_treatment_helps=str(data.get("how_treatment_helps", "") or data.get("how_it_helps", "") or ""),
             self_care_tips=_ensure_list(data.get("self_care_tips") or data.get("self_care")),
             duration_guidance=str(data.get("duration_guidance", "") or data.get("recovery", "") or ""),
+            user_conditions=_ensure_list(data.get("user_conditions") or data.get("conditions")),
         )
 
 
@@ -452,7 +457,7 @@ class MedicalModel:
         if not candidate_products:
             return []
 
-        # Build product list for prompt with similarity scores
+        # Build product list for prompt with similarity scores and full details
         product_list = []
         for i, product in enumerate(candidate_products, 1):
             # Support both old (name) and new (title) field names
@@ -463,15 +468,20 @@ class MedicalModel:
             relevance = "high" if score >= 0.5 else "medium" if score >= 0.35 else "low"
             product_info = f"{i}. [{relevance} relevance] {name}"
 
-            # Add description/indications
+            # Add description/indications (expanded)
             desc = getattr(product, 'description', None) or getattr(product, 'indications', None)
             if desc:
-                product_info += f" - {desc[:100]}"
+                product_info += f"\n   Description: {desc[:200]}"
 
-            # Add contraindications
+            # Add composition (active ingredients)
+            composition = getattr(product, 'composition', None)
+            if composition:
+                product_info += f"\n   Composition: {composition[:150]}"
+
+            # Add contraindications (full for safety)
             contra = getattr(product, 'contraindications', None)
             if contra:
-                product_info += f" (Avoid if: {contra[:80]})"
+                product_info += f"\n   Contraindications: {contra[:200]}"
 
             product_list.append(product_info)
 
@@ -483,13 +493,14 @@ Customer query: {user_query}
 
 Medical analysis: {medical_reasoning}
 
-Available products (with search relevance):
+Available products (with details):
 {products_str}
 
 Select the {max_products} best products by their numbers. Consider:
 - Product relevance level (prefer high/medium over low)
 - How well the product matches the symptoms
-- Any contraindications mentioned
+- Active ingredients in composition
+- Any contraindications mentioned (CRITICAL: avoid products with contraindications matching user conditions)
 - Effectiveness for the condition
 
 Respond with ONLY valid JSON in this exact format: {{"selected": [1, 3, 5]}}
