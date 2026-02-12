@@ -1,23 +1,23 @@
 """
 Pipeline orchestrator for the ViaPharma OTC Chatbot.
-Each step can be swapped out for real implementations as we build them.
 
 Pipeline follows the Perplexity two-stage retrieval pattern:
 1. Vector DB returns top-K candidates (fast, cheap)
 2. LLM refines and picks best matches (accurate)
 """
 
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from src.medical_model import get_medical_model, MedicalReasoning
-from src.translator import get_translator
-from src.product_store import get_product_store
-from src.intent_classifier import get_intent_classifier
-from src.safety import get_safety_layer
-from src.logging_config import get_logger
 from src.config import get_settings
+from src.intent_classifier import get_intent_classifier
+from src.logging_config import get_logger
+from src.medical_model import MedicalReasoning, get_medical_model
+from src.product_store import get_product_store
+from src.safety import get_safety_layer
+from src.translator import get_translator
 
 logger = get_logger("viapharma.pipeline")
 
@@ -143,6 +143,56 @@ class Pipeline:
     - Stage 2: LLM refinement for best matches
     """
 
+    # =========================================================================
+    # Catalog Query Detection - Skip medical reasoning for product-only queries
+    # =========================================================================
+    _CATALOG_PATTERNS_BG = [
+        # "What brands of X do you have/offer?"
+        re.compile(r'какви\s+марки?\s+.+\s+(имате|предлагате|продавате)', re.IGNORECASE),
+        re.compile(r'какви\s+.+\s+марки?\s+(имате|предлагате|продавате)', re.IGNORECASE),
+        # "Show me X" / "I'm looking for X"
+        re.compile(r'^покажи\s+(ми\s+)?', re.IGNORECASE),
+        re.compile(r'^търся\s+', re.IGNORECASE),
+        # "Do you have X?"
+        re.compile(r'^имате\s+ли\s+', re.IGNORECASE),
+        re.compile(r'^предлагате\s+ли\s+', re.IGNORECASE),
+        re.compile(r'^продавате\s+ли\s+', re.IGNORECASE),
+        # "What X do you have?"
+        re.compile(r'^какви?\s+.+\s+(имате|предлагате)\s*\??$', re.IGNORECASE),
+        # "List of X" / "All X"
+        re.compile(r'^списък\s+(с|на)\s+', re.IGNORECASE),
+        re.compile(r'^всички\s+', re.IGNORECASE),
+        # Brand-specific queries
+        re.compile(r'^продукти\s+(на|от)\s+', re.IGNORECASE),
+    ]
+
+    _CATALOG_PATTERNS_EN = [
+        re.compile(r'what\s+brands?\s+of\s+.+\s+(do you have|do you offer|are available)', re.IGNORECASE),
+        re.compile(r'^show\s+me\s+', re.IGNORECASE),
+        re.compile(r'^looking\s+for\s+', re.IGNORECASE),
+        re.compile(r'^do\s+you\s+(have|sell|offer)\s+', re.IGNORECASE),
+        re.compile(r'^list\s+(of\s+)?', re.IGNORECASE),
+        re.compile(r'^all\s+.+\s+products', re.IGNORECASE),
+    ]
+
+    # Product categories that indicate catalog queries (no symptoms)
+    _CATALOG_CATEGORIES = {
+        # Bulgarian - cosmetics/skincare
+        'слънцезащитн', 'крем', 'кремове', 'лосион', 'шампоан', 'паста за зъби',
+        'дезодорант', 'парфюм', 'козметика', 'грижа за кожа', 'грижа за коса',
+        'серум', 'маска за лице', 'балсам', 'гел за душ', 'сапун',
+        # Bulgarian - baby/hygiene
+        'бебешки продукти', 'памперси', 'мокри кърпички', 'превръзки',
+        # Bulgarian - supplements (non-symptom queries)
+        'витамини', 'хранителни добавки', 'протеин', 'колаген', 'омега',
+        # Bulgarian - medical devices
+        'термометър', 'тонометър', 'глюкомер', 'инхалатор',
+        # English equivalents
+        'sunscreen', 'cream', 'lotion', 'shampoo', 'toothpaste',
+        'deodorant', 'perfume', 'cosmetics', 'skincare', 'haircare',
+        'diapers', 'wipes', 'bandages', 'vitamins', 'supplements',
+    }
+
     def __init__(self, lazy_load: bool = True):
         """
         Initialize the pipeline.
@@ -167,44 +217,44 @@ class Pipeline:
             self._load_translator()
             self._load_product_store()
 
+    @property
+    def product_store(self):
+        """Get the product store, loading lazily if necessary."""
+        if self._product_store is None:
+            self._product_store = get_product_store()
+        return self._product_store
+
+    @property
+    def translator(self):
+        """Get the translator, loading lazily if necessary."""
+        if self._translator is None:
+            self._translator = get_translator()
+        return self._translator
+
+    @property
+    def medical_model(self):
+        """Get the medical model, loading lazily if necessary."""
+        if self._medical_model is None:
+            self._medical_model = get_medical_model()
+            self._medical_model.load()
+        return self._medical_model
+
     def _load_product_store(self):
         """Load the product store."""
         if self._product_store is None:
             self._product_store = get_product_store()
 
-    @property
-    def product_store(self):
-        """Get the product store, loading it if necessary."""
-        if self._product_store is None:
-            self._load_product_store()
-        return self._product_store
-
     def _load_translator(self):
         """Load the translator models."""
         if self._translator is None:
             self._translator = get_translator()
-            # Pre-load both translation models
             self._translator.load_all()
-
-    @property
-    def translator(self):
-        """Get the translator, loading it if necessary."""
-        if self._translator is None:
-            self._translator = get_translator()
-        return self._translator
 
     def _load_medical_model(self):
         """Load the MedGemma model."""
         if self._medical_model is None:
             self._medical_model = get_medical_model()
             self._medical_model.load()
-
-    @property
-    def medical_model(self):
-        """Get the medical model, loading it if necessary."""
-        if self._medical_model is None:
-            self._load_medical_model()
-        return self._medical_model
 
     def process(self, user_input: str) -> PipelineResult:
         """
@@ -356,78 +406,36 @@ class Pipeline:
         response_lower = reasoning.likely_cause.lower()
         return any(phrase in response_lower for phrase in self._REFUSAL_PHRASES)
 
-    # =========================================================================
-    # Step 2 & 6: Translation
-    # =========================================================================
     def _translate_to_english(self, text: str) -> str:
-        """
-        Translate Bulgarian to English using MarianMT.
-
-        Args:
-            text: Bulgarian text to translate
-
-        Returns:
-            English translation
-        """
+        """Translate Bulgarian to English."""
         return self.translator.translate_to_english(text)
 
     def _translate_to_bulgarian(self, text: str) -> str:
-        """
-        Translate English to Bulgarian using MarianMT.
-
-        Args:
-            text: English text to translate
-
-        Returns:
-            Bulgarian translation
-        """
+        """Translate English to Bulgarian."""
         return self.translator.translate_to_bulgarian(text)
 
-    # =========================================================================
-    # Step 3: Medical Reasoning
-    # =========================================================================
-    def _get_medical_reasoning(self, text: str) -> str:
-        """
-        Use MedGemma to understand symptoms and suggest treatment categories.
-
-        Args:
-            text: Symptom description (in English after translation)
-
-        Returns:
-            Medical reasoning with:
-            - Identified symptoms
-            - Possible conditions
-            - Recommended treatment types (e.g., "analgesics", "antipyretics")
-        """
+    def _get_medical_reasoning(self, text: str) -> MedicalReasoning:
+        """Use MedGemma to understand symptoms and suggest treatment categories."""
         return self.medical_model.get_medical_reasoning(text)
 
-    # =========================================================================
-    # Step 4: Safety Check
-    # =========================================================================
     def _check_safety(self, original_query: str, translated_query: str, medical_reasoning: MedicalReasoning) -> tuple[bool, str]:
         """
-        Check for red-flag symptoms that require professional medical attention.
+        Check for red-flag symptoms requiring professional medical attention.
 
-        Checks for:
-        - Emergency symptoms (call 112/911)
-        - Urgent symptoms (see doctor within 24-48h)
-        - Warning symptoms (monitor, see doctor if persists)
-        - MedGemma's see_doctor recommendation
-
-        Note: Checks BOTH original Bulgarian and translated English text
-        to ensure safety patterns in both languages are caught.
+        Checks both original Bulgarian and translated English text for safety patterns,
+        plus MedGemma's see_doctor recommendation.
         """
-        # Check ORIGINAL Bulgarian text first (for Bulgarian safety phrases)
+        # Check original Bulgarian text
         result = self.safety_layer.check_safety(original_query)
         if result.is_red_flag:
             return True, result.message
 
-        # Also check TRANSLATED English text (for English safety phrases)
+        # Check translated English text
         result_en = self.safety_layer.check_safety(translated_query)
         if result_en.is_red_flag:
             return True, result_en.message
 
-        # Also check if MedGemma flagged this as needing a doctor
+        # Check MedGemma's recommendation
         if medical_reasoning.see_doctor:
             return True, (
                 "⚠️ **Препоръчваме консултация с лекар.**\n\n"
@@ -437,57 +445,42 @@ class Pipeline:
 
         return False, ""
 
-    # =========================================================================
-    # Step 5a: Product Retrieval (Vector DB - FAST)
-    # =========================================================================
     def _retrieve_product_candidates(self, medical_reasoning: MedicalReasoning, top_k: int = 10) -> list:
         """
         Stage 1: Fast vector similarity search to get top-K product candidates.
 
-        Uses ChromaDB with multilingual embeddings to find relevant products
-        based on the medical reasoning from MedGemma.
-
-        Args:
-            medical_reasoning: The medical analysis from MedGemma
-            top_k: Number of candidates to retrieve (default: 10)
-
-        Returns:
-            List of Product objects (candidates, not final selection)
+        Uses ChromaDB with multilingual embeddings based on MedGemma's analysis.
         """
-        # Check if product store has products
         if self.product_store.collection.count() == 0:
             logger.warning("Product store is empty. Run product_store.py --reload to load products.")
             return []
 
-        # Build search query from medical reasoning
-        search_parts = []
-        if medical_reasoning.treatment_type:
-            search_parts.append(medical_reasoning.treatment_type)
-        if medical_reasoning.symptoms:
-            search_parts.extend(medical_reasoning.symptoms)
-        if medical_reasoning.likely_cause:
-            search_parts.append(medical_reasoning.likely_cause)
-
-        search_query = " ".join(search_parts) if search_parts else "medicine"
-
-        # Search ChromaDB using the medical reasoning as query
+        search_query = self._build_search_query(medical_reasoning)
         results = self.product_store.search(search_query, n_results=top_k)
 
-        # Convert results to Product objects
+        return self._convert_to_products(results)
+
+    def _build_search_query(self, medical_reasoning: MedicalReasoning) -> str:
+        """Build search query from medical reasoning components."""
+        parts = []
+        if medical_reasoning.treatment_type:
+            parts.append(medical_reasoning.treatment_type)
+        if medical_reasoning.symptoms:
+            parts.extend(medical_reasoning.symptoms)
+        if medical_reasoning.likely_cause:
+            parts.append(medical_reasoning.likely_cause)
+        return " ".join(parts) if parts else "medicine"
+
+    def _convert_to_products(self, results: list) -> list:
+        """Convert ChromaDB results to Product objects."""
         products = []
         for result in results:
             try:
-                product = Product.from_chromadb(result)
-                products.append(product)
+                products.append(Product.from_chromadb(result))
             except Exception as e:
                 logger.warning(f"Failed to parse product", extra={"error": str(e)})
-                continue
-
         return products
 
-    # =========================================================================
-    # Step 5b: Product Refinement (LLM - ACCURATE)
-    # =========================================================================
     def _refine_product_selection(
         self,
         user_query: str,
@@ -495,31 +488,16 @@ class Pipeline:
         candidates: list,
         max_products: int = 3
     ) -> list:
-        """
-        Stage 2: Use LLM to pick the best products from candidates.
-
-        This follows the Perplexity pattern:
-        - Given original query + candidate matches
-        - Pick the best entity match(es)
-
-        Args:
-            user_query: Original user query (translated to English)
-            medical_reasoning: Medical analysis from MedGemma
-            candidates: List of Product objects from vector search
-            max_products: Maximum products to recommend (default: 3)
-
-        Returns:
-            List of best-matching Product objects
-        """
+        """Stage 2: Use LLM to pick the best products from candidates."""
         if not candidates:
             return []
 
-        # Convert MedicalReasoning to string for LLM refinement
-        reasoning_str = f"Symptoms: {', '.join(medical_reasoning.symptoms)}. "
-        reasoning_str += f"Likely cause: {medical_reasoning.likely_cause}. "
-        reasoning_str += f"Treatment type: {medical_reasoning.treatment_type}."
+        reasoning_str = (
+            f"Symptoms: {', '.join(medical_reasoning.symptoms)}. "
+            f"Likely cause: {medical_reasoning.likely_cause}. "
+            f"Treatment type: {medical_reasoning.treatment_type}."
+        )
 
-        # Use MedGemma to refine the selection
         return self.medical_model.refine_product_selection(
             user_query=user_query,
             medical_reasoning=reasoning_str,
@@ -527,64 +505,50 @@ class Pipeline:
             max_products=max_products
         )
 
-    # =========================================================================
-    # Step 6: Special Context Detection
-    # =========================================================================
-    def _is_child_related_query(self, text: str) -> bool:
-        """
-        Check if query is about children or babies.
+    # Child-related keywords for detection
+    _CHILD_KEYWORDS = {
+        'бебе', 'бебета', 'бебешки', 'бебешка', 'бебето',
+        'дете', 'деца', 'детски', 'детска', 'детето',
+        'новородено', 'кърмаче', 'малко дете',
+        'месечно', 'годишно', 'месеца', 'години',
+        'педиатър', 'педиатричен',
+        'никнене на зъби', 'зъбки',
+        'дозировка за дете', 'доза за дете',
+        'за деца', 'за бебета',
+        'baby', 'babies', 'infant', 'infants',
+        'child', 'children', 'kid', 'kids',
+        'toddler', 'newborn',
+        'months old', 'years old',
+        'pediatric', 'teething',
+    }
 
-        Returns True if the query mentions children, babies, or age-related terms.
-        """
-        child_keywords = {
-            # Bulgarian
-            'бебе', 'бебета', 'бебешки', 'бебешка', 'бебето',
-            'дете', 'деца', 'детски', 'детска', 'детето',
-            'новородено', 'кърмаче', 'малко дете',
-            'месечно', 'годишно', 'месеца', 'години',
-            'педиатър', 'педиатричен',
-            'никнене на зъби', 'зъбки',
-            'дозировка за дете', 'доза за дете',
-            'за деца', 'за бебета',
-            # English
-            'baby', 'babies', 'infant', 'infants',
-            'child', 'children', 'kid', 'kids',
-            'toddler', 'newborn',
-            'months old', 'years old',
-            'pediatric', 'teething',
-        }
+    def _is_child_related_query(self, text: str) -> bool:
+        """Check if query mentions children, babies, or age-related terms."""
         text_lower = text.lower()
-        return any(kw in text_lower for kw in child_keywords)
+        return any(kw in text_lower for kw in self._CHILD_KEYWORDS)
+
+    # Safety information keywords
+    _SAFETY_KEYWORDS = {
+        'двойна доза', 'тройна доза', 'предозиране', 'предозирах',
+        'максимална доза', 'максималната доза', 'колко мога да взема',
+        'прекалено много', 'твърде много',
+        'алкохол с', 'пия алкохол', 'комбинирам', 'смесвам',
+        'взема заедно', 'едновременно',
+        'безопасно ли е', 'опасно ли е', 'вредно ли е',
+        'странични ефекти', 'странични действия', 'нежелани реакции',
+        'противопоказания', 'да не взема',
+        'по време на бременност', 'бременна', 'кърмене', 'кърмя',
+        'double dose', 'overdose', 'maximum dose',
+        'alcohol with', 'combine', 'mix medications',
+        'safe to take', 'dangerous', 'harmful',
+        'side effects', 'contraindications',
+        'during pregnancy', 'pregnant', 'breastfeeding',
+    }
 
     def _is_safety_information_query(self, text: str) -> bool:
-        """
-        Check if query is asking about medication safety.
-
-        These queries should always include a safety disclaimer.
-        """
-        safety_keywords = {
-            # Bulgarian - dosage/overdose
-            'двойна доза', 'тройна доза', 'предозиране', 'предозирах',
-            'максимална доза', 'максималната доза', 'колко мога да взема',
-            'прекалено много', 'твърде много',
-            # Bulgarian - interactions
-            'алкохол с', 'пия алкохол', 'комбинирам', 'смесвам',
-            'взема заедно', 'едновременно',
-            # Bulgarian - safety concerns
-            'безопасно ли е', 'опасно ли е', 'вредно ли е',
-            'странични ефекти', 'странични действия', 'нежелани реакции',
-            'противопоказания', 'да не взема',
-            # Bulgarian - pregnancy/breastfeeding
-            'по време на бременност', 'бременна', 'кърмене', 'кърмя',
-            # English
-            'double dose', 'overdose', 'maximum dose',
-            'alcohol with', 'combine', 'mix medications',
-            'safe to take', 'dangerous', 'harmful',
-            'side effects', 'contraindications',
-            'during pregnancy', 'pregnant', 'breastfeeding',
-        }
+        """Check if query asks about medication safety."""
         text_lower = text.lower()
-        return any(kw in text_lower for kw in safety_keywords)
+        return any(kw in text_lower for kw in self._SAFETY_KEYWORDS)
 
     def _add_child_disclaimer(self, response: str) -> str:
         """Add child-specific safety disclaimer to response."""
@@ -610,41 +574,31 @@ class Pipeline:
 - Консултирайте се с лекар преди употреба при бременност или кърмене"""
         return response + "\n" + disclaimer
 
-    def _is_chronic_disease_query(self, text: str) -> bool:
-        """
-        Check if query is about chronic disease medications.
+    # Chronic disease keywords
+    _CHRONIC_KEYWORDS = {
+        'диабет', 'диабетик', 'захарен диабет', 'инсулин',
+        'кръвна захар', 'глюкоза',
+        'щитовидна', 'щитовидната жлеза', 'тироксин',
+        'хипотиреоидизъм', 'хипертиреоидизъм',
+        'хипертония', 'високо кръвно', 'кръвно налягане',
+        'сърдечна недостатъчност', 'аритмия',
+        'холестерол', 'статини',
+        'астма', 'бронхиална астма', 'хобб',
+        'епилепсия', 'паркинсон', 'множествена склероза',
+        'антидепресант', 'антипсихотик', 'шизофрения',
+        'ревматоиден артрит', 'лупус', 'имуносупресор',
+        'diabetes', 'insulin', 'blood sugar',
+        'thyroid', 'hypothyroidism', 'hyperthyroidism',
+        'hypertension', 'blood pressure',
+        'asthma', 'copd',
+        'epilepsy', 'parkinson',
+        'antidepressant', 'antipsychotic',
+    }
 
-        These typically require prescriptions and should include a warning.
-        """
-        chronic_keywords = {
-            # Bulgarian - diabetes
-            'диабет', 'диабетик', 'захарен диабет', 'инсулин',
-            'кръвна захар', 'глюкоза',
-            # Bulgarian - thyroid
-            'щитовидна', 'щитовидната жлеза', 'тироксин',
-            'хипотиреоидизъм', 'хипертиреоидизъм',
-            # Bulgarian - cardiovascular
-            'хипертония', 'високо кръвно', 'кръвно налягане',
-            'сърдечна недостатъчност', 'аритмия',
-            'холестерол', 'статини',
-            # Bulgarian - respiratory
-            'астма', 'бронхиална астма', 'хобб',
-            # Bulgarian - neurological
-            'епилепсия', 'паркинсон', 'множествена склероза',
-            # Bulgarian - mental health (prescription)
-            'антидепресант', 'антипсихотик', 'шизофрения',
-            # Bulgarian - autoimmune
-            'ревматоиден артрит', 'лупус', 'имуносупресор',
-            # English equivalents
-            'diabetes', 'insulin', 'blood sugar',
-            'thyroid', 'hypothyroidism', 'hyperthyroidism',
-            'hypertension', 'blood pressure',
-            'asthma', 'copd',
-            'epilepsy', 'parkinson',
-            'antidepressant', 'antipsychotic',
-        }
+    def _is_chronic_disease_query(self, text: str) -> bool:
+        """Check if query is about chronic disease medications."""
         text_lower = text.lower()
-        return any(kw in text_lower for kw in chronic_keywords)
+        return any(kw in text_lower for kw in self._CHRONIC_KEYWORDS)
 
     def _add_chronic_disease_disclaimer(self, response: str) -> str:
         """Add prescription warning for chronic disease queries."""
@@ -660,131 +614,114 @@ class Pipeline:
 - За предписани лекарства, моля консултирайте се с вашия лекар или фармацевт"""
         return response + "\n" + disclaimer
 
-    # =========================================================================
-    # Step 7: Response Formatting
-    # =========================================================================
+    # Garbage patterns to filter from responses
+    _GARBAGE_PATTERNS = {
+        "нежелани реакции", "странични ефекти", "неизвестна честота",
+        "side effects", "unknown frequency", "семенна течност",
+        "мускулно- скелетната", "съединителната тъкан",
+        "болка в гърба, болка в гърба", "болка в корема, болка в корема",
+        "не се препоръчва употребата", "да се каже, че",
+        "консултирайте с вашия лекар или фармацевт",
+        "този препарат", "лекарствен продукт",
+        "от с", "обучение",
+    }
+
     def _format_response(
         self,
         medical_reasoning: MedicalReasoning,
         products: list,
         translate_reasoning: bool = True
     ) -> str:
-        """
-        Format the final response as a friendly pharmacy assistant.
+        """Format the final response as a friendly pharmacy assistant."""
+        parts = ["## 🔍 Медицински анализ\n"]
 
-        Args:
-            medical_reasoning: The medical analysis from MedGemma
-            products: List of recommended products
-            translate_reasoning: Whether to translate reasoning to Bulgarian (default: True)
-        """
-        response_parts = []
-
-        # Garbage patterns to filter out (from product side effects, etc.)
-        garbage_patterns = {
-            "нежелани реакции", "странични ефекти", "неизвестна честота",
-            "side effects", "unknown frequency", "семенна течност",
-            "мускулно- скелетната", "съединителната тъкан"
-        }
-
-        def contains_garbage(text: str) -> bool:
-            """Check if text contains garbage patterns."""
-            if not text:
-                return True
-            text_lower = text.lower()
-            return any(pattern in text_lower for pattern in garbage_patterns)
-
-        def safe_translate(text: str) -> str:
-            """Translate text to Bulgarian, falling back to original if garbage detected."""
-            if not translate_reasoning or not text:
+        # Helper for translation with garbage filtering
+        def translate_if_valid(text: str, min_length: int = 3) -> str | None:
+            if not text or len(text) <= min_length or self._contains_garbage(text):
+                return None
+            if not translate_reasoning:
                 return text
             try:
                 translated = self._translate_to_bulgarian(text)
-                return text if contains_garbage(translated) else translated
+                if self._contains_garbage(translated):
+                    return text
+                return translated
             except Exception:
                 return text
 
-        def is_valid_text(text: str, min_length: int = 3) -> bool:
-            """Check if text is valid (non-empty, meets min length, no garbage)."""
-            return bool(text) and len(text) > min_length and not contains_garbage(text)
-
-        def translate_if_valid(text: str, min_length: int = 3) -> str | None:
-            """Translate text and return it only if valid, otherwise None."""
-            if not is_valid_text(text, min_length):
-                return None
-            translated = safe_translate(text)
-            return translated if is_valid_text(translated, min_length) else None
-
-        # Medical analysis section
-        response_parts.append("## 🔍 Медицински анализ\n")
-
-        # Symptoms - only show if they look like actual symptom keywords (not long explanations)
+        # Symptoms
         if medical_reasoning.symptoms:
             valid_symptoms = [s for s in medical_reasoning.symptoms if len(s) < 40]
             if valid_symptoms:
-                response_parts.append(f"**🩺 Симптоми:** {', '.join(valid_symptoms)}\n")
+                parts.append(f"**🩺 Симптоми:** {', '.join(valid_symptoms)}\n")
 
         # Probable cause with explanation
         if cause := translate_if_valid(medical_reasoning.likely_cause):
-            response_parts.append(f"**🔬 Вероятна причина:** {cause}\n")
+            parts.append(f"**🔬 Вероятна причина:** {cause}\n")
 
         if explanation := translate_if_valid(medical_reasoning.explanation, min_length=10):
-            response_parts.append(f"{explanation}\n")
+            parts.append(f"{explanation}\n")
 
         # Treatment recommendation
         if treatment := translate_if_valid(medical_reasoning.treatment_type):
-            response_parts.append(f"**💊 Препоръчано лечение:** {treatment}\n")
+            parts.append(f"**💊 Препоръчано лечение:** {treatment}\n")
 
         if how_helps := translate_if_valid(medical_reasoning.how_treatment_helps, min_length=10):
-            response_parts.append(f"*{how_helps}*\n")
+            parts.append(f"*{how_helps}*\n")
 
         # Self-care tips
         if medical_reasoning.self_care_tips:
-            valid_tips = [
-                translated for tip in medical_reasoning.self_care_tips
-                if (translated := translate_if_valid(tip, min_length=5))
-            ]
+            valid_tips = [t for tip in medical_reasoning.self_care_tips if (t := translate_if_valid(tip, min_length=5))]
             if valid_tips:
-                response_parts.append("**🏠 Домашни грижи:**")
-                response_parts.extend(f"• {tip}" for tip in valid_tips)
-                response_parts.append("")
+                parts.append("**🏠 Домашни грижи:**")
+                parts.extend(f"• {tip}" for tip in valid_tips)
+                parts.append("")
 
         # Recovery timeline
         if duration := translate_if_valid(medical_reasoning.duration_guidance):
-            response_parts.append(f"**⏱️ Възстановяване:** {duration}\n")
+            parts.append(f"**⏱️ Възстановяване:** {duration}\n")
 
         # Warnings
         if medical_reasoning.warnings:
-            valid_warnings = [
-                translated for warning in medical_reasoning.warnings
-                if (translated := translate_if_valid(warning, min_length=10))
-            ]
+            valid_warnings = [w for warning in medical_reasoning.warnings if (w := translate_if_valid(warning, min_length=10))]
             if valid_warnings:
-                response_parts.append("**⚠️ Кога да потърсите лекар:**")
-                response_parts.extend(f"• {warning}" for warning in valid_warnings)
-                response_parts.append("")
+                parts.append("**⚠️ Кога да потърсите лекар:**")
+                parts.extend(f"• {warning}" for warning in valid_warnings)
+                parts.append("")
 
-        # Product recommendations section
-        response_parts.append("\n## 💊 Препоръчани продукти\n")
-
+        # Product recommendations
+        parts.append("\n## 💊 Препоръчани продукти\n")
         if products:
             for i, product in enumerate(products, 1):
-                if isinstance(product, Product):
-                    response_parts.append(f"### {i}. {product.to_display_string()}\n")
-                else:
-                    response_parts.append(f"### {i}. {product}\n")
+                display = product.to_display_string() if isinstance(product, Product) else str(product)
+                parts.append(f"### {i}. {display}\n")
         else:
-            response_parts.append("*Съжалявам, не намерих подходящи продукти в каталога.*")
+            parts.append("*Съжалявам, не намерих подходящи продукти в каталога.*")
 
-        # Add see doctor warning if needed
         if medical_reasoning.see_doctor:
-            response_parts.append("\n🏥 **Важно:** Препоръчваме консултация с лекар за вашите симптоми.")
+            parts.append("\n🏥 **Важно:** Препоръчваме консултация с лекар за вашите симптоми.")
 
-        # Disclaimer (always shown)
-        response_parts.append("\n---")
-        response_parts.append("*Това е информационна услуга, не медицински съвет. "
-                            "Консултирайте се с фармацевт за повече информация.*")
+        parts.append("\n---")
+        parts.append("*Това е информационна услуга, не медицински съвет. "
+                    "Консултирайте се с фармацевт за повече информация.*")
 
-        return "\n".join(response_parts)
+        return "\n".join(parts)
+
+    def _contains_garbage(self, text: str) -> bool:
+        """Check if text contains garbage patterns or excessive repetition."""
+        if not text or len(text.strip()) < 3:
+            return True
+        text_lower = text.lower()
+        if any(pattern in text_lower for pattern in self._GARBAGE_PATTERNS):
+            return True
+        # Check for excessive repetition
+        words = text_lower.split()
+        if len(words) > 10:
+            for i in range(len(words) - 5):
+                phrase = " ".join(words[i:i+3])
+                if text_lower.count(phrase) >= 3:
+                    return True
+        return False
 
 
 # Global pipeline instance

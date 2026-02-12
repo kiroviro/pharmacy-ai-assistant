@@ -8,9 +8,10 @@ import json
 import os
 import re
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Optional
-from mlx_lm import load, generate
+
+from mlx_lm import generate, load
 
 from src.logging_config import get_logger
 
@@ -40,33 +41,32 @@ class MedicalReasoning:
 
     @classmethod
     def from_dict(cls, data: dict) -> "MedicalReasoning":
-        # Helper to ensure list fields are actually lists
-        def ensure_list(value, default=None):
-            if default is None:
-                default = []
-            if value is None:
-                return default
-            if isinstance(value, list):
-                return value
-            if isinstance(value, str):
-                # If it's a comma-separated string, split it
-                if "," in value:
-                    return [s.strip() for s in value.split(",") if s.strip()]
-                return [value] if value.strip() else default
-            return default
-
         return cls(
-            symptoms=ensure_list(data.get("symptoms")),
+            symptoms=_ensure_list(data.get("symptoms")),
             likely_cause=str(data.get("likely_cause", "") or ""),
             treatment_type=str(data.get("treatment_type", "") or ""),
-            warnings=ensure_list(data.get("warnings")),
+            warnings=_ensure_list(data.get("warnings")),
             see_doctor=bool(data.get("see_doctor", False)),
             explanation=str(data.get("explanation", "") or ""),
-            # Support both field name variants
             how_treatment_helps=str(data.get("how_treatment_helps", "") or data.get("how_it_helps", "") or ""),
-            self_care_tips=ensure_list(data.get("self_care_tips") or data.get("self_care")),
+            self_care_tips=_ensure_list(data.get("self_care_tips") or data.get("self_care")),
             duration_guidance=str(data.get("duration_guidance", "") or data.get("recovery", "") or ""),
         )
+
+
+def _ensure_list(value, default: list | None = None) -> list:
+    """Ensure value is a list, converting from string if needed."""
+    if default is None:
+        default = []
+    if value is None:
+        return default
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        if "," in value:
+            return [s.strip() for s in value.split(",") if s.strip()]
+        return [value] if value.strip() else default
+    return default
 
     def format_english(self) -> str:
         """Format the reasoning in English for translation."""
@@ -341,24 +341,21 @@ class MedicalModel:
         Returns:
             MedicalReasoning object (sanitized)
         """
-        reasoning = None
-        try:
-            # Try to extract JSON from response
-            # Sometimes the model adds text before/after JSON
-            json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group()
-                data = json.loads(json_str)
-                reasoning = MedicalReasoning.from_dict(data)
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.warning(f"Failed to parse JSON response: {e}")
-
-        # Fallback: try to parse unstructured response
+        reasoning = self._try_parse_json(response)
         if reasoning is None:
             reasoning = self._parse_unstructured_response(response)
-
-        # Sanitize to remove garbage text
         return self._sanitize_reasoning(reasoning)
+
+    def _try_parse_json(self, response: str) -> MedicalReasoning | None:
+        """Try to extract and parse JSON from response."""
+        try:
+            json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group())
+                return MedicalReasoning.from_dict(data)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Failed to parse JSON response: {e}")
+        return None
 
     def _parse_unstructured_response(self, response: str) -> MedicalReasoning:
         """
