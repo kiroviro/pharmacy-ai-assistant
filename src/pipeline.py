@@ -631,12 +631,19 @@ class Pipeline:
             r'всички\s+',
             r'продукти\s+(на|от)\s+',
             r'\s+(имате|предлагате|продавате)\s*\??$',
+            # Remove availability words (наличен/налични/наличност)
+            r'\bналичен\b',
+            r'\bналични\b',
+            r'\bналичност\b',
+            r'\bв\s+наличност\b',
             r'^what\s+brands?\s+of\s+',
             r'^show\s+me\s+',
             r'^looking\s+for\s+',
             r'^do\s+you\s+(have|sell|offer)\s+',
             r'^list\s+(of\s+)?',
             r'\s+(do you have|do you offer|are available)\s*\??$',
+            r'\bavailable\b',
+            r'\bin\s+stock\b',
         ]
 
         result = text_lower
@@ -658,6 +665,57 @@ class Pipeline:
         """Check if text contains symptom-related words."""
         return any(symptom in text for symptom in self._SYMPTOM_WORDS)
 
+    # Generic terms that shouldn't be used for strict filtering
+    _GENERIC_TERMS = {
+        'мг', 'mg', 'мл', 'ml', 'капсули', 'таблетки', 'сироп', 'капки',
+        'крем', 'гел', 'разтвор', 'суспензия', 'за', 'при', 'х', 'g', 'гр',
+    }
+
+    def _filter_by_product_name_match(self, products: list, search_term: str) -> list:
+        """
+        Filter products to only those whose title contains key search terms.
+
+        This prevents semantic search from returning unrelated products that match
+        on generic terms like 'мг', 'капсули', etc.
+
+        Args:
+            products: List of Product objects
+            search_term: The extracted search term (e.g., "нурофен 200 мг")
+
+        Returns:
+            Filtered list of products that contain at least one key term
+        """
+        # Extract key terms (excluding generic terms and short words)
+        search_lower = search_term.lower()
+        key_terms = [
+            term for term in search_lower.split()
+            if term not in self._GENERIC_TERMS and len(term) > 2
+        ]
+
+        if not key_terms:
+            # No key terms to filter on, return all
+            return products
+
+        logger.debug(f"Filtering products by key terms: {key_terms}")
+
+        filtered = []
+        for product in products:
+            title_lower = product.title.lower() if hasattr(product, 'title') else ""
+            brand_lower = product.brand.lower() if hasattr(product, 'brand') else ""
+
+            # Check if any key term is in title or brand
+            if any(term in title_lower or term in brand_lower for term in key_terms):
+                filtered.append(product)
+            else:
+                logger.debug(f"Filtered out: {product.title[:40]}... (no match for {key_terms})")
+
+        # If filtering removed all results, be more lenient and return top results
+        if not filtered and products:
+            logger.warning(f"No products matched key terms {key_terms}, returning top semantic matches")
+            return products[:3]
+
+        return filtered
+
     def _process_catalog_query(self, user_input: str, search_term: str) -> PipelineResult:
         """
         Process a catalog query without medical reasoning.
@@ -678,11 +736,15 @@ class Pipeline:
             )
 
         # Use hybrid search for better brand/product name matching
-        results = self.product_store.hybrid_search(search_term, n_results=6)
+        results = self.product_store.hybrid_search(search_term, n_results=12)  # Get more for filtering
         products = self._convert_to_products(results)
 
         # Filter OTC only
         products = self.safety_layer.filter_otc_only(products)
+
+        # For catalog queries, filter to products that actually contain the key search terms
+        # This prevents matching on generic terms like "мг", "капсули", etc.
+        products = self._filter_by_product_name_match(products, search_term)
 
         # Format catalog response (simpler than medical response)
         response = self._format_catalog_response(search_term, products)
