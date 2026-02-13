@@ -42,11 +42,14 @@ medgemma/
 │   │   ├── orchestrator.py # Pipeline class
 │   │   ├── models.py       # Product, PipelineResult
 │   │   ├── constants.py    # Keywords, patterns
-│   │   └── conditions.py   # Condition extraction
+│   │   ├── conditions.py   # Condition extraction
+│   │   ├── product_ingredients.py  # Ingredient parsing
+│   │   └── query_router.py # Query routing
 │   ├── medical_model.py    # MedGemma wrapper
 │   ├── translator.py       # BG↔EN translation
-│   ├── safety.py          # Emergency detection
-│   ├── product_store.py   # ChromaDB vector store
+│   ├── safety.py           # Emergency detection
+│   ├── product_store.py    # ChromaDB vector store
+│   ├── unified_processor.py # Unified LLM processor
 │   └── intent_classifier.py
 ├── tests/                  # Test suite
 ├── data/                   # Product data, embeddings

@@ -52,7 +52,11 @@
       "Bash(chmod:*)",
       "Bash(timeout 600 python3:*)",
       "Bash(timeout 3600 python3:*)",
-      "Bash(timeout 300 python3 -m pytest:*)"
+      "Bash(timeout 300 python3 -m pytest:*)",
+      "Skill(reflect)",
+      "Skill(doc-cleanup)",
+      "Bash(pytest:*)",
+      "Bash(test:*)"
     ]
   }
 }

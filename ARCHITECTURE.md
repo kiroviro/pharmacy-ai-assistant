@@ -209,7 +209,15 @@ medgemma/
 │   ├── safety.py               # Step 4: Red-flag detection + OTC filter
 │   ├── product_store.py        # Step 5a: ChromaDB vector search
 │   ├── data_loader.py          # CSV to ChromaDB loader
-│   └── pipeline.py             # Main pipeline orchestrator
+│   ├── unified_processor.py    # Unified LLM processor
+│   └── pipeline/               # Pipeline module
+│       ├── __init__.py
+│       ├── orchestrator.py     # Main pipeline class
+│       ├── models.py           # Data models (Product, PipelineResult)
+│       ├── constants.py        # Keywords, symptom mappings
+│       ├── conditions.py       # User condition extraction
+│       ├── product_ingredients.py  # Ingredient parsing
+│       └── query_router.py     # Query routing logic
 │
 ├── output/                     # Generated files (git-ignored)
 │
@@ -379,7 +387,7 @@ Allows recommendations but adds warning message:
 | Component | Status | File | Tests |
 |-----------|--------|------|-------|
 | OpenAI API | ✅ Done | `api_server.py` | 18 tests |
-| Pipeline | ✅ Done | `src/pipeline.py` | 13 tests |
+| Pipeline | ✅ Done | `src/pipeline/orchestrator.py` | 13 tests |
 | MedGemma | ✅ Done | `src/medical_model.py` | - |
 | Translation | ✅ Done | `src/translator.py` | - |
 | Product Store | ✅ Done | `src/product_store.py` | - |

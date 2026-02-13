@@ -190,12 +190,18 @@ Final Response (BG)
 
 | File | Purpose |
 |------|---------|
-| `src/pipeline.py` | Main orchestrator |
+| `src/pipeline/orchestrator.py` | Main pipeline orchestrator |
+| `src/pipeline/models.py` | Data models (Product, PipelineResult) |
+| `src/pipeline/constants.py` | Symptom mappings, keywords |
+| `src/pipeline/conditions.py` | User condition extraction |
+| `src/pipeline/product_ingredients.py` | Ingredient parsing |
+| `src/pipeline/query_router.py` | Query routing logic |
 | `src/medical_model.py` | MedGemma integration |
 | `src/translator.py` | BG↔EN translation |
 | `src/product_store.py` | ChromaDB vector store |
 | `src/safety.py` | Emergency/red-flag detection |
 | `src/intent_classifier.py` | Medical intent detection |
+| `src/unified_processor.py` | Unified LLM processor |
 
 ## Performance Metrics
 
