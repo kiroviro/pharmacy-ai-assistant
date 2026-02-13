@@ -433,6 +433,53 @@ class Translator:
         "difficulty breathing": "затруднено дишане",
         "shorten the duration": "скъсят продължителността",
         "duration": "продължителност",
+        # Verb phrases (critical for avoiding mixed EN/BG output)
+        "reduce symptoms": "намаляват симптомите",
+        "reduces symptoms": "намалява симптомите",
+        "reduce pain": "намаляват болката",
+        "reduces pain": "намалява болката",
+        "reduce fever": "намаляват температурата",
+        "reduces fever": "намалява температурата",
+        "reduce congestion": "намаляват запушването",
+        "reduce swelling": "намаляват отока",
+        "reduce": "намаляват",
+        "reduces": "намалява",
+        "help reduce": "помагат за намаляване на",
+        "helps reduce": "помага за намаляване на",
+        "help relieve": "помагат за облекчаване на",
+        "helps relieve": "помага за облекчаване на",
+        "help with": "помагат при",
+        "helps with": "помага при",
+        "help": "помагат",
+        "helps": "помага",
+        "relieve symptoms": "облекчават симптомите",
+        "relieves symptoms": "облекчава симптомите",
+        "relieve pain": "облекчават болката",
+        "relieves pain": "облекчава болката",
+        "relieve congestion": "облекчават запушването",
+        "relieves congestion": "облекчава запушването",
+        "relieve": "облекчават",
+        "relieves": "облекчава",
+        "loosen mucus": "разхлабват слузта",
+        "loosens mucus": "разхлабва слузта",
+        "making it easier": "като улесняват",
+        "makes it easier": "като улеснява",
+        "making it easier to cough up": "улеснявайки откашлянето",
+        "take as needed": "приемайте при нужда",
+        "as needed": "при нужда",
+        "last longer": "продължават по-дълго",
+        "lasts longer": "продължава по-дълго",
+        "longer than": "по-дълго от",
+        "works within": "действа в рамките на",
+        "work within": "действат в рамките на",
+        "works by": "действа чрез",
+        "work by": "действат чрез",
+        "subside within": "отшумяват в рамките на",
+        "subsides within": "отшумява в рамките на",
+        "subside": "отшумяват",
+        "subsides": "отшумява",
+        "last": "продължават",
+        "lasts": "продължава",
     }
 
     def _calculate_bulgarian_ratio(self, text: str) -> float:
@@ -523,7 +570,69 @@ class Translator:
         # Cache result (without dictionary applied - we apply it on retrieval)
         self._cache_en_to_bg.set(text, result)
 
+        # Final cleanup: remove/replace common English words that slip through
+        result = self._cleanup_english_remnants(result)
+
         return result
+
+    # Common English words that slip through translation and their Bulgarian replacements
+    _ENGLISH_REMNANTS = {
+        # Common verbs
+        "help": "помага",
+        "helps": "помага",
+        "use": "използвайте",
+        "take": "вземете",
+        "reduce": "намалява",
+        "relieve": "облекчава",
+        "may": "може",
+        "can": "може",
+        "should": "трябва",
+        # Common nouns
+        "symptoms": "симптоми",
+        "pain": "болка",
+        "fever": "температура",
+        "cold": "настинка",
+        "flu": "грип",
+        "cough": "кашлица",
+        "doctor": "лекар",
+        "medication": "лекарство",
+        "medicine": "лекарство",
+        "treatment": "лечение",
+        # Common adjectives
+        "severe": "тежък",
+        "mild": "лек",
+        "chronic": "хроничен",
+        # Common prepositions/connectors
+        "with": "с",
+        "for": "за",
+        "and": "и",
+        "or": "или",
+        "the": "",  # Remove articles
+        "a": "",
+        "an": "",
+    }
+
+    def _cleanup_english_remnants(self, text: str) -> str:
+        """
+        Final cleanup pass to replace common English words that slip through translation.
+
+        This catches words the MarianMT model failed to translate, especially
+        common verbs, nouns, and connectors.
+        """
+        import re
+
+        result = text
+        for en_word, bg_word in self._ENGLISH_REMNANTS.items():
+            # Only replace if word is isolated (not part of a Bulgarian word)
+            # Use word boundaries to avoid partial matches
+            pattern = rf'\b{re.escape(en_word)}\b'
+            result = re.sub(pattern, bg_word, result, flags=re.IGNORECASE)
+
+        # Clean up any double spaces or orphaned punctuation from removed words
+        result = re.sub(r'\s+', ' ', result)
+        result = re.sub(r'\s+([.,!?])', r'\1', result)
+
+        return result.strip()
 
     def translate_batch_to_bulgarian(self, texts: list[str]) -> list[str]:
         """

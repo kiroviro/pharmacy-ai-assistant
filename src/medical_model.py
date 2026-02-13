@@ -383,7 +383,8 @@ class MedicalModel:
         prompt: str,
         max_tokens: int,
         sampler,
-        operation_name: str = "inference"
+        operation_name: str = "inference",
+        repetition_penalty: float = 1.15
     ) -> str:
         """
         Generate model response with automatic retry on transient failures.
@@ -398,6 +399,7 @@ class MedicalModel:
             max_tokens: Maximum tokens to generate
             sampler: The sampler to use for generation
             operation_name: Name of the operation for logging
+            repetition_penalty: Penalty for repeating tokens (1.0 = no penalty, >1.0 = discourage repetition)
 
         Returns:
             Generated response string
@@ -415,6 +417,7 @@ class MedicalModel:
                     prompt=prompt,
                     max_tokens=max_tokens,
                     sampler=sampler,
+                    repetition_penalty=repetition_penalty,
                 )
                 return response
 

@@ -638,6 +638,13 @@ class Pipeline:
             selected_products=products[:3]
         )
 
+    # Standard OTC disclaimer for all responses
+    _OTC_DISCLAIMER = (
+        "\n---\n"
+        "⚠️ *Тази информация е само за справка. "
+        "Консултирайте се с фармацевт или лекар за персонална препоръка.*"
+    )
+
     def _format_catalog_response(self, search_term: str, products: list) -> str:
         """Format a simple catalog response without medical analysis."""
         parts = []
@@ -670,6 +677,9 @@ class Pipeline:
         else:
             parts.append(f'*Съжалявам, не намерих продукти за "{search_term}" в каталога.*')
             parts.append("\n*Опитайте с друга ключова дума или опишете за какво ви е нужен продуктът.*")
+
+        # Add OTC disclaimer for catalog responses
+        parts.append(self._OTC_DISCLAIMER)
 
         return "\n".join(parts)
 
@@ -734,6 +744,20 @@ class Pipeline:
             "reason": reason
         })
         if not is_medical:
+            # Edge case: Short queries (1-2 words) might be product names - try catalog search first
+            words = user_input.strip().split()
+            if len(words) <= 2:
+                try:
+                    products = self.product_store.search(user_input, top_k=5)
+                    if products and len(products) > 0:
+                        logger.info(f"Short query matched products in catalog", extra={
+                            "query": user_input,
+                            "products_found": len(products)
+                        })
+                        return self._process_catalog_query(user_input, user_input)
+                except Exception as e:
+                    logger.debug(f"Catalog search for short query failed: {e}")
+
             return PipelineResult(
                 response=self.intent_classifier.get_rejection_message("bg", reason),
                 is_medical=False,
@@ -812,7 +836,8 @@ class Pipeline:
         # Step 6 & 7: Translate back and format response
         final_response = self._format_response(
             medical_reasoning=medical_reasoning,
-            products=selected_products
+            products=selected_products,
+            original_query=user_input
         )
 
         # Add warning message if applicable
@@ -946,7 +971,7 @@ class Pipeline:
         )
 
         # Format response using unified result's Bulgarian translations
-        final_response = self._format_response_from_unified(llm_result, selected_products)
+        final_response = self._format_response_from_unified(llm_result, selected_products, user_input)
 
         # Add disclaimers based on conditions detected by LLM
         if "child" in llm_result.extraction.user_conditions or llm_result.extraction.age_group in ("infant", "child"):
@@ -1015,12 +1040,18 @@ class Pipeline:
         self,
         llm_result: UnifiedProcessorResult,
         products: list,
+        original_query: str = "",
     ) -> str:
         """
         Format response using Bulgarian translations from unified processor.
 
         This avoids the separate translation step since the LLM already
         provided Bulgarian translations.
+
+        Args:
+            llm_result: Result from unified processor
+            products: List of selected products
+            original_query: Original Bulgarian user query (for symptom validation)
         """
         parts = ["## 🔍 Медицински анализ\n"]
         reasoning = llm_result.reasoning
@@ -1029,16 +1060,21 @@ class Pipeline:
             parts.append("*Не можах да анализирам запитването.*")
             return "\n".join(parts)
 
-        # Symptoms (from extraction)
+        # Symptoms (from extraction) - validate against original query to prevent phantom symptoms
         if llm_result.extraction.symptoms:
-            # Use translator for symptoms if no Bulgarian provided
-            translated_symptoms = []
-            for symptom in llm_result.extraction.symptoms[:5]:
-                translated = self.translator.translate_symptom(symptom)
-                if translated:
-                    translated_symptoms.append(translated)
-            if translated_symptoms:
-                parts.append(f"**🩺 Симптоми:** {', '.join(translated_symptoms)}\n")
+            # Validate symptoms against original query
+            validated_symptoms = self._validate_symptoms_against_query(
+                llm_result.extraction.symptoms, original_query
+            )
+            if validated_symptoms:
+                # Use translator for symptoms if no Bulgarian provided
+                translated_symptoms = []
+                for symptom in validated_symptoms[:5]:
+                    translated = self.translator.translate_symptom(symptom)
+                    if translated:
+                        translated_symptoms.append(translated)
+                if translated_symptoms:
+                    parts.append(f"**🩺 Симптоми:** {', '.join(translated_symptoms)}\n")
 
         # Explanation (use Bulgarian from LLM if available)
         if reasoning.explanation_bg:
@@ -1330,6 +1366,9 @@ class Pipeline:
 
         Uses ChromaDB with multilingual embeddings based on MedGemma's analysis.
         Now uses hybrid search (semantic + keyword) with category awareness.
+
+        Also validates treatment_type against original query keywords to catch
+        MedGemma misclassifications (e.g., GI symptoms classified as cold/flu).
         """
         if self.product_store.collection.count() == 0:
             logger.warning("Product store is empty. Run product_store.py --reload to load products.")
@@ -1337,11 +1376,32 @@ class Pipeline:
 
         search_query = self._build_search_query(medical_reasoning, original_query)
 
+        # Validate/correct treatment_type using original query keywords
+        treatment_type = medical_reasoning.treatment_type
+        if original_query:
+            query_treatment = self._extract_treatment_from_query(original_query)
+            if query_treatment:
+                # Override if MedGemma's treatment doesn't match query symptoms
+                # This catches cases like GI symptoms being classified as cold/flu
+                if treatment_type:
+                    # Check if there's a category mismatch
+                    gi_types = {'antidiarrheal', 'digestive', 'antacids', 'laxatives'}
+                    cold_types = {'cough', 'decongestants', 'antipyretics'}
+
+                    # If query has GI symptoms but MedGemma returned cold/flu, override
+                    if query_treatment in gi_types and treatment_type.lower() in cold_types:
+                        logger.info(f"Overriding treatment_type from '{treatment_type}' to '{query_treatment}' based on query keywords")
+                        treatment_type = query_treatment
+                    # Also override if no treatment type from MedGemma
+                else:
+                    treatment_type = query_treatment
+                    logger.debug(f"Using query-extracted treatment_type: {treatment_type}")
+
         # Use category-aware hybrid search for better results
-        if medical_reasoning.treatment_type:
+        if treatment_type:
             results = self.product_store.search_by_category(
                 query=search_query,
-                treatment_type=medical_reasoning.treatment_type,
+                treatment_type=treatment_type,
                 n_results=top_k,
             )
         else:
@@ -1402,6 +1462,107 @@ class Pipeline:
         'ibuprofen', 'paracetamol', 'acetaminophen', 'aspirin',
         'nurofen', 'panadol', 'advil', 'tylenol', 'analgin',
     }
+
+    # Bulgarian symptom keywords → treatment type mapping
+    # Used to validate/correct MedGemma's treatment_type
+    _BG_SYMPTOM_TO_TREATMENT = {
+        # Digestive/GI symptoms - HIGH PRIORITY (often misclassified as cold/flu)
+        'диария': 'antidiarrheal',
+        'разстройство': 'antidiarrheal',
+        'гадене': 'digestive',
+        'повръщане': 'digestive',
+        'стомах': 'digestive',
+        'стомашни': 'digestive',
+        'киселини': 'antacids',
+        'запек': 'laxatives',
+        'чревни': 'digestive',
+        # Pain
+        'болка': 'analgesics',
+        'главоболие': 'analgesics',
+        'мигрена': 'analgesics',
+        'болки': 'analgesics',
+        # Fever
+        'температура': 'antipyretics',
+        'треска': 'antipyretics',
+        # Respiratory/Cold
+        'кашлица': 'cough',
+        'хрема': 'decongestants',
+        'настинка': 'cough',
+        'простуда': 'cough',
+        'грип': 'antipyretics',
+        # Throat
+        'гърло': 'throat',
+        # Allergy
+        'алергия': 'antihistamines',
+        'кихане': 'antihistamines',
+        'сърбеж': 'antihistamines',
+    }
+
+    def _extract_treatment_from_query(self, query: str) -> Optional[str]:
+        """
+        Extract treatment type from original Bulgarian query keywords.
+
+        Used to validate/correct MedGemma's treatment_type when there's
+        a mismatch between detected symptoms and recommended treatment.
+        """
+        query_lower = query.lower()
+
+        # Count symptom matches by treatment type
+        treatment_scores = {}
+        for keyword, treatment in self._BG_SYMPTOM_TO_TREATMENT.items():
+            if keyword in query_lower:
+                treatment_scores[treatment] = treatment_scores.get(treatment, 0) + 1
+
+        if not treatment_scores:
+            return None
+
+        # Return treatment with highest score (most keyword matches)
+        return max(treatment_scores, key=treatment_scores.get)
+
+    def _query_has_symptom_keywords(self, query: str) -> bool:
+        """
+        Check if the original query contains any recognizable symptom keywords.
+
+        Used to validate whether MedGemma's detected symptoms are phantom or real.
+        """
+        query_lower = query.lower()
+        return any(keyword in query_lower for keyword in self._BG_SYMPTOM_TO_TREATMENT.keys())
+
+    def _validate_symptoms_against_query(self, symptoms: list[str], original_query: str) -> list[str]:
+        """
+        Validate detected symptoms against the original query.
+
+        Filters out phantom symptoms that don't have any relation to the query.
+        This prevents showing symptoms like "кашлица, хрема" for a query like "помощ".
+
+        Args:
+            symptoms: List of symptom strings (in English or Bulgarian)
+            original_query: The original Bulgarian user query
+
+        Returns:
+            Filtered list of symptoms that are likely valid
+        """
+        if not symptoms or not original_query:
+            return symptoms
+
+        query_lower = original_query.lower()
+
+        # If query has no recognizable symptom keywords, symptoms are likely phantom
+        if not self._query_has_symptom_keywords(query_lower):
+            # Only keep symptoms if they match known Bulgarian symptom words
+            # This catches cases where the query IS about symptoms but uses different words
+            valid_symptoms = []
+            for symptom in symptoms:
+                symptom_lower = symptom.lower()
+                # Check if any keyword from our mapping appears in either the query or symptom
+                for keyword in self._BG_SYMPTOM_TO_TREATMENT.keys():
+                    if keyword in symptom_lower and keyword in query_lower:
+                        valid_symptoms.append(symptom)
+                        break
+            return valid_symptoms
+
+        # Query has symptom keywords, so keep all detected symptoms
+        return symptoms
 
     def _extract_drug_names(self, text: str) -> list[str]:
         """Extract known drug names from text for product search."""
@@ -1906,11 +2067,18 @@ class Pipeline:
         self,
         medical_reasoning: MedicalReasoning,
         products: list,
-        translate_reasoning: bool = True
+        translate_reasoning: bool = True,
+        original_query: str = ""
     ) -> str:
         """Format the final response as a friendly pharmacy assistant.
 
         Uses batched translation for efficiency when translate_reasoning=True.
+
+        Args:
+            medical_reasoning: MedicalReasoning object from model
+            products: List of selected products
+            translate_reasoning: Whether to translate reasoning fields
+            original_query: Original Bulgarian user query (for symptom validation)
         """
         parts = ["## 🔍 Медицински анализ\n"]
 
@@ -1933,17 +2101,22 @@ class Pipeline:
                 return None  # Don't return English original - skip the field
             return translated
 
-        # Symptoms (translate using dedicated symptom translation)
+        # Symptoms (validate against original query to prevent phantom symptoms)
         if medical_reasoning.symptoms:
-            translated_symptoms = []
-            for symptom in medical_reasoning.symptoms:
-                if symptom and len(symptom) < 40:
-                    # Use specialized symptom translation
-                    translated = self.translator.translate_symptom(symptom)
-                    if translated and not self._contains_garbage(translated):
-                        translated_symptoms.append(translated)
-            if translated_symptoms:
-                parts.append(f"**🩺 Симптоми:** {', '.join(translated_symptoms)}\n")
+            # Validate symptoms against original query
+            validated_symptoms = self._validate_symptoms_against_query(
+                medical_reasoning.symptoms, original_query
+            )
+            if validated_symptoms:
+                translated_symptoms = []
+                for symptom in validated_symptoms:
+                    if symptom and len(symptom) < 40:
+                        # Use specialized symptom translation
+                        translated = self.translator.translate_symptom(symptom)
+                        if translated and not self._contains_garbage(translated):
+                            translated_symptoms.append(translated)
+                if translated_symptoms:
+                    parts.append(f"**🩺 Симптоми:** {', '.join(translated_symptoms)}\n")
 
         # Probable cause with explanation
         if cause := get_translated("likely_cause", medical_reasoning.likely_cause):
@@ -2068,6 +2241,8 @@ class Pipeline:
 
     def _contains_garbage(self, text: str) -> bool:
         """Check if text contains garbage patterns, low Bulgarian content, or excessive repetition."""
+        import re
+
         if not text or len(text.strip()) < 3:
             return True
 
@@ -2079,8 +2254,17 @@ class Pipeline:
 
         # Check Bulgarian content ratio (text should be mostly Bulgarian)
         bg_ratio = self._calculate_bulgarian_ratio(text)
-        if bg_ratio < 0.3:  # Less than 30% Bulgarian = garbage for BG output
+        if bg_ratio < 0.5:  # Less than 50% Bulgarian = garbage for BG output (increased from 0.3)
             return True
+
+        # Check for model output artifacts (word/word/word patterns, repeated substrings)
+        artifact_patterns = [
+            r'\w+/\s*\w+/\s*\w+',  # word/word/word patterns like "си гол/ си гол/ си гол"
+            r'(.{2,10})\1{2,}',    # repeated substrings 2+ times
+        ]
+        for pattern in artifact_patterns:
+            if re.search(pattern, text_lower):
+                return True
 
         # Check for excessive word repetition
         words = text_lower.split()
@@ -2091,6 +2275,13 @@ class Pipeline:
             max_count = max(word_counts.values())
             if max_count > len(words) * 0.5:
                 return True
+
+        # Check for 2-word phrase repetition (catches patterns like "си гол си гол")
+        if len(words) >= 4:
+            for i in range(len(words) - 1):
+                phrase = " ".join(words[i:i+2])
+                if len(phrase) > 3 and text_lower.count(phrase) >= 2:
+                    return True
 
         # Check for 3-word phrase repetition
         if len(words) > 10:

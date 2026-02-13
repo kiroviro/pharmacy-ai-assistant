@@ -6,6 +6,7 @@ with Open WebUI and other OpenAI-compatible clients.
 """
 
 import asyncio
+import gc
 import json
 import time
 import uuid
@@ -13,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import Optional
 
+import mlx.core as mx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
@@ -36,7 +38,8 @@ init_default_logger(level=settings.log_level, json_format=settings.log_json)
 logger = get_logger("viapharma.api")
 
 # Thread pool for running blocking operations
-executor = ThreadPoolExecutor(max_workers=4)
+# Using 1 worker to serialize requests for memory safety (MLX doesn't handle concurrent inference well)
+executor = ThreadPoolExecutor(max_workers=1)
 
 # Rate limiting storage (simple in-memory implementation)
 rate_limit_store: dict[str, list[float]] = {}
@@ -240,7 +243,12 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     logger.info("Shutting down...")
-    executor.shutdown(wait=False)
+    executor.shutdown(wait=True)  # Wait for pending tasks to complete
+    gc.collect()
+    try:
+        mx.metal.clear_cache()
+    except Exception:
+        pass
 
 
 def _warmup_models():
@@ -325,6 +333,27 @@ async def request_middleware(request: Request, call_next):
 
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Response-Time"] = f"{duration_ms:.2f}ms"
+    return response
+
+
+@app.middleware("http")
+async def memory_cleanup_middleware(request: Request, call_next):
+    """
+    Aggressive memory cleanup after heavy inference requests.
+    Prevents VRAM accumulation and server crashes.
+    """
+    response = await call_next(request)
+
+    # Cleanup after chat completion requests (heavy inference)
+    if "/chat/completions" in str(request.url.path) or "/v1/chat/completions" in str(request.url.path):
+        try:
+            # Force Python garbage collection
+            gc.collect()
+            # Clear MLX metal cache (releases GPU memory on Apple Silicon)
+            mx.metal.clear_cache()
+        except Exception:
+            pass  # Silently ignore cleanup errors
+
     return response
 
 
