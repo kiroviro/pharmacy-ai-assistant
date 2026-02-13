@@ -22,10 +22,14 @@ from src.logging_config import get_logger
 logger = get_logger("viapharma.medical_model")
 
 # =============================================================================
-# CACHE CONFIGURATION
+# CONFIGURATION
 # =============================================================================
 # Cache size for medical reasoning results (number of unique queries)
 REASONING_CACHE_SIZE = 500
+
+# Retry configuration for model inference
+MAX_INFERENCE_RETRIES = 3
+RETRY_BASE_DELAY_SECONDS = 0.5  # Exponential backoff: 0.5s, 1.0s, 2.0s
 
 
 @dataclass
@@ -374,6 +378,66 @@ class MedicalModel:
         prompt = f"<start_of_turn>user\n{system_prompt}\n\n{user_message}<end_of_turn>\n<start_of_turn>model\n"
         return prompt
 
+    def _generate_with_retry(
+        self,
+        prompt: str,
+        max_tokens: int,
+        sampler,
+        operation_name: str = "inference"
+    ) -> str:
+        """
+        Generate model response with automatic retry on transient failures.
+
+        Uses exponential backoff for retries. Handles common failure modes:
+        - Memory allocation errors
+        - Timeout/resource exhaustion
+        - Transient model errors
+
+        Args:
+            prompt: The formatted prompt to send to the model
+            max_tokens: Maximum tokens to generate
+            sampler: The sampler to use for generation
+            operation_name: Name of the operation for logging
+
+        Returns:
+            Generated response string
+
+        Raises:
+            Exception: If all retries fail
+        """
+        last_error = None
+
+        for attempt in range(MAX_INFERENCE_RETRIES):
+            try:
+                response = generate(
+                    self.model,
+                    self.tokenizer,
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    sampler=sampler,
+                )
+                return response
+
+            except Exception as e:
+                last_error = e
+                error_type = type(e).__name__
+
+                if attempt < MAX_INFERENCE_RETRIES - 1:
+                    delay = RETRY_BASE_DELAY_SECONDS * (2 ** attempt)
+                    logger.warning(
+                        f"{operation_name} failed (attempt {attempt + 1}/{MAX_INFERENCE_RETRIES}), "
+                        f"retrying in {delay:.1f}s: {error_type}: {str(e)[:100]}"
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.error(
+                        f"{operation_name} failed after {MAX_INFERENCE_RETRIES} attempts: "
+                        f"{error_type}: {str(e)[:200]}"
+                    )
+
+        # All retries exhausted
+        raise last_error
+
     def get_medical_reasoning(
         self,
         symptoms: str,
@@ -413,17 +477,16 @@ class MedicalModel:
         if not self._loaded:
             self.load()
 
-        # Run inference
+        # Run inference with retry logic
         start_time = time.perf_counter()
         prompt = self._format_prompt(symptoms, system_prompt)
 
         sampler = make_sampler(temp=temperature)
-        response = generate(
-            self.model,
-            self.tokenizer,
+        response = self._generate_with_retry(
             prompt=prompt,
             max_tokens=max_tokens,
             sampler=sampler,
+            operation_name="medical_reasoning"
         )
         inference_time_ms = (time.perf_counter() - start_time) * 1000
 
@@ -715,12 +778,11 @@ Replace the numbers with your chosen product numbers. Output nothing else.
         prompt = self._format_prompt(refinement_prompt)
 
         sampler = make_sampler(temp=0.0)  # Fully deterministic for product selection
-        response = generate(
-            self.model,
-            self.tokenizer,
+        response = self._generate_with_retry(
             prompt=prompt,
             max_tokens=50,
             sampler=sampler,
+            operation_name="product_selection"
         )
 
         # Parse the response to get product indices

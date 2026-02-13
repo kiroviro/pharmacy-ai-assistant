@@ -5,15 +5,28 @@ Uses keyword-based classification with medical terms in Bulgarian and English.
 Fast and efficient - no ML model needed for this use case.
 
 DEPRECATION NOTICE:
-    This module is being replaced by the unified LLM processor
-    (src/unified_processor.py) which provides semantic understanding
-    instead of keyword matching.
+==================
+    Status: DEPRECATED - Scheduled for removal
+    Replacement: src/unified_processor.py (LLM-based semantic classification)
 
-    When unified_processor_enabled=True in config, this module is only
-    used as a fallback. It will be fully deprecated in a future release.
+    Timeline:
+    - Phase 1 (Current): Runs in parallel with unified processor as fallback
+    - Phase 2 (v2.0): Will emit deprecation warnings when used
+    - Phase 3 (v3.0): Will be removed entirely
 
-    Migration: Set VIAPHARMA_UNIFIED_PROCESSOR_ENABLED=true to use the
-    new LLM-driven intent classification.
+    Migration Path:
+    1. Set VIAPHARMA_UNIFIED_PROCESSOR_ENABLED=true in your environment
+    2. Test that unified processor handles your queries correctly
+    3. Report any classification issues to improve unified processor
+    4. Once stable, remove intent_classifier imports from your code
+
+    Why Deprecated:
+    - Keyword matching cannot understand semantic context
+    - False positives on words like "delivery", "payment" that contain medical substrings
+    - Cannot handle novel phrasing or misspellings
+    - Unified processor uses LLM for true intent understanding
+
+    Set VIAPHARMA_UNIFIED_PROCESSOR_ENABLED=true to use the new system.
 """
 
 import re

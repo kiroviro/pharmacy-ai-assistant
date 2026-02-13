@@ -525,45 +525,6 @@ class Translator:
 
         return result
 
-    def translate_batch_to_english(self, texts: list[str]) -> list[str]:
-        """
-        Translate multiple Bulgarian texts to English (more efficient).
-
-        Args:
-            texts: List of Bulgarian texts
-
-        Returns:
-            List of English translations
-        """
-        if not texts:
-            return []
-
-        self._load_bg_to_en()
-
-        # Filter out empty strings and track positions
-        non_empty = [(i, t) for i, t in enumerate(texts) if t and t.strip()]
-        if not non_empty:
-            return texts
-
-        # Translate non-empty texts
-        indices, valid_texts = zip(*non_empty)
-        inputs = self._bg_to_en_tokenizer(
-            list(valid_texts),
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=512
-        )
-        translated = self._bg_to_en_model.generate(**inputs)
-        results = [self._bg_to_en_tokenizer.decode(t, skip_special_tokens=True) for t in translated]
-
-        # Reconstruct full list
-        output = list(texts)
-        for idx, result in zip(indices, results):
-            output[idx] = result
-
-        return output
-
     def translate_batch_to_bulgarian(self, texts: list[str]) -> list[str]:
         """
         Translate multiple English texts to Bulgarian (more efficient).
