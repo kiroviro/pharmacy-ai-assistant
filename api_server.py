@@ -468,6 +468,18 @@ async def get_metrics():
 
     cache_stats = _get_cache_stats(pipeline)
 
+    # Log cache performance for operational monitoring
+    if cache_stats and metrics_store["requests_total"] > 0:
+        for cache_name, stats in cache_stats.items():
+            if stats and isinstance(stats, dict):
+                # Handle nested translator stats
+                if cache_name == "translator":
+                    for direction, dir_stats in stats.items():
+                        if dir_stats:
+                            _log_cache_performance(f"translator_{direction}", dir_stats)
+                else:
+                    _log_cache_performance(cache_name, stats)
+
     try:
         products_count = pipeline.product_store.collection.count()
     except Exception:
@@ -493,8 +505,30 @@ async def get_metrics():
     })
 
 
+def _log_cache_performance(cache_name: str, stats: dict) -> None:
+    """Log cache performance metrics for operational visibility."""
+    hit_rate = stats.get("hit_rate_percent", 0.0)
+    hits = stats.get("hits", 0)
+    misses = stats.get("misses", 0)
+    size = stats.get("size", 0)
+
+    # Only log if cache has seen usage
+    if hits + misses > 0:
+        logger.info(
+            f"Cache performance: {cache_name}",
+            extra={
+                "cache": cache_name,
+                "hit_rate_percent": round(hit_rate, 2),
+                "hits": hits,
+                "misses": misses,
+                "size": size,
+                "efficiency": "good" if hit_rate >= 50 else "poor" if hit_rate < 30 else "moderate"
+            }
+        )
+
+
 def _get_cache_stats(pipeline) -> dict:
-    """Get all cache stats (translator and medical model)."""
+    """Get all cache stats (translator, medical model, unified processor)."""
     result = {}
 
     # Translator cache stats
@@ -519,6 +553,16 @@ def _get_cache_stats(pipeline) -> dict:
             # Verify it's a real dict (not a Mock)
             if isinstance(stats, dict):
                 result["medical_reasoning"] = stats
+        except Exception:
+            pass
+
+    # Unified processor cache stats
+    if hasattr(pipeline, '_unified_processor') and pipeline._unified_processor is not None and hasattr(pipeline._unified_processor, 'get_cache_stats'):
+        try:
+            stats = pipeline._unified_processor.get_cache_stats()
+            # Verify it's a real dict (not a Mock)
+            if isinstance(stats, dict):
+                result["unified_processor"] = stats
         except Exception:
             pass
 
