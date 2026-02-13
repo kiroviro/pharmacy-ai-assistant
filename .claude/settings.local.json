@@ -27,7 +27,32 @@
       "Bash(git reset:*)",
       "Bash(mlx_vlm generate:*)",
       "Bash(git restore:*)",
-      "Bash(by stiff neck, seek attention\"\\) which were triggering false positives.\nNow the safety layer only checks the user''s actual symptoms.\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(by stiff neck, seek attention\"\\) which were triggering false positives.\nNow the safety layer only checks the user''s actual symptoms.\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(pip-audit:*)",
+      "Bash(done)",
+      "Skill(lyra-optimizer)",
+      "Bash(lsof:*)",
+      "Bash(pgrep:*)",
+      "Bash(ps:*)",
+      "Bash(git rm:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(timeout 180 python3:*)",
+      "Bash(timeout 120 python3:*)",
+      "Bash(timeout 60 python3:*)",
+      "Bash(timeout 300 python:*)",
+      "Bash(docker inspect:*)",
+      "Bash(docker pull:*)",
+      "Bash(du:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker image:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker restart:*)",
+      "Bash(chmod:*)",
+      "Bash(timeout 600 python3:*)",
+      "Bash(timeout 3600 python3:*)",
+      "Bash(timeout 300 python3 -m pytest:*)"
     ]
   }
 }

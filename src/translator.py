@@ -530,6 +530,14 @@ class Translator:
             # Dictionary made significant changes, use it
             return dict_result
 
+        # For long text, translate sentence-by-sentence first (MarianMT does better on short segments)
+        SENTENCE_BY_SENTENCE_THRESHOLD = 200
+        if len(text.strip()) > SENTENCE_BY_SENTENCE_THRESHOLD and "." in text:
+            sentences = [s.strip() for s in text.split(".") if s.strip()]
+            if len(sentences) > 1:
+                translated_sentences = [self.translate_to_bulgarian(s) for s in sentences]
+                return ". ".join(translated_sentences)
+
         # Check cache
         cached = self._cache_en_to_bg.get(text)
         if cached is not None:
@@ -576,17 +584,24 @@ class Translator:
         return result
 
     # Common English words that slip through translation and their Bulgarian replacements
+    # Expanded for Issue 6: mixed English/Bulgarian - target 95%+ Bulgarian
     _ENGLISH_REMNANTS = {
         # Common verbs
         "help": "помага",
-        "helps": "помага",
+        "helps": "помагат",
         "use": "използвайте",
         "take": "вземете",
-        "reduce": "намалява",
-        "relieve": "облекчава",
+        "reduce": "намаляват",
+        "relieve": "облекчават",
+        "relieves": "облекчава",
         "may": "може",
         "can": "може",
         "should": "трябва",
+        "loosen": "разхлабят",
+        "making": "прави",
+        "easier": "по-лесно",
+        "last": "продължават",
+        "like": "като",
         # Common nouns
         "symptoms": "симптоми",
         "pain": "болка",
@@ -598,10 +613,20 @@ class Translator:
         "medication": "лекарство",
         "medicine": "лекарство",
         "treatment": "лечение",
+        "congestion": "запушване",
+        "mucus": "слуз",
+        "saline": "солен",
+        "spray": "спрей",
+        "days": "дни",
+        "antihistamines": "антихистамини",
+        "antipyretics": "антипиретици",
+        "decongestants": "деконгестанти",
         # Common adjectives
         "severe": "тежък",
         "mild": "лек",
         "chronic": "хроничен",
+        "usual": "обикновено",
+        "typically": "обикновено",
         # Common prepositions/connectors
         "with": "с",
         "for": "за",
@@ -686,15 +711,18 @@ class Translator:
         translated = self._en_to_bg_model.generate(**inputs)
         results = [self._en_to_bg_tokenizer.decode(t, skip_special_tokens=True) for t in translated]
 
-        # Apply dictionary and validate each result
+        # Apply dictionary, cleanup, and validate each result
         for idx, original, result in zip(indices, valid_texts, results):
             # Apply dictionary to model output (catches terms model missed)
             result = self._apply_medical_dictionary(result)
+            # Final cleanup: replace English remnants (Issue 6: mixed language)
+            result = self._cleanup_english_remnants(result)
             bg_ratio = self._calculate_bulgarian_ratio(result)
 
             if bg_ratio < 0.4:
                 # Model failed - use dictionary result or original with dictionary applied
                 dict_fallback = self._apply_medical_dictionary(original)
+                dict_fallback = self._cleanup_english_remnants(dict_fallback)
                 if self._calculate_bulgarian_ratio(dict_fallback) > bg_ratio:
                     result = dict_fallback
 

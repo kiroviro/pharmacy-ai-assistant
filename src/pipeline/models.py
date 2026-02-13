@@ -76,36 +76,35 @@ class Product:
         )
 
     def to_display_string(self) -> str:
-        """Format product for display in chat with clean markdown."""
+        """Format product for display in chat — title, price, short desc, buy link."""
         lines = []
 
-        # Title - make it a link if URL available
+        # Title (linked if URL available)
         if self.product_url:
             lines.append(f"**[{self.title}]({self.product_url})**")
         else:
             lines.append(f"**{self.title}**")
 
-        # Price and brand on same line
+        # Price and brand
         price_line = f"💰 {self.price_bgn:.2f} лв ({self.price_eur:.2f} €)"
         if self.brand:
             price_line += f"  •  🏷️ {self.brand}"
         lines.append(price_line)
 
-        # Description - clean formatting, smart truncation
+        # Short description (max 150 chars — keep product cards compact)
         if self.description:
-            desc = self.description[:300].strip()
-            if len(self.description) > 300:
-                # Cut at last complete sentence or word
+            desc = self.description[:150].strip()
+            if len(self.description) > 150:
                 last_period = desc.rfind('.')
-                if last_period > 200:
+                if last_period > 80:
                     desc = desc[:last_period + 1]
                 else:
                     desc = desc.rsplit(' ', 1)[0] + "..."
             lines.append(f"\n{desc}")
 
-        # Add to cart link
+        # Prominent buy link (stands out)
         if self.product_url:
-            lines.append(f"\n🛒 [Виж продукта / Купи]({self.product_url})")
+            lines.append(f"\n**🛒 [Виж продукта / Купи]({self.product_url})**")
 
         return "\n".join(lines)
 

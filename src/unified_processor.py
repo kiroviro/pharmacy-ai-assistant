@@ -202,7 +202,7 @@ class UnifiedProcessor:
         model_path: str = "./models/medgemma-4b-it-bf16",
         cache_size: int = 500,
         temperature: float = 0.1,
-        max_tokens: int = 800,
+        max_tokens: int = 1200,
     ):
         self.model_path = model_path
         self.temperature = temperature

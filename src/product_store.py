@@ -39,9 +39,10 @@ TREATMENT_CATEGORY_MAP = {
     "analgesics": ["болкоуспокояващи", "аналгетици", "болка"],
     "pain relief": ["болкоуспокояващи", "аналгетици", "болка"],
     "pain": ["болкоуспокояващи", "аналгетици"],
-    # Fever
-    "antipyretics": ["температура", "антипиретици", "простуда"],
-    "fever": ["температура", "антипиретици", "простуда"],
+    # Fever: include "болка" to pull in pure paracetamol/ibuprofen products
+    # whose titles say "при болка и температура" (not just cold/flu combos)
+    "antipyretics": ["температура", "болка и температура", "парацетамол таблетки"],
+    "fever": ["температура", "болка и температура", "парацетамол таблетки"],
     # Allergies
     "antihistamines": ["алергия", "антихистамини"],
     "allergy": ["алергия", "антихистамини"],
@@ -60,6 +61,86 @@ TREATMENT_CATEGORY_MAP = {
     # Vitamins/Supplements
     "vitamins": ["витамини", "добавки", "минерали"],
     "supplements": ["добавки", "хранителни добавки"],
+}
+
+
+# Homeopathy detection patterns
+_HOMEOPATHY_MARKERS = [
+    "хомеопатич", "homeopathic", "homeopathy", "хомеопатия",
+    # Potency notations (CH, DH, D, C followed by numbers)
+    " ch ", " сн ", " dh ", " дн ",
+    "5 ch", "9 ch", "15 ch", "30 ch", "200 ch",
+    "5 сн", "9 сн", "15 сн", "30 сн",
+    "3 dh", "6 dh", "12 dh", "30 dh",
+    "3 дн", "6 дн", "12 дн",
+    "boiron", "буарон",
+]
+
+
+def _is_homeopathic_product(combined_text: str) -> bool:
+    """Detect if a product is homeopathic based on its text content."""
+    text = combined_text.lower()
+    return any(marker in text for marker in _HOMEOPATHY_MARKERS)
+
+
+# Mapping from treatment type → ingredient keywords for composition boosting
+# These are the actual ingredient names that should appear in product.composition
+TREATMENT_INGREDIENT_KEYWORDS = {
+    "antipyretics": [
+        "парацетамол", "paracetamol", "acetaminophen",
+        "ибупрофен", "ibuprofen",
+        "аспирин", "aspirin", "ацетилсалицилова",
+        "метамизол", "аналгин", "metamizole",
+    ],
+    "analgesics": [
+        "парацетамол", "paracetamol", "acetaminophen",
+        "ибупрофен", "ibuprofen",
+        "диклофенак", "diclofenac",
+        "напроксен", "naproxen",
+        "метамизол", "аналгин", "metamizole",
+        "аспирин", "aspirin",
+    ],
+    "antihistamines": [
+        "лоратадин", "loratadine",
+        "цетиризин", "cetirizine",
+        "фексофенадин", "fexofenadine",
+    ],
+    "antacids": [
+        "омепразол", "omeprazole",
+        "пантопразол", "pantoprazole",
+        "ранитидин", "ranitidine",
+    ],
+    "antidiarrheal": [
+        "лоперамид", "loperamide",
+        "смектит", "smectite", "смекта",
+    ],
+    "cough": [
+        "декстрометорфан", "dextromethorphan",
+        "гвайфенезин", "guaifenesin",
+    ],
+    "decongestants": [
+        "псевдоефедрин", "pseudoephedrine",
+        "фенилефрин", "phenylephrine",
+        "ксилометазолин", "xylometazoline",
+        "оксиметазолин", "oxymetazoline",
+    ],
+    "fever": [  # Alias for antipyretics
+        "парацетамол", "paracetamol", "acetaminophen",
+        "ибупрофен", "ibuprofen",
+        "аспирин", "aspirin",
+        "метамизол", "аналгин",
+    ],
+    "pain relief": [  # Alias for analgesics
+        "парацетамол", "paracetamol",
+        "ибупрофен", "ibuprofen",
+        "диклофенак", "diclofenac",
+        "напроксен", "naproxen",
+    ],
+    "pain": [
+        "парацетамол", "paracetamol",
+        "ибупрофен", "ibuprofen",
+        "диклофенак", "diclofenac",
+    ],
 }
 
 
@@ -268,17 +349,21 @@ class ProductStore:
         n_results: int = 10,
         where: Optional[dict] = None,
         keyword_boost: float = KEYWORD_BOOST_PER_MATCH,
+        preferred_ingredients: list[str] | None = None,
     ) -> list[dict]:
         """
         Hybrid search combining semantic similarity with keyword boosting.
 
         Improves handling of exact product/brand name queries like "Нурофен" or "Панадол".
+        Also supports ingredient-based boosting for symptom-driven selection.
 
         Args:
             query: Search query (Bulgarian or English)
             n_results: Number of results to return
             where: Optional filter conditions
             keyword_boost: Score boost per keyword match in title (0-0.2 recommended)
+            preferred_ingredients: Optional list of ingredient keywords to boost in
+                composition (e.g., ["парацетамол", "paracetamol", "ибупрофен"])
 
         Returns:
             List of products with combined semantic + keyword scores
@@ -302,6 +387,7 @@ class ProductStore:
         for product in semantic_results:
             title_lower = product.get("title", "").lower()
             brand_lower = product.get("brand", "").lower()
+            composition_lower = product.get("composition", "").lower()
 
             # Count keyword matches in title and brand
             title_matches = sum(1 for term in query_terms if term in title_lower)
@@ -315,9 +401,50 @@ class ProductStore:
             if exact_title_match:
                 boost += keyword_boost * 2
 
-            # Apply boost (cap at 1.0)
+            # ---- Ingredient-based composition boost (symptom-driven ranking) ----
+            # If preferred_ingredients are specified, boost products whose composition
+            # contains those ingredients. This ensures e.g. paracetamol/ibuprofen
+            # products rank above homeopathy for a fever query.
+            if preferred_ingredients:
+                combined_text = f"{composition_lower} {title_lower}"
+                ingredient_hits = sum(
+                    1 for ing in preferred_ingredients if ing.lower() in combined_text
+                )
+                if ingredient_hits > 0:
+                    # Strong boost: 0.15 per matching ingredient
+                    boost += ingredient_hits * 0.15
+
+                    # Extra "simplicity bonus" for single-ingredient products
+                    # (not combo cold/flu) — these are more appropriate for
+                    # single-symptom queries like "fever" or "headache"
+                    combo_markers = [
+                        "простуда и грип", "грип и настинка", "настинка и грип",
+                        "cold and flu", "cold & flu",
+                        "простуда и кашлица", "грипни симптоми",
+                    ]
+                    desc_lower = product.get("description", "").lower()
+                    full_text = f"{title_lower} {desc_lower}"
+                    is_combo = any(m in full_text for m in combo_markers)
+                    if not is_combo:
+                        boost += 0.15  # Extra boost for simple products
+                        logger.debug(
+                            f"Simplicity bonus for '{product.get('title', '')[:30]}': +0.15"
+                        )
+
+            # ---- Homeopathy penalty ----
+            # Homeopathic products get a score penalty when the search is for
+            # a specific clinical treatment type (indicated by preferred_ingredients).
+            if preferred_ingredients:
+                combined_text = f"{composition_lower} {title_lower} {product.get('description', '').lower()}"
+                if _is_homeopathic_product(combined_text):
+                    boost -= 0.20  # Significant penalty
+                    logger.debug(
+                        f"Homeopathy penalty for '{product.get('title', '')[:30]}': -0.20"
+                    )
+
+            # Apply boost (cap at 1.0, floor at 0.0)
             original_score = product["score"]
-            product["score"] = min(1.0, original_score + boost)
+            product["score"] = max(0.0, min(1.0, original_score + boost))
             product["keyword_boost"] = boost  # Store for debugging
 
             if boost > 0:
@@ -340,6 +467,8 @@ class ProductStore:
         Category-aware search using treatment type mapping.
 
         Maps treatment types (from MedGemma) to product categories for better filtering.
+        Also passes preferred ingredients for composition-based boosting, ensuring
+        symptom-driven selection (e.g., paracetamol for fever, not homeopathy).
 
         Args:
             query: Search query
@@ -358,15 +487,28 @@ class ProductStore:
                 category_keywords.extend(keywords)
                 break
 
+        # Find preferred ingredient keywords for this treatment type
+        preferred_ingredients = None
+        for key, ingredients in TREATMENT_INGREDIENT_KEYWORDS.items():
+            if key in treatment_lower or treatment_lower in key:
+                preferred_ingredients = ingredients
+                break
+
         if category_keywords:
             # Enhance query with category context
             category_context = " ".join(category_keywords[:2])
             enhanced_query = f"{query} {category_context}"
             logger.debug(f"Category-enhanced query: '{enhanced_query}'")
-            return self.hybrid_search(enhanced_query, n_results=n_results)
+            return self.hybrid_search(
+                enhanced_query, n_results=n_results,
+                preferred_ingredients=preferred_ingredients,
+            )
 
-        # Fallback to regular hybrid search
-        return self.hybrid_search(query, n_results=n_results)
+        # Fallback to regular hybrid search (still with ingredient boost if available)
+        return self.hybrid_search(
+            query, n_results=n_results,
+            preferred_ingredients=preferred_ingredients,
+        )
 
     def get_product_by_sku(self, sku: str) -> Optional[dict]:
         """Get a specific product by SKU."""

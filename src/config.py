@@ -41,7 +41,7 @@ class Settings(BaseSettings):
         default="./models/medgemma-4b-it-bf16",
         description="Path to MedGemma model"
     )
-    medgemma_max_tokens: int = Field(default=200, description="Max tokens for MedGemma")
+    medgemma_max_tokens: int = Field(default=500, description="Max tokens for MedGemma")
     medgemma_temperature: float = Field(default=0.3, description="Temperature for MedGemma")
 
     # Translation models (Helsinki-NLP)
@@ -120,7 +120,7 @@ class Settings(BaseSettings):
         description="Temperature for unified processor (low for consistency)"
     )
     unified_processor_max_tokens: int = Field(
-        default=800,
+        default=1200,
         description="Max tokens for unified processor response"
     )
     unified_processor_cache_size: int = Field(

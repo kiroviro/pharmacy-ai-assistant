@@ -99,6 +99,8 @@ Reject these with is_pharmacy_related=false:
     "see_doctor": true/false
   }
 }
+
+IMPORTANT: Always fill explanation_bg, self_care_tips_bg, and warnings_bg in Bulgarian. The user sees ONLY these Bulgarian fields; the English fields are for internal use. Write the _bg fields in correct Bulgarian.
 </output_format>
 
 <examples>
@@ -249,6 +251,8 @@ Response:
 }
 </example>
 </examples>
+
+Remember: Always provide explanation_bg, self_care_tips_bg, and warnings_bg in Bulgarian so the user gets responses in Bulgarian without translation.
 
 Now analyze the query and output ONLY valid JSON:"""
 

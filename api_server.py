@@ -426,6 +426,24 @@ async def health_check():
     )
 
 
+@app.post("/cache/clear")
+async def clear_cache():
+    """Clear in-memory caches (translator, medical model, unified processor). Use before e2e tests for a clean run."""
+    pipeline = get_pipeline()
+    cleared = []
+    if pipeline._translator is not None and hasattr(pipeline._translator, "clear_cache"):
+        pipeline._translator.clear_cache()
+        cleared.append("translator")
+    if pipeline._medical_model is not None and hasattr(pipeline._medical_model, "clear_cache"):
+        pipeline._medical_model.clear_cache()
+        cleared.append("medical_model")
+    if pipeline._unified_processor is not None and hasattr(pipeline._unified_processor, "clear_cache"):
+        pipeline._unified_processor.clear_cache()
+        cleared.append("unified_processor")
+    logger.info("Caches cleared", extra={"cleared": cleared})
+    return {"ok": True, "cleared": cleared}
+
+
 @app.get("/hints")
 async def get_hints():
     """Get suggested medical queries in Bulgarian for UI display."""
@@ -677,6 +695,14 @@ async def _process_with_timeout(user_message: str):
         raise HTTPException(
             status_code=504,
             detail="Заявката отне твърде дълго. Моля, опитайте отново."
+        )
+    except Exception as e:
+        logger.error(f"Pipeline error: {e}", exc_info=True)
+        metrics_store["requests_total"] += 1
+        metrics_store["requests_failed"] += 1
+        raise HTTPException(
+            status_code=500,
+            detail="Вътрешна грешка при обработка. Проверете логовете на сървъра."
         )
 
 

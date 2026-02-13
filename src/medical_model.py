@@ -384,7 +384,6 @@ class MedicalModel:
         max_tokens: int,
         sampler,
         operation_name: str = "inference",
-        repetition_penalty: float = 1.15
     ) -> str:
         """
         Generate model response with automatic retry on transient failures.
@@ -399,7 +398,6 @@ class MedicalModel:
             max_tokens: Maximum tokens to generate
             sampler: The sampler to use for generation
             operation_name: Name of the operation for logging
-            repetition_penalty: Penalty for repeating tokens (1.0 = no penalty, >1.0 = discourage repetition)
 
         Returns:
             Generated response string
@@ -417,7 +415,6 @@ class MedicalModel:
                     prompt=prompt,
                     max_tokens=max_tokens,
                     sampler=sampler,
-                    repetition_penalty=repetition_penalty,
                 )
                 return response
 
@@ -444,7 +441,7 @@ class MedicalModel:
     def get_medical_reasoning(
         self,
         symptoms: str,
-        max_tokens: int = 200,
+        max_tokens: int = 500,
         temperature: float = 0.3,
         system_prompt: str = None,
         use_cache: bool = True
@@ -758,7 +755,7 @@ class MedicalModel:
 
         products_str = "\n".join(product_list)
 
-        refinement_prompt = f"""Based on the customer's symptoms and the medical analysis, select the {max_products} most appropriate products.
+        refinement_prompt = f"""You are a virtual pharmacist. Select the {max_products} most clinically appropriate products.
 
 Customer query: {user_query}
 
@@ -767,12 +764,14 @@ Medical analysis: {medical_reasoning}
 Available products (with details):
 {products_str}
 
-Select the {max_products} best products by their numbers. Consider:
-- Product relevance level (prefer high/medium over low)
-- How well the product matches the symptoms
-- Active ingredients in composition
-- Any contraindications mentioned (CRITICAL: avoid products with contraindications matching user conditions)
-- Effectiveness for the condition
+Selection criteria (in priority order):
+1. PREFER products with proven active pharmaceutical ingredients (paracetamol, ibuprofen, cetirizine, etc.) over homeopathic or herbal products
+2. For single symptoms, PREFER simple single-ingredient products over combination cold/flu products
+3. Active ingredients must match the treatment type (e.g., antipyretics → paracetamol/ibuprofen, NOT cough suppressants)
+4. Avoid products whose contraindications match the user's conditions
+5. Prefer high/medium relevance over low
+
+CRITICAL: A "fever only" query should get a pure antipyretic (paracetamol or ibuprofen), NOT a combination cold/flu product and NOT homeopathy.
 
 Respond with ONLY valid JSON in this exact format: {{"selected": [1, 3, 5]}}
 Replace the numbers with your chosen product numbers. Output nothing else.
