@@ -369,7 +369,7 @@ class Pipeline:
         # Check Bulgarian patterns
         for pattern in self._COMPARISON_PATTERNS_BG:
             if pattern.search(text_lower):
-                drugs = self._extract_drug_names(text_lower)
+                drugs = self._extract_comparison_drugs(text_lower)
                 if len(drugs) >= 2:
                     logger.debug(f"Comparison query detected (BG)", extra={"drugs": drugs})
                     return True, drugs
@@ -377,15 +377,15 @@ class Pipeline:
         # Check English patterns
         for pattern in self._COMPARISON_PATTERNS_EN:
             if pattern.search(text_lower):
-                drugs = self._extract_drug_names(text_lower)
+                drugs = self._extract_comparison_drugs(text_lower)
                 if len(drugs) >= 2:
                     logger.debug(f"Comparison query detected (EN)", extra={"drugs": drugs})
                     return True, drugs
 
         return False, []
 
-    def _extract_drug_names(self, text: str) -> list[str]:
-        """Extract drug names from a comparison query."""
+    def _extract_comparison_drugs(self, text: str) -> list[str]:
+        """Extract drug names from a comparison query for comparison handler."""
         text_lower = text.lower()
         found_drugs = []
 
@@ -524,8 +524,9 @@ class Pipeline:
             if products:
                 lines.append(f"\n**Налични продукти с {display_name}:**")
                 for i, p in enumerate(products[:2], 1):
-                    price_bgn = f"{p.price:.2f} лв" if p.price else "N/A"
-                    lines.append(f"{i}. [{p.title}]({p.url}) - {price_bgn}")
+                    price_str = f"{p.price_bgn:.2f} лв" if p.price_bgn else "N/A"
+                    url = p.product_url or "#"
+                    lines.append(f"{i}. [{p.title}]({url}) - {price_str}")
             else:
                 lines.append(f"\n⚠️ *Няма налични продукти с {display_name} в каталога*")
 
@@ -1048,10 +1049,12 @@ class Pipeline:
             if translated and self._calculate_bulgarian_ratio(translated) > 0.3:
                 parts.append(f"**🔬 Какво се случва:** {translated}\n")
 
-        # Treatment category
+        # Treatment category (with validation to avoid mixed EN/BG output)
         if reasoning.treatment_category:
             translated_treatment = self.translator.translate_to_bulgarian(reasoning.treatment_category)
-            parts.append(f"**💊 Препоръчано лечение:** {translated_treatment}\n")
+            # Only include if translation is sufficiently Bulgarian (>50%)
+            if translated_treatment and self._calculate_bulgarian_ratio(translated_treatment) > 0.5:
+                parts.append(f"**💊 Препоръчано лечение:** {translated_treatment}\n")
 
         # Self-care tips (use Bulgarian from LLM if available)
         tips_bg = reasoning.self_care_tips_bg or []
