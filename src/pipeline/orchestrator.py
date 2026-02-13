@@ -1442,6 +1442,16 @@ class Pipeline:
         parts.append("## 🛒 Подходящи продукти\n")
         if products:
             displayed_products = self._filter_by_severity(products, symptom_count)
+            # Add combo note when single symptom + cold/flu combo product shown
+            if symptom_count <= 1:
+                any_combo = any(
+                    len(extract_all_product_ingredients(p)) >= 2
+                    or "грип" in (getattr(p, "title") or "").lower()
+                    or "настинка" in (getattr(p, "title") or "").lower()
+                    for p in displayed_products
+                )
+                if any_combo:
+                    parts.append("*Комбиниран продукт за грип/настинка. При единствен симптом (напр. само температура) по-подходящ е продукт само с една активна съставка.*\n")
             for i, product in enumerate(displayed_products, 1):
                 if i > 1:
                     parts.append("---")
@@ -2914,6 +2924,12 @@ class Pipeline:
         ingredient = extract_product_ingredient(product)
         all_ingredients = extract_all_product_ingredients(product)
         is_combo = len(all_ingredients) >= 2
+        # Also treat cold/flu multi-symptom products as combo (title/desc keywords)
+        if not is_combo:
+            td = f"{(getattr(product, 'title') or '')} {(getattr(product, 'description') or '')}".lower()
+            if any(kw in td for kw in ["грип и настинка", "при грип", "за грип", "грипни симптоми", "простуд"]):
+                if any(kw in td for kw in ["температур", "кашлица", "хрема", "болка"]):
+                    is_combo = True
 
         # ✔ Active ingredient line (from product's own Състав)
         ingredient_bg = INGREDIENT_BG_NAMES.get(ingredient, "") if ingredient else ""

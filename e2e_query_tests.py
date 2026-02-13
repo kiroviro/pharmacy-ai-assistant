@@ -623,9 +623,24 @@ def analyze_response(result: dict, catalog_titles: set | None = None) -> dict:
     scores = {}
 
     # === LANGUAGE CHECK ===
+    # Exclude URLs and brand-name-like tokens (all-caps/ASCII) for fair ratio
+    text_for_ratio = re.sub(r"https?://[^\s\)\]\>]+", "", response)
+    words = text_for_ratio.split()
+    filtered_chars = []
+    for w in words:
+        # Skip likely brand names: all-ASCII, 2+ chars, mostly uppercase or title
+        clean_w = "".join(c for c in w if c.isalnum() or c in ".-/'")
+        if len(clean_w) >= 2 and clean_w.isascii():
+            upper = sum(1 for c in clean_w if c.isupper())
+            if upper >= len(clean_w) * 0.5:  # Brand-like (PARACETAMOL, etc.)
+                continue
+        filtered_chars.extend(list(w))
+        filtered_chars.append(" ")
+    ratio_text = "".join(filtered_chars)
+    ratio_text_lower = ratio_text.lower()
     bulgarian_chars = set("абвгдежзийклмнопрстуфхцчшщъьюя")
-    bg_count = sum(1 for c in response_lower if c in bulgarian_chars)
-    total_alpha = sum(1 for c in response_lower if c.isalpha())
+    bg_count = sum(1 for c in ratio_text_lower if c in bulgarian_chars)
+    total_alpha = sum(1 for c in ratio_text_lower if c.isalpha())
     bg_ratio = bg_count / total_alpha if total_alpha > 0 else 0
     scores["bulgarian_ratio"] = round(bg_ratio, 2)
 
@@ -842,10 +857,11 @@ def analyze_response(result: dict, catalog_titles: set | None = None) -> dict:
     }
 
 
-def run_all_tests():
-    """Run all test queries and collect results."""
+def run_all_tests(queries_dict=None):
+    """Run all test queries and collect results. Use queries_dict for --quick mode."""
+    queries_to_run = queries_dict or TEST_QUERIES
     all_results = []
-    total_queries = sum(len(queries) for queries in TEST_QUERIES.values())
+    total_queries = sum(len(queries) for queries in queries_to_run.values())
     current = 0
 
     catalog_titles = load_catalog_titles()
@@ -856,7 +872,7 @@ def run_all_tests():
     print(f"E2E QUERY TEST SUITE - {total_queries} QUERIES")
     print(f"{'='*80}\n")
 
-    for category, queries in TEST_QUERIES.items():
+    for category, queries in queries_to_run.items():
         print(f"\n{'='*80}")
         print(f"Category: {category.upper()} ({len(queries)} queries)")
         print('='*80)
@@ -1277,8 +1293,26 @@ def print_report(report: dict):
 
 
 def main():
-    """Main entry point."""
+    """Main entry point. Use --quick to run only 12 sample queries (~2 min)."""
+    import sys
+    quick_mode = "--quick" in sys.argv
+    if quick_mode:
+        # Subset: 2 per category that hit catalog path + 2 symptom queries
+        sample = {
+            "symptoms": ["Боли ме главата от сутринта", "Имам температура 38 градуса"],
+            "medications": ["Имате ли наличен Парацетамол 500 мг?", "Имате ли прахчета за грип?"],
+            "children": ["Какво може да се даде при температура на бебе 8 месеца?", "Имате ли сироп за кашлица за 2-годишно дете?"],
+            "cosmetics": ["Имате ли крем за атопична кожа?", "Имате ли шампоан против косопад?"],
+            "chronic": ["Имате ли лекарства за диабет?", "Имате ли нещо за поддържане на стави?"],
+            "non_medical": ["Как се доставя поръчката?"],
+        }
+        TEST_QUERIES_RUN = {k: v for k, v in sample.items()}
+        print("⚠️  QUICK MODE: running 12 sample queries\n")
+    else:
+        TEST_QUERIES_RUN = TEST_QUERIES
+
     print(f"Starting E2E query tests at {datetime.now().isoformat()}\n")
+    print("⚠️  Ensure API server is running the latest code (restart with: pkill -f api_server; python api_server.py)\n")
 
     try:
         response = requests.get("http://localhost:8000/health", timeout=5)
@@ -1303,7 +1337,7 @@ def main():
         print(f"         (Could not clear cache: {e}; continuing)\n")
 
     print("Step 2: Running query tests...\n")
-    results = run_all_tests()
+    results = run_all_tests(TEST_QUERIES_RUN if quick_mode else None)
     report = generate_report(results)
     print_report(report)
 
