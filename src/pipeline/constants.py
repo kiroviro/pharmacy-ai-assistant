@@ -166,6 +166,12 @@ CATALOG_PATTERNS_BG = [
     re.compile(r'^всички\s+', re.IGNORECASE),
     # Brand-specific queries
     re.compile(r'^продукти\s+(на|от)\s+', re.IGNORECASE),
+    # Substitute/alternative queries
+    re.compile(r'(генеричен|генерик)\s+(заместител|аналог)', re.IGNORECASE),
+    re.compile(r'заместител\s+(на|за)\s+', re.IGNORECASE),
+    re.compile(r'алтернатива\s+(на|за)\s+', re.IGNORECASE),
+    re.compile(r'аналог\s+(на|за)\s+', re.IGNORECASE),
+    re.compile(r'вместо\s+', re.IGNORECASE),
 ]
 
 CATALOG_PATTERNS_EN = [
@@ -175,7 +181,109 @@ CATALOG_PATTERNS_EN = [
     re.compile(r'^do\s+you\s+(have|sell|offer)\s+', re.IGNORECASE),
     re.compile(r'^list\s+(of\s+)?', re.IGNORECASE),
     re.compile(r'^all\s+.+\s+products', re.IGNORECASE),
+    # Substitute/alternative queries
+    re.compile(r'(generic\s+)?(substitute|alternative|replacement)\s+(for|to)\s+', re.IGNORECASE),
+    re.compile(r'instead\s+of\s+', re.IGNORECASE),
+    re.compile(r'equivalent\s+(to|of)\s+', re.IGNORECASE),
 ]
+
+# =============================================================================
+# MEDICATION COMPARISON PATTERNS
+# =============================================================================
+
+COMPARISON_PATTERNS_BG = [
+    re.compile(r'кое\s+е\s+по-?\s*(силно|добро|ефективно|бързо).+или', re.IGNORECASE),
+    re.compile(r'кой\s+е\s+по-?\s*(силен|добър|ефективен|бърз).+или', re.IGNORECASE),
+    re.compile(r'.+\s+или\s+.+\s*[-–]\s*кое?\s+е\s+по-', re.IGNORECASE),
+    re.compile(r'\b\w+\s+(vs\.?|срещу|versus)\s+\w+', re.IGNORECASE),
+    re.compile(r'разлика\s+(между|на)\s+.+\s+(и|или)\s+', re.IGNORECASE),
+    re.compile(r'сравни(те)?\s+.+\s+(с|и|или)\s+', re.IGNORECASE),
+    re.compile(r'\b\w+\s+или\s+\w+\s+(за|при|срещу)\s+', re.IGNORECASE),
+    re.compile(r'да\s+(взема|пия|използвам)\s+.+\s+или\s+', re.IGNORECASE),
+]
+
+COMPARISON_PATTERNS_EN = [
+    re.compile(r'which\s+is\s+(stronger|better|more effective|faster).+or', re.IGNORECASE),
+    re.compile(r'\b\w+\s+(vs\.?|versus)\s+\w+', re.IGNORECASE),
+    re.compile(r'difference\s+between\s+.+\s+and\s+', re.IGNORECASE),
+    re.compile(r'compare\s+.+\s+(with|and|to|or)\s+', re.IGNORECASE),
+    re.compile(r'\b\w+\s+or\s+\w+\s+for\s+', re.IGNORECASE),
+    re.compile(r'should\s+I\s+(take|use)\s+.+\s+or\s+', re.IGNORECASE),
+]
+
+# Common drug names for extraction (both Bulgarian and English/Latin)
+COMMON_DRUG_NAMES = {
+    'ибупрофен', 'ibuprofen', 'нурофен', 'nurofen', 'адвил', 'advil',
+    'диклофенак', 'diclofenac', 'волтарен', 'voltaren',
+    'аспирин', 'aspirin', 'ацетилсалицилова',
+    'напроксен', 'naproxen', 'алеве', 'aleve',
+    'кетопрофен', 'ketoprofen', 'индометацин', 'indomethacin',
+    'парацетамол', 'paracetamol', 'ацетаминофен', 'acetaminophen',
+    'панадол', 'panadol', 'ефералган', 'efferalgan',
+    'лоратадин', 'loratadine', 'кларитин', 'claritin',
+    'цетиризин', 'cetirizine', 'зиртек', 'zyrtec',
+    'дезлоратадин', 'desloratadine',
+    'декстрометорфан', 'dextromethorphan',
+    'гвайфенезин', 'guaifenesin',
+    'псевдоефедрин', 'pseudoephedrine',
+    'омепразол', 'omeprazole', 'пантопразол', 'pantoprazole',
+    'ранитидин', 'ranitidine', 'фамотидин', 'famotidine',
+}
+
+# Symptom words that indicate medical (non-catalog) queries
+SYMPTOM_WORDS = {
+    'болка', 'боли', 'болки', 'температура', 'треска', 'кашлица',
+    'хрема', 'гадене', 'повръщане', 'диария', 'запек', 'сърбеж',
+    'обрив', 'подуване', 'възпаление', 'инфекция', 'алергия',
+    'pain', 'ache', 'fever', 'cough', 'nausea', 'rash', 'swelling',
+}
+
+# Patterns to strip from catalog queries when extracting search term
+CATALOG_REMOVE_PATTERNS = [
+    r'какви\s+марки?\s+(на\s+)?',
+    r'какви\s+',
+    r'имате\s+ли\s+',
+    r'предлагате\s+ли\s+',
+    r'продавате\s+ли\s+',
+    r'покажи\s+(ми\s+)?',
+    r'търся\s+',
+    r'списък\s+(с|на)\s+',
+    r'всички\s+',
+    r'продукти\s+(на|от)\s+',
+    r'\s+(имате|предлагате|продавате)\s*\??$',
+    r'\bналичен\b', r'\bналични\b', r'\bналичност\b', r'\bв\s+наличност\b',
+    r'(генеричен|генерик)\s+(заместител|аналог)\s*(на|за)?\s*',
+    r'заместител\s+(на|за)\s*',
+    r'алтернатива\s+(на|за)\s*',
+    r'аналог\s+(на|за)\s*',
+    r'вместо\s+',
+    r'^what\s+brands?\s+of\s+',
+    r'^show\s+me\s+',
+    r'^looking\s+for\s+',
+    r'^do\s+you\s+(have|sell|offer)\s+',
+    r'^list\s+(of\s+)?',
+    r'\s+(do you have|do you offer|are available)\s*\??$',
+    r'\bavailable\b',
+    r'\bin\s+stock\b',
+    r'(generic\s+)?(substitute|alternative|replacement)\s+(for|to)\s*',
+    r'instead\s+of\s*',
+    r'equivalent\s+(to|of)\s*',
+]
+
+# Map drug name variants to canonical form for comparison deduplication
+COMPARISON_CANONICAL_MAP = {
+    'ibuprofen': 'ибупрофен', 'нурофен': 'ибупрофен', 'nurofen': 'ибупрофен',
+    'адвил': 'ибупрофен', 'advil': 'ибупрофен',
+    'diclofenac': 'диклофенак', 'волтарен': 'диклофенак', 'voltaren': 'диклофенак',
+    'paracetamol': 'парацетамол', 'acetaminophen': 'парацетамол',
+    'панадол': 'парацетамол', 'panadol': 'парацетамол',
+    'aspirin': 'аспирин',
+}
+
+HELP_CLARIFICATION_WORDS = {
+    'помощ', 'помогнете', 'здравей', 'здрасти', 'здравейте',
+    'help', 'hi', 'hello', 'привет',
+}
 
 # Product categories that indicate catalog queries (no symptoms)
 CATALOG_CATEGORIES = {

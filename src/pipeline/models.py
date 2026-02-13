@@ -76,14 +76,18 @@ class Product:
         )
 
     def to_display_string(self) -> str:
-        """Format product for display in chat — title, price, short desc, buy link."""
+        """Format product for display in chat — title (## heading), image, price, desc, buy link."""
         lines = []
 
-        # Title (linked if URL available)
+        # Title first as ## heading (matches other section headings like "Подходящи продукти")
         if self.product_url:
-            lines.append(f"**[{self.title}]({self.product_url})**")
+            lines.append(f"## [{self.title}]({self.product_url})")
         else:
-            lines.append(f"**{self.title}**")
+            lines.append(f"## {self.title}")
+
+        # Product image second (Markdown — universally supported, HTML <img> often not rendered)
+        if self.image_url and self.image_url.strip():
+            lines.append(f"![{self.title}]({self.image_url})")
 
         # Price and brand
         price_line = f"💰 {self.price_bgn:.2f} лв ({self.price_eur:.2f} €)"
@@ -102,9 +106,14 @@ class Product:
                     desc = desc.rsplit(' ', 1)[0] + "..."
             lines.append(f"\n{desc}")
 
-        # Prominent buy link (stands out)
+        # Prominent buy link — separator before, after, and extra below before ✔ Съдържа
         if self.product_url:
-            lines.append(f"\n**🛒 [Виж продукта / Купи]({self.product_url})**")
+            lines.append(
+                f"\n\n---\n"
+                f"🛒 **[Виж продукта / Купи]({self.product_url})**\n"
+                f"---\n"
+                f"---"
+            )
 
         return "\n".join(lines)
 

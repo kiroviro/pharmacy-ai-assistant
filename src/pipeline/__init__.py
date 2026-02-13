@@ -10,6 +10,8 @@ Modules:
 - constants: Keyword patterns for condition extraction and query detection
 - models: Product and PipelineResult dataclasses
 - conditions: User condition extraction and contraindication filtering
+- product_ingredients: Ingredient recognition and product utilities
+- query_router: Query type detection (catalog, comparison, help)
 - orchestrator: Main Pipeline class
 """
 
