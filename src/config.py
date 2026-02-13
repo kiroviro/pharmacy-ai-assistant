@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     # Logging
     # ==========================================================================
     log_level: str = Field(default="INFO", description="Log level (DEBUG, INFO, WARNING, ERROR)")
-    log_json: bool = Field(default=False, description="Use JSON format for logs")
+    log_json: bool = Field(default=True, description="Use JSON format for logs (recommended for production)")
     log_file: Optional[str] = Field(default=None, description="Optional log file path")
 
     # ==========================================================================
