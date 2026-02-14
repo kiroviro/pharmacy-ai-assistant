@@ -38,7 +38,10 @@ init_default_logger(level=settings.log_level, json_format=settings.log_json)
 logger = get_logger("viapharma.api")
 
 # Thread pool for running blocking operations
-# Using 1 worker to serialize requests for memory safety (MLX doesn't handle concurrent inference well)
+# Using 1 worker to serialize requests for memory safety
+# VALIDATED: MLX segfaults with concurrent inference (exit code 139)
+# Test: tests/load_test_concurrency.py - parallel execution causes immediate crash
+# For scaling: use horizontal pod replication, not threading (see MLX_CONCURRENCY_TEST_RESULTS.md)
 executor = ThreadPoolExecutor(max_workers=1)
 
 # Rate limiting storage (simple in-memory implementation)
