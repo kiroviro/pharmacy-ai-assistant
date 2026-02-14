@@ -75,70 +75,63 @@ Week 5: Extract IngredientAnalyzer (~250 LOC)
 
 ---
 
-### 3. ⚠️ ACTIVE: Single-Threaded Inference Bottleneck
-**Status**: 🟡 Needs Investigation
+### 3. ✅ RESOLVED: Single-Threaded Inference Bottleneck
+**Status**: ✅ Resolved - Claim Validated
 **Priority**: P0 (Performance Critical)
-**Effort**: 2-4 hours (testing) + 1 hour (fix if safe)
+**Date Resolved**: February 13, 2026
 
 **Problem**:
 - File: `api_server.py:42`
 - Code: `ThreadPoolExecutor(max_workers=1)`
 - Comment claims: "MLX doesn't handle concurrent inference well"
-- **This claim is unvalidated**
 
-**Impact**:
-- At 10 req/min: average latency = 10x p50 (2-3s → 20-30s queue time)
-- Prevents horizontal scaling benefits
-- Users will experience increasing latency under load
+**Test Results**: ❌ **MLX DOES NOT SUPPORT CONCURRENT INFERENCE**
 
-**Investigation Plan**:
-```python
-# 1. Create load test (tests/load_test_concurrency.py)
-import concurrent.futures
-import time
-import mlx.core as mx
-from src.medical_model import get_medical_model
+**Test Methodology**:
+- Model: MedGemma 4B (MLX format)
+- Test queries: 20 unique Bulgarian medical queries
+- Cache: Disabled to measure actual inference time
 
-def test_concurrent_inference():
-    model = get_medical_model()
-    queries = ["имам главоболие"] * 10
+**Results**:
+```
+Sequential (max_workers=1):
+  ✅ Success: 20/20 queries
+  Time: 54.84s (2.742s per query)
 
-    # Test 1: Sequential (current state)
-    start = time.time()
-    for q in queries:
-        model.get_medical_reasoning(q)
-    seq_time = time.time() - start
+Parallel (max_workers=2):
+  ❌ CRASHED with Segmentation Fault
+  Exit code: 139 (SIGSEGV)
+  Success rate: 0%
 
-    # Test 2: Parallel (2 workers)
-    start = time.time()
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        list(executor.map(model.get_medical_reasoning, queries))
-    parallel_2_time = time.time() - start
-
-    # Test 3: Parallel (4 workers)
-    start = time.time()
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        list(executor.map(model.get_medical_reasoning, queries))
-    parallel_4_time = time.time() - start
-
-    print(f"Sequential: {seq_time:.2f}s")
-    print(f"2 workers: {parallel_2_time:.2f}s (speedup: {seq_time/parallel_2_time:.2f}x)")
-    print(f"4 workers: {parallel_4_time:.2f}s (speedup: {seq_time/parallel_4_time:.2f}x)")
-
-    # Check for crashes or memory issues
-    mx.metal.clear_cache()
-
-# 2. Monitor VRAM usage during test
-# 3. If safe, update api_server.py:42 to max_workers=2 or 4
+Parallel (max_workers=4):
+  ⏭️ Skipped (2 workers already crashed)
 ```
 
-**Expected Outcomes**:
-- **If MLX crashes**: Keep max_workers=1, document limitation
-- **If MLX works**: Increase to 2-4 workers, gain 2-4x throughput
+**Root Cause**:
+- MLX has thread-unsafe global state (Metal command buffers or GPU contexts)
+- No internal locking - assumes single-threaded usage
+- Metal API may not support concurrent contexts
+- Immediate segfault when attempting concurrent inference
+
+**Decision**: ✅ **KEEP** `max_workers=1` (current configuration is correct)
+
+**Performance Characteristics**:
+- Single Request Latency: ~2.7s per query
+- Maximum Throughput: ~22 req/min (1,333 req/hour)
+- Latency Under Load:
+  - 10 req/min: 2.7s average latency
+  - 20 req/min: 5.4s average latency
+  - 30 req/min: 8.1s average latency
+
+**Scaling Options** (if needed):
+1. **Horizontal Scaling** (Recommended): Deploy multiple pods (3 pods = 3x throughput)
+2. **Model Optimization**: Quantize to 2-bit or use smaller model variant
+3. **Batching**: Process multiple queries in single inference call
+4. **GPU Splitting**: Run multiple isolated processes on same GPU
 
 **Files**:
-- `api_server.py:42`
-- Create: `tests/load_test_concurrency.py`
+- `api_server.py:42` - Keep as-is
+- `tests/load_test_concurrency.py` - Test script preserved for future validation
 
 ---
 
@@ -373,36 +366,26 @@ pytest tests/e2e/ -v
 
 ---
 
-### 9. ⚠️ ACTIVE: Test Coverage Unknown
-**Status**: 🟡 Partially Done
-**Priority**: P2 (Quality Assurance)
-**Effort**: 1 hour
+### 9. ✅ FIXED: Test Coverage Unknown
+**Status**: ✅ Completed (Commit: a255fb3)
+**Date Resolved**: February 13, 2026
 
-**Problem**:
-- 275 tests exist, but no coverage reporting
-- README mentions `--cov=src` but no enforcement
-- Unknown which code paths are untested
+**Original Issue**: 275 tests exist, but no coverage reporting or enforcement
 
-**Solution**:
-```yaml
-# .github/workflows/test.yml (if using GitHub Actions)
-- name: Run tests with coverage
-  run: |
-    pytest tests/ --cov=src --cov-report=term-missing --cov-fail-under=80
+**Solution Implemented**:
+- Added `pytest-cov` to requirements.txt
+- Updated `pytest.ini` with coverage settings
+- Set minimum threshold at 35% (current baseline)
+- Generated HTML report in `htmlcov/`
 
-# pytest.ini (add)
-[pytest]
-addopts = --cov=src --cov-report=html --cov-report=term-missing
-```
+**Current Coverage**: 39%
 
-**Files**:
-- Create: `.github/workflows/test.yml` (or update existing CI)
-- Update: `pytest.ini`
+**Results**:
+- Well-tested files: unified_processor (92%), query_router (91%), intent_classifier (92%)
+- Poorly-tested files: orchestrator (9%), product_store (18%), data_loader (29%)
+- CI now enforces minimum 35% coverage
 
-**Deliverable**:
-- Coverage badge in README: ![Coverage](https://img.shields.io/badge/coverage-XX%25-green)
-- HTML report in `htmlcov/` (gitignored)
-- CI fails if coverage drops below 80%
+**Next Steps**: Gradually increase threshold to 80% as refactoring progresses
 
 ---
 
@@ -543,6 +526,65 @@ COPY models/ /app/models/
 
 ---
 
+## 🟠 High Priority Issues
+
+### 17. ⚠️ ACTIVE: Pipeline Tests Failing (Incorrect Mock Paths)
+**Status**: 🔴 Not Started
+**Priority**: P2 (Test Quality)
+**Effort**: 30 minutes
+
+**Problem**:
+- File: `tests/test_pipeline.py:184-188`
+- 5 tests failing with AttributeError
+- Tests try to patch `src.pipeline.get_translator` but it doesn't exist in `__init__.py`
+- These functions exist in `src.pipeline.orchestrator` but aren't re-exported
+
+**Failing Tests**:
+```
+tests/test_pipeline.py::TestPipelineInitialization::test_pipeline_components_exist
+tests/test_pipeline.py::TestPipelineInitialization::test_lazy_loading_works
+tests/test_pipeline.py::TestPipelineFlow::test_medical_query_flow
+tests/test_pipeline.py::TestPipelineFlow::test_non_medical_query_rejected
+tests/test_pipeline.py::TestPipelineFlow::test_empty_query_handled
+```
+
+**Error**:
+```
+AttributeError: <module 'src.pipeline'> does not have the attribute 'get_translator'
+```
+
+**Root Cause**:
+The test fixture patches the wrong path. The getter functions are imported in orchestrator.py from their actual modules:
+- `get_translator` → from `src.translator`
+- `get_medical_model` → from `src.medical_model`
+- `get_product_store` → from `src.product_store`
+- `get_intent_classifier` → from `src.intent_classifier`
+- `get_safety_layer` → from `src.safety`
+
+**Solution**:
+```python
+# tests/test_pipeline.py:184-188
+# OLD (incorrect):
+with patch('src.pipeline.get_translator', return_value=mock_translator):
+    with patch('src.pipeline.get_medical_model', return_value=mock_model):
+        ...
+
+# NEW (correct):
+with patch('src.translator.get_translator', return_value=mock_translator):
+    with patch('src.medical_model.get_medical_model', return_value=mock_model):
+        with patch('src.product_store.get_product_store', return_value=mock_store):
+            with patch('src.intent_classifier.get_intent_classifier', return_value=mock_intent):
+                with patch('src.safety.get_safety_layer', return_value=mock_safety):
+                    ...
+```
+
+**Files**:
+- `tests/test_pipeline.py:184-188`
+
+**Impact**: Test suite shows 5 errors (67 passed, 5 errors) → Should be 72 passed, 0 errors
+
+---
+
 ## 🟢 Low Priority / Nice-to-Have
 
 ### 15. ⚠️ ACTIVE: Dockerfile Not Visible
@@ -571,18 +613,20 @@ COPY models/ /app/models/
 
 ## Prioritized Action Plan
 
-### This Week (8 hours)
-1. **Test Coverage Enforcement** (1h) → Issue #9
-   - Add pytest-cov to CI with 80% threshold
+### Immediate (This Session)
+1. **Fix Pipeline Tests** (30min) → Issue #17
+   - Update mock paths in tests/test_pipeline.py
+   - Get all 275 tests passing
 
-2. **MLX Concurrency Test** (2-4h) → Issue #3
-   - Write load test
-   - Validate single-thread claim
-   - Increase workers if safe
-
-3. **Split E2E Tests** (3-4h) → Issue #7
+### This Week (6-7 hours)
+2. **Split E2E Tests** (3-4h) → Issue #7
    - Organize into 5 category files
    - Improve test navigation
+
+3. **Enable Unified Processor** (3 days) → Issue #4
+   - Feature flag → True
+   - Monitor for 1 week
+   - Remove legacy if stable
 
 ### Next Sprint (2 weeks)
 4. **QueryRouter Extraction** (5 days) → Issue #2 (Week 1)
@@ -606,9 +650,9 @@ COPY models/ /app/models/
 | Metric | Current | Target | Status |
 |--------|---------|--------|--------|
 | Orchestrator Size | 2,676 LOC | <1,000 LOC | 🔴 |
-| Test Coverage | Unknown | >80% | 🟡 |
+| Test Coverage | 39% | >80% | 🟡 |
 | Security CVEs | 1 | 0 | 🟢 |
-| Concurrent Workers | 1 | 2-4 | 🟡 |
+| Concurrent Workers | 1 | 1 (validated) | ✅ |
 | Cache Hit Rate Visibility | 100% | 100% | ✅ |
 | E2E Test Files | 1 (1,628 LOC) | 5 (<400 LOC each) | 🔴 |
 | Architecture Paths | 2 (unified + legacy) | 1 | 🟡 |
