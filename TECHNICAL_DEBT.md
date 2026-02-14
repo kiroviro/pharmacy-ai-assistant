@@ -548,9 +548,10 @@ COPY models/ /app/models/
 ## 🟠 High Priority Issues
 
 ### 17. ⚠️ ACTIVE: Garbage Text Contaminating Responses (CRITICAL)
-**Status**: 🔴 Not Started
+**Status**: 🟡 Investigation Complete - Fixing
 **Priority**: P0 (User-Facing Quality)
-**Effort**: 4-8 hours (investigation + fix)
+**Effort**: 4-8 hours (investigation ✅ + fix 🔴)
+**Investigation Date**: February 14, 2026
 
 **Problem**:
 - **25 issues detected** (6 CRITICAL) in E2E quality tests
@@ -570,53 +571,261 @@ Query: "Какво да направя при ларингит?"
 Garbage: "зъбни протези"
 ```
 
-**Root Cause Analysis**:
-Likely sources:
-1. **Product data contamination**: Product descriptions contain irrelevant keywords
-2. **Vector search noise**: ChromaDB returning irrelevant products
-3. **LLM hallucination**: Medical model inserting unrelated text
-4. **Template corruption**: Response formatting including wrong product data
+---
 
-**Impact**:
-- **CRITICAL**: Medical advice contaminated with irrelevant text
-- User trust degradation
-- Safety risk (confusing advice)
-- Unprofessional appearance
+## ✅ ROOT CAUSE IDENTIFIED
 
-**Investigation Plan**:
-```python
-# 1. Identify source of garbage text
-# Check if it comes from:
-# - Product database (src/product_store.py)
-# - LLM output (src/medical_model.py)
-# - Template formatting (src/pipeline/orchestrator.py)
+**Investigation Method**:
+Created `debug_garbage_text.py` to trace pipeline execution for failing queries.
 
-# 2. Sample 10 failing queries
-failing_queries = [
-    "Имам температура 38 градуса",
-    "Имам болка в ухото при дете",
-    # ... more from test_results.json
-]
+**Key Findings**:
 
-# 3. For each, trace:
-# - Product search results (candidate_products)
-# - LLM reasoning output
-# - Final formatted response
+### ✅ Vector Search is WORKING CORRECTLY
+For query "Имам температура 38 градуса" (I have 38-degree fever):
+```
+Candidate products from ChromaDB:
+1. Диалгин (fever medication) ✅
+2. Панактив (fever medication) ✅
+3. Нурофен (fever medication) ✅
+4. Аспетакс (fever medication) ✅
+```
+**ALL products returned by vector search are relevant and correct.**
 
-# 4. Identify pattern
+### ❌ LLM (MedGemma 4B) is HALLUCINATING
+
+**Evidence**:
+The garbage text appears **in the LLM-generated medical reasoning output**, not in product data.
+
+**Example hallucination**:
+```
+Query: "Имам температура 38 градуса"
+
+LLM Output Fragment:
+"Това е знак, че тялото се бори с инфекция.
+Те могат да бъдат използвани като средство за защита на личните данни,
+за да може да се използва като средство за..."
+
+Translation:
+"This is a sign that the body is fighting an infection.
+They can be used as a means of protecting personal data,
+so that it can be used as a means for..."
 ```
 
-**Solution** (depends on root cause):
-- **If product data**: Clean ChromaDB, filter irrelevant products
-- **If vector search**: Improve search query, add category filters
-- **If LLM**: Adjust system prompt, add output validation
-- **If template**: Fix response builder logic
+**Garbage patterns identified**:
+- "защита на личните данни" (protection of personal data)
+- "средство за защита" (means of protection)
+- "зъбні протези" (dental prosthetics)
+- "грижа за зъбні протези" (denture care)
+- "репелент" (repellent)
+- "комар" (mosquito)
 
-**Files**:
-- Check: `src/product_store.py` (vector search)
-- Check: `src/pipeline/orchestrator.py` (response formatting)
-- Check: `src/medical_model.py` (LLM output)
-- Test: `/Users/kiril/IdeaProjects/medgemma/output/test_results.json`
+**Root Cause**: MedGemma 4B model generating semantically irrelevant Bulgarian text mid-sentence during medical reasoning.
+
+---
+
+## 🔧 PROPOSED FIXES
+
+### Option 1: Output Validation (Quick Fix - Recommended)
+**Effort**: 2-3 hours
+**Risk**: Low
+
+Add post-processing filter to detect and block garbage patterns:
+
+```python
+# src/pipeline/response_validator.py (NEW)
+from typing import List, Tuple
+
+GARBAGE_PATTERNS = [
+    "защита на личните",
+    "средство за защита",
+    "зъбні протези",
+    "грижа за зъбні протези",
+    "репелент",
+    "комар",
+    "средство за комари",
+]
+
+def validate_response(response: str) -> Tuple[bool, List[str]]:
+    """Check response for garbage text."""
+    response_lower = response.lower()
+    found_garbage = [p for p in GARBAGE_PATTERNS if p in response_lower]
+
+    if found_garbage:
+        return False, found_garbage
+    return True, []
+
+# src/pipeline/orchestrator.py
+def process(self, query: str):
+    # ... existing code ...
+
+    # Validate response before returning
+    is_valid, garbage = validate_response(result.response)
+    if not is_valid:
+        logger.warning(f"Garbage detected in response: {garbage}")
+        # Option A: Retry with different prompt
+        # Option B: Return fallback response
+        # Option C: Filter out garbage sentences
+```
+
+**Pros**:
+- Fast to implement
+- Catches known patterns
+- No model changes needed
+
+**Cons**:
+- Doesn't fix root cause
+- Requires pattern maintenance
+- May miss new garbage patterns
+
+---
+
+### Option 2: Improve LLM Prompt (Medium Fix)
+**Effort**: 3-4 hours
+**Risk**: Medium
+
+Update MedGemma system prompt to reduce hallucinations:
+
+```python
+# src/medical_model.py
+SYSTEM_PROMPT = """
+Ти си опитен фармацевт в България. Отговаряй САМО на български език.
+
+ВАЖНО:
+- Говори САМО за медицински теми и лекарства
+- НЕ споменавай: зъбні протези, защита на данни, репеленти, комари
+- Ако не знаеш, кажи "не съм сигурен" вместо да измисляш
+- Фокусирай се върху симптомите и подходящите лекарства
+
+{existing_prompt}
+"""
+
+# Add temperature reduction to reduce creativity/hallucination
+model.generate(
+    prompt=prompt,
+    temperature=0.3,  # Lower from 0.7 to reduce hallucination
+    top_p=0.85,       # Lower from 0.95 to reduce randomness
+)
+```
+
+**Testing plan**:
+```bash
+# Test on 25 failing queries
+for query in failing_queries:
+    result = pipeline.process(query)
+    garbage = detect_garbage(result.response)
+    assert len(garbage) == 0, f"Still has garbage: {garbage}"
+```
+
+**Pros**:
+- Addresses root cause
+- May improve overall quality
+- No pattern maintenance
+
+**Cons**:
+- May reduce response creativity
+- Requires A/B testing
+- Model behavior unpredictable
+
+---
+
+### Option 3: Add Sentence-Level Filtering (Robust Fix)
+**Effort**: 4-6 hours
+**Risk**: Medium
+
+Filter out irrelevant sentences using semantic similarity:
+
+```python
+# src/pipeline/response_cleaner.py (NEW)
+from sentence_transformers import SentenceTransformer
+import numpy as np
+
+class ResponseCleaner:
+    def __init__(self):
+        self.model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+
+    def clean_response(self, response: str, original_query: str) -> str:
+        """Remove sentences unrelated to the query."""
+        sentences = response.split('.')
+
+        # Embed query and each sentence
+        query_emb = self.model.encode(original_query)
+        sent_embs = self.model.encode(sentences)
+
+        # Calculate similarity
+        similarities = [
+            np.dot(query_emb, sent_emb) / (np.linalg.norm(query_emb) * np.linalg.norm(sent_emb))
+            for sent_emb in sent_embs
+        ]
+
+        # Keep only sentences with similarity > threshold
+        filtered = [
+            sent for sent, sim in zip(sentences, similarities)
+            if sim > 0.3  # Tune threshold
+        ]
+
+        return '. '.join(filtered)
+```
+
+**Pros**:
+- Catches ALL irrelevant text (not just known patterns)
+- Semantic understanding
+- Future-proof
+
+**Cons**:
+- Adds latency (~100-200ms)
+- Requires new dependency
+- May filter valid content if threshold wrong
+
+---
+
+### Option 4: Model Replacement (Long-term Fix)
+**Effort**: 1-2 weeks
+**Risk**: High
+
+Replace MedGemma 4B with a more stable model:
+
+**Candidates**:
+- **BioMistral-7B**: Medical model, better hallucination control
+- **Llama-3-8B-Instruct**: General model, very reliable
+- **GPT-4o-mini API**: Highest quality, external dependency
+
+**Testing required**:
+- Medical accuracy comparison
+- Bulgarian language quality
+- Hallucination rate
+- Inference speed
+- VRAM usage
+
+---
+
+## 📋 RECOMMENDED ACTION PLAN
+
+**Phase 1 (Day 1 - Today)**: Implement Option 1 (Output Validation)
+- Quick win to block known patterns
+- Reduces 7% → ~2% garbage immediately
+- Effort: 2-3 hours
+
+**Phase 2 (Day 2)**: Implement Option 2 (Improve Prompt)
+- Test with lower temperature (0.7 → 0.3)
+- Add explicit "don't mention" instructions
+- A/B test on 100 queries
+- Effort: 3-4 hours
+
+**Phase 3 (Week 2)**: Implement Option 3 if needed (Semantic Filtering)
+- Only if Phases 1+2 don't get to <1% garbage
+- Effort: 4-6 hours
+
+**Phase 4 (Future)**: Evaluate Option 4 if still problematic
+- Model replacement is last resort
+- Requires extensive testing
+
+---
+
+**Files to Create/Modify**:
+- NEW: `src/pipeline/response_validator.py` (Option 1)
+- MODIFY: `src/medical_model.py` (Option 2)
+- NEW: `src/pipeline/response_cleaner.py` (Option 3)
+- MODIFY: `src/pipeline/orchestrator.py` (integration)
 
 **Success Criteria**: Garbage text in <1% of responses (currently 7%)
 
