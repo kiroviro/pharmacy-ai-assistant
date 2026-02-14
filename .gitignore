@@ -73,3 +73,9 @@ logs/
 
 # Development artifacts (generated improvement plans, stale docs)
 IMPROVEMENT_PLAN.md
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml

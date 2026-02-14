@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/kiril/medgemma/actions/workflows/ci.yml/badge.svg)](https://github.com/kiril/medgemma/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Coverage](https://img.shields.io/badge/coverage-39%25-yellow.svg)](htmlcov/index.html)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Bulgarian-language medical chatbot that recommends OTC products based on symptoms. Powered by MedGemma on Mac M-series.
@@ -140,9 +141,26 @@ Or create a `.env` file (see `.env.example`).
 # Run all tests
 pytest tests/ -v
 
-# Run with coverage
+# Run with coverage (enforced minimum: 35%)
 pytest tests/ --cov=src --cov-report=term-missing
+
+# Generate HTML coverage report
+pytest tests/ --cov=src --cov-report=html
+# Open htmlcov/index.html in browser
 ```
+
+**Current Coverage**: 39% (baseline established Feb 2026)
+
+Coverage by component:
+- ✅ Unified Processor: 92%
+- ✅ Query Router: 91%
+- ✅ Intent Classifier: 92%
+- ✅ Safety Layer: 77%
+- ⚠️ Medical Model: 59%
+- 🔴 Orchestrator: 9% (god object - scheduled for refactor)
+- 🔴 Product Store: 18%
+
+**Goal**: Increase to 60% by Q2 2026, 80% by Q3 2026
 
 ## Architecture
 
