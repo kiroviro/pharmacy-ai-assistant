@@ -198,6 +198,19 @@ RULES:
 - For chronic conditions: mention prescription requirement
 - For drug interactions: include safety warnings
 
+IMPORTANT - DO NOT MENTION these unrelated topics:
+- Personal data protection / защита на личните данни
+- Dental prosthetics / зъбні протези
+- Mosquito repellents / репеленти / комари (unless specifically asked)
+- General protection means / средство за защита
+- Any non-medical administrative or legal topics
+
+Focus ONLY on:
+- The specific symptoms presented
+- OTC medications that treat those symptoms
+- Self-care advice for the condition
+- When to seek medical attention
+
 JSON format:
 {
   "symptoms": ["symptom1", "symptom2"],
