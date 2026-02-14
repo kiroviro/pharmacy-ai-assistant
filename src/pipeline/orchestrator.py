@@ -886,6 +886,7 @@ class Pipeline:
         parts.append("")
 
         # ── SECTION 2: Active ingredients ───────────────────────────────
+        # ALWAYS show this section when products are present (Issue #18)
         parts.append("---")
         treatment_type = reasoning.treatment_category or ""
         recommended_ingredients = self._get_recommended_ingredients(treatment_type)
@@ -898,16 +899,21 @@ class Pipeline:
             recommended_ingredients = list(seen)[:5]
         symptom_count = len(llm_result.extraction.symptoms) if llm_result.extraction.symptoms else 1
 
-        if recommended_ingredients:
+        # Show ingredients section if we have products (even if ingredient extraction failed)
+        if products:
             parts.append("## 💊 Подходящи активни съставки\n")
-            ingredient_names_bg = [
-                INGREDIENT_BG_NAMES.get(ing, ing) for ing in recommended_ingredients
-            ]
-            for name_bg in ingredient_names_bg:
-                parts.append(f"• **{name_bg}**")
-            action_text = self._get_treatment_action_text(treatment_type)
-            if action_text:
-                parts.append(f"\n{action_text}")
+            if recommended_ingredients:
+                ingredient_names_bg = [
+                    INGREDIENT_BG_NAMES.get(ing, ing) for ing in recommended_ingredients
+                ]
+                for name_bg in ingredient_names_bg:
+                    parts.append(f"• **{name_bg}**")
+                action_text = self._get_treatment_action_text(treatment_type)
+                if action_text:
+                    parts.append(f"\n{action_text}")
+            else:
+                # Fallback when ingredient extraction fails (Issue #18)
+                parts.append("*Проверете активните съставки и дозировката в листовката на продукта.*")
 
         # Self-care tip (inline, one line with 💧) — filter garbage from LLM
         tips_bg = reasoning.self_care_tips_bg or []
@@ -1981,21 +1987,34 @@ class Pipeline:
         parts.append("")
 
         # ── SECTION 2: Active ingredients ───────────────────────────────
+        # ALWAYS show this section when products are present (Issue #18)
         parts.append("---")
         treatment_type = medical_reasoning.treatment_type or ""
         recommended_ingredients = self._get_recommended_ingredients(treatment_type)
+        # Fallback: derive from products when LLM omits
+        if not recommended_ingredients and products:
+            seen = set()
+            for p in products[:5]:
+                for ing in extract_all_product_ingredients(p):
+                    seen.add(ing)
+            recommended_ingredients = list(seen)[:5]
         symptom_count = len(medical_reasoning.symptoms) if medical_reasoning.symptoms else 1
 
-        if recommended_ingredients:
+        # Show ingredients section if we have products (even if ingredient extraction failed)
+        if products:
             parts.append("## 💊 Подходящи активни съставки\n")
-            ingredient_names_bg = [
-                INGREDIENT_BG_NAMES.get(ing, ing) for ing in recommended_ingredients
-            ]
-            for name_bg in ingredient_names_bg:
-                parts.append(f"• **{name_bg}**")
-            action_text = self._get_treatment_action_text(treatment_type)
-            if action_text:
-                parts.append(f"\n{action_text}")
+            if recommended_ingredients:
+                ingredient_names_bg = [
+                    INGREDIENT_BG_NAMES.get(ing, ing) for ing in recommended_ingredients
+                ]
+                for name_bg in ingredient_names_bg:
+                    parts.append(f"• **{name_bg}**")
+                action_text = self._get_treatment_action_text(treatment_type)
+                if action_text:
+                    parts.append(f"\n{action_text}")
+            else:
+                # Fallback when ingredient extraction fails (Issue #18)
+                parts.append("*Проверете активните съставки и дозировката в листовката на продукта.*")
 
         # Self-care tips (inline 💧, max 2)
         if medical_reasoning.self_care_tips:
