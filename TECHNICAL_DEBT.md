@@ -1,8 +1,27 @@
 # Technical Debt & Issues Tracker
 
-**Last Updated**: February 13, 2026
-**Project Grade**: B- (75/100)
-**Source**: Staff Engineering Review (Claude Sonnet 4.5)
+**Last Updated**: February 14, 2026
+**Project Grade**: C+ (70/100) - *Downgraded due to E2E quality findings*
+**Source**: Staff Engineering Review + E2E Quality Tests (352 queries)
+
+## 📊 Quality Status (E2E Tests - February 14, 2026)
+
+**Test Results**: 352 queries, 0 failures, but significant quality issues
+
+| Category | Status | Details |
+|----------|--------|---------|
+| 🚨 **CRITICAL** | 6 issues | Garbage text contaminating medical advice |
+| ⚠️ **HIGH** | 231 issues | Template compliance (missing ingredients 62%) |
+| ⚠️ **MEDIUM** | 4 issues | Language quality (English leaks) |
+| ⚠️ **LOW** | 20 issues | Performance outliers (max 49s) |
+| ✅ **PASSING** | 322/352 | Core functionality works (91.5%) |
+
+**Top Priorities**:
+1. Fix garbage text (7% of responses affected)
+2. Fix template compliance (only 38% show active ingredients)
+3. Fix language quality (4 responses with English leaks)
+
+**See**: Issues #17-#20 (Production Quality)
 
 ---
 
@@ -528,9 +547,221 @@ COPY models/ /app/models/
 
 ## 🟠 High Priority Issues
 
-### 17. ⚠️ ACTIVE: Pipeline Tests Failing (Incorrect Mock Paths)
+### 17. ⚠️ ACTIVE: Garbage Text Contaminating Responses (CRITICAL)
 **Status**: 🔴 Not Started
-**Priority**: P2 (Test Quality)
+**Priority**: P0 (User-Facing Quality)
+**Effort**: 4-8 hours (investigation + fix)
+
+**Problem**:
+- **25 issues detected** (6 CRITICAL) in E2E quality tests
+- Irrelevant text appearing in medical advice responses
+- Common garbage patterns: "защита на личните", "зъбни протези", "средство за защита"
+- Affects 7% of responses (25/352)
+
+**Examples**:
+```
+Query: "Имам температура 38 градуса"
+Garbage: "защита на личните", "средство за защита"
+
+Query: "Имам болка в ухото при дете"
+Garbage: "зъбни протези"
+
+Query: "Какво да направя при ларингит?"
+Garbage: "зъбни протези"
+```
+
+**Root Cause Analysis**:
+Likely sources:
+1. **Product data contamination**: Product descriptions contain irrelevant keywords
+2. **Vector search noise**: ChromaDB returning irrelevant products
+3. **LLM hallucination**: Medical model inserting unrelated text
+4. **Template corruption**: Response formatting including wrong product data
+
+**Impact**:
+- **CRITICAL**: Medical advice contaminated with irrelevant text
+- User trust degradation
+- Safety risk (confusing advice)
+- Unprofessional appearance
+
+**Investigation Plan**:
+```python
+# 1. Identify source of garbage text
+# Check if it comes from:
+# - Product database (src/product_store.py)
+# - LLM output (src/medical_model.py)
+# - Template formatting (src/pipeline/orchestrator.py)
+
+# 2. Sample 10 failing queries
+failing_queries = [
+    "Имам температура 38 градуса",
+    "Имам болка в ухото при дете",
+    # ... more from test_results.json
+]
+
+# 3. For each, trace:
+# - Product search results (candidate_products)
+# - LLM reasoning output
+# - Final formatted response
+
+# 4. Identify pattern
+```
+
+**Solution** (depends on root cause):
+- **If product data**: Clean ChromaDB, filter irrelevant products
+- **If vector search**: Improve search query, add category filters
+- **If LLM**: Adjust system prompt, add output validation
+- **If template**: Fix response builder logic
+
+**Files**:
+- Check: `src/product_store.py` (vector search)
+- Check: `src/pipeline/orchestrator.py` (response formatting)
+- Check: `src/medical_model.py` (LLM output)
+- Test: `/Users/kiril/IdeaProjects/medgemma/output/test_results.json`
+
+**Success Criteria**: Garbage text in <1% of responses (currently 7%)
+
+---
+
+### 18. ⚠️ ACTIVE: Template Compliance Issues (HIGH)
+**Status**: 🔴 Not Started
+**Priority**: P1 (User Experience)
+**Effort**: 2-3 days
+
+**Problem**:
+- **231 template failures** (429 warnings total)
+- **Only 38% of responses** have active ingredients section (112/297)
+- **Generic safety blocks** instead of ingredient-specific warnings
+- Combo products shown without explanation
+
+**Template Compliance**:
+```
+✅ Symptom header:        296/297 (100%)
+❌ Active ingredients:    112/297 (38%)  ← CRITICAL GAP
+✅ Safety block:          296/297 (100%)
+✅ Products section:      296/297 (100%)
+⚠️  Ingredient line:      261/297 (88%)
+✅ Buy link:              296/297 (100%)
+✅ Triage section:        296/297 (100%)
+✅ Footer:                296/297 (100%)
+```
+
+**Issues**:
+1. **Missing active ingredients** (62% of responses): Users don't know what they're taking
+2. **Generic safety blocks**: "Проверете листовката" instead of specific warnings
+3. **Combo products without context**: Multi-ingredient products shown for single symptoms
+
+**Example Problems**:
+```
+Query: "Имам хрема и кихам много"
+Issues:
+- Missing 💊 Подходящи активни съставки section
+- Safety block is generic
+- Combo cold/flu product shown without explaining why
+```
+
+**Root Cause**:
+- File: `src/pipeline/orchestrator.py` (_format_response_from_unified)
+- Conditional template logic not firing correctly
+- Ingredient extraction from products failing
+- Safety block generation using fallback template
+
+**Impact**:
+- Users don't understand what medication they're taking
+- Safety warnings are vague and unhelpful
+- Lower quality than expected from virtual pharmacist
+
+**Solution**:
+1. **Fix ingredient extraction** (src/pipeline/product_ingredients.py)
+2. **Ensure ingredients section always present** when products shown
+3. **Generate ingredient-specific safety warnings** from contraindications
+4. **Add combo product explanation** when multiple ingredients present
+
+**Files**:
+- `src/pipeline/orchestrator.py:_format_response_from_unified`
+- `src/pipeline/product_ingredients.py`
+- `src/pipeline/response_builder.py` (if exists)
+
+**Success Criteria**:
+- Active ingredients section: 38% → >95%
+- Specific safety warnings: >80%
+- Combo product notes: 100%
+
+---
+
+### 19. ⚠️ ACTIVE: Language Quality Issues (MEDIUM)
+**Status**: 🔴 Not Started
+**Priority**: P1 (User Experience)
+**Effort**: 2-3 hours
+
+**Problem**:
+- **4 responses** have Bulgarian ratio < 80%
+- English text leaking into Bulgarian responses
+- Translation quality degradation
+
+**Examples**:
+```
+Query: "Какво да взема при афти?"
+Bulgarian ratio: 75%
+English leak: "Afts обикновено лекува в рамките на 1-2 седмици"
+
+Query: "Кое е подходящо при възпалени венци?"
+Bulgarian ratio: 74%
+English leak: "Гидит или сантиментални нарушения"
+```
+
+**Root Cause**:
+- LLM outputting mixed language (medical_model.py)
+- Translation skipping certain terms
+- Bulgarian medical terminology missing from model
+
+**Impact**:
+- Unprofessional appearance
+- User confusion
+- Breaks user trust
+
+**Solution**:
+1. **Add language validation** to medical model output
+2. **Improve translation coverage** for medical terms
+3. **Add post-processing** to detect and fix English leaks
+
+**Files**:
+- `src/medical_model.py` (LLM prompt/output)
+- `src/translator.py` (medical term coverage)
+- `src/pipeline/orchestrator.py` (validation)
+
+**Success Criteria**: Bulgarian ratio > 95% in all responses
+
+---
+
+### 20. ⚠️ ACTIVE: Performance Outliers (LOW)
+**Status**: 🔴 Not Started
+**Priority**: P2 (Performance)
+**Effort**: 2-4 hours (investigation)
+
+**Problem**:
+- **Average response time**: 7.3 seconds (acceptable)
+- **Maximum response time**: 49.3 seconds (unacceptable)
+- **Min response time**: 89ms (cached response)
+
+**Impact**:
+- User timeout/frustration on outliers
+- Inconsistent experience
+
+**Investigation Needed**:
+- What causes 49-second responses?
+- Is it specific query types?
+- Vector search slowness?
+- LLM generation time?
+
+**Files**:
+- Check: Query logs for slow requests
+- Profile: Vector search, LLM inference, product search
+
+---
+
+### 21. ⚠️ ACTIVE: Pipeline Tests Failing (Incorrect Mock Paths)
+**Status**: 🔴 Not Started
+**Priority**: P3 (Test Quality)
 **Effort**: 30 minutes
 
 **Problem**:
@@ -613,35 +844,114 @@ with patch('src.translator.get_translator', return_value=mock_translator):
 
 ## Prioritized Action Plan
 
-### Immediate (This Session)
-1. **Fix Pipeline Tests** (30min) → Issue #17
+### 🚨 CRITICAL - Production Quality (This Week)
+
+**Priority: Fix user-facing quality issues before refactoring**
+
+#### Day 1: Investigate Garbage Text (4-6 hours) → Issue #17
+**Goal**: Find root cause of irrelevant text in responses
+
+```bash
+# 1. Sample failing queries from test_results.json
+jq '.critical_issues[] | select(.issues[] | .type == "GARBAGE")' output/test_results.json
+
+# 2. Trace through pipeline for one query
+python -c "
+from src.pipeline import get_pipeline
+pipeline = get_pipeline()
+result = pipeline.process('Имам температура 38 градуса')
+print('Products:', result.selected_products)
+print('Response:', result.response)
+"
+
+# 3. Check if garbage comes from:
+# - Product database (grep product data for "защита на личните")
+# - LLM output (log raw medical_model output)
+# - Template formatting (check response builder)
+```
+
+**Deliverable**: Root cause identified, fix approach decided
+
+---
+
+#### Day 2-3: Fix Template Compliance (8-12 hours) → Issue #18
+**Goal**: Active ingredients section present in >95% of responses
+
+**Tasks**:
+1. Fix ingredient extraction (2-3h)
+   - Debug why only 38% have ingredients section
+   - Ensure `extract_product_ingredient()` works for all products
+
+2. Update response template (2-3h)
+   - Always show 💊 section when products present
+   - Generate ingredient-specific safety warnings
+
+3. Add combo product notes (2h)
+   - Detect multi-ingredient products
+   - Add explanation why combo is recommended
+
+4. Validate with E2E tests (2h)
+   - Re-run comprehensive tests
+   - Target: 112/297 → 285/297+ with ingredients
+
+**Files**:
+- `src/pipeline/product_ingredients.py`
+- `src/pipeline/orchestrator.py:_format_response_from_unified`
+
+**Success Criteria**: Template compliance 38% → >95%
+
+---
+
+#### Day 4: Fix Language Quality (2-3 hours) → Issue #19
+**Goal**: Bulgarian ratio >95% in all responses
+
+**Tasks**:
+1. Add language validation (1h)
+   - Check response before returning
+   - Flag responses with <90% Bulgarian
+
+2. Fix English leaks (1h)
+   - Common patterns: "Afts", "Гидит", medical terms
+   - Add to translation dictionary or fix prompt
+
+3. Test with failing queries (1h)
+
+**Success Criteria**: 4 failures → 0 failures
+
+---
+
+### 🟡 HIGH PRIORITY - Code Quality (Next Week)
+
+#### Week 2: Fix Unit Tests & Split E2E Tests (1 day)
+1. **Fix Pipeline Tests** (30min) → Issue #21
    - Update mock paths in tests/test_pipeline.py
    - Get all 275 tests passing
 
-### This Week (6-7 hours)
 2. **Split E2E Tests** (3-4h) → Issue #7
    - Organize into 5 category files
    - Improve test navigation
 
-3. **Enable Unified Processor** (3 days) → Issue #4
-   - Feature flag → True
-   - Monitor for 1 week
-   - Remove legacy if stable
+---
 
-### Next Sprint (2 weeks)
-4. **QueryRouter Extraction** (5 days) → Issue #2 (Week 1)
-   - First strangler fig step
-   - Reduces orchestrator by ~300 LOC
+### 🟢 MEDIUM PRIORITY - Architecture (Weeks 3-4)
 
-5. **Enable Unified Processor** (3 days) → Issue #4
-   - Feature flag → True
-   - Monitor for 1 week
-   - Remove legacy if stable
+#### Week 3: Enable Unified Processor (3 days) → Issue #4
+- Feature flag → True
+- Monitor for 1 week
+- Remove legacy if stable
 
-### Future (4+ weeks)
-6. **ResponseBuilder Extraction** (5 days) → Issue #2 (Week 2)
-7. **Redis Rate Limiting** (1 day) → Issue #6
-8. **Memory Leak Investigation** (1-2 days) → Issue #5
+#### Week 4: Start God Object Refactor (5 days) → Issue #2
+- Extract QueryRouter
+- Reduces orchestrator by ~300 LOC
+
+---
+
+### 🔵 LOW PRIORITY - Future Work
+
+- **ResponseBuilder Extraction** (5 days) → Issue #2 (Week 2)
+- **Redis Rate Limiting** (1 day) → Issue #6
+- **Memory Leak Investigation** (1-2 days) → Issue #5
+- **Performance Outlier Investigation** (2-4h) → Issue #20
 
 ---
 
@@ -649,9 +959,18 @@ with patch('src.translator.get_translator', return_value=mock_translator):
 
 | Metric | Current | Target | Status |
 |--------|---------|--------|--------|
+| **Production Quality** | | | |
+| Garbage Text in Responses | 7% (25/352) | <1% | 🔴 |
+| Template Compliance (Ingredients) | 38% (112/297) | >95% | 🔴 |
+| Language Quality (BG ratio) | 95% avg (4 failures) | >98% | 🟡 |
+| Response Time (p99) | 49.3s | <10s | 🔴 |
+| Product Relevance | 99% (3 failures) | >99% | 🟢 |
+| **Code Quality** | | | |
 | Orchestrator Size | 2,676 LOC | <1,000 LOC | 🔴 |
 | Test Coverage | 39% | >80% | 🟡 |
+| Unit Tests Passing | 270/275 (98%) | 100% | 🟡 |
 | Security CVEs | 1 | 0 | 🟢 |
+| **Architecture** | | | |
 | Concurrent Workers | 1 | 1 (validated) | ✅ |
 | Cache Hit Rate Visibility | 100% | 100% | ✅ |
 | E2E Test Files | 1 (1,628 LOC) | 5 (<400 LOC each) | 🔴 |
