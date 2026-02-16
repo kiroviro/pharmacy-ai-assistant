@@ -294,7 +294,9 @@ class Pipeline:
         lines.append("**⚠️ Важно:** Изборът на лекарство зависи от конкретното състояние.")
         lines.append("Консултирайте се с фармацевт за персонална препоръка.")
 
-        return "\n".join(lines)
+        response = "\n".join(lines)
+        # Final garbage cleanup pass (Issue #17)
+        return self._final_garbage_cleanup(response)
 
     # Generic terms that shouldn't be used for strict filtering
     _GENERIC_TERMS = {
@@ -486,7 +488,9 @@ class Pipeline:
         parts.append("Информацията има общ характер и не замества консултация с лекар или фармацевт.")
         parts.append("Преди употреба прочетете листовката.")
 
-        return "\n".join(parts)
+        response = "\n".join(parts)
+        # Final garbage cleanup pass (Issue #17)
+        return self._final_garbage_cleanup(response)
 
     def process(self, user_input: str) -> PipelineResult:
         """
@@ -1013,7 +1017,9 @@ class Pipeline:
         parts.append("Информацията има общ характер и не замества консултация с лекар или фармацевт.")
         parts.append("Преди употреба прочетете листовката.")
 
-        return "\n".join(parts)
+        response = "\n".join(parts)
+        # Final garbage cleanup pass (Issue #17)
+        return self._final_garbage_cleanup(response)
 
     def _collect_triage_items_unified(
         self, reasoning, medical_reasoning, products, original_query
@@ -2098,7 +2104,9 @@ class Pipeline:
         parts.append("Информацията има общ характер и не замества консултация с лекар или фармацевт.")
         parts.append("Преди употреба прочетете листовката.")
 
-        return "\n".join(parts)
+        response = "\n".join(parts)
+        # Final garbage cleanup pass (Issue #17)
+        return self._final_garbage_cleanup(response)
 
     def _collect_triage_items_legacy(
         self, medical_reasoning, products, original_query, get_translated
@@ -2558,6 +2566,49 @@ class Pipeline:
                     return True
 
         return False
+
+    def _final_garbage_cleanup(self, response: str) -> str:
+        """
+        Final pass to remove any remaining garbage patterns from the complete response.
+
+        This catches garbage that might appear in product descriptions or other
+        sections that aren't filtered during formatting (Issue #17).
+        """
+        if not response:
+            return response
+
+        response_lower = response.lower()
+
+        # Check for critical garbage patterns
+        critical_patterns = [
+            "зъбні протези", "грижа за зъбні протези",
+            "защита на личните", "средство за защита",
+            "репелент", "комар", "комари",
+        ]
+
+        has_garbage = any(p in response_lower for p in critical_patterns)
+        if not has_garbage:
+            return response
+
+        # Remove sentences containing garbage
+        lines = response.split('\n')
+        cleaned_lines = []
+
+        for line in lines:
+            line_lower = line.lower()
+            # Skip lines that contain garbage patterns
+            if any(p in line_lower for p in critical_patterns):
+                logger.warning(f"Removed line with garbage pattern: {line[:100]}")
+                continue
+            cleaned_lines.append(line)
+
+        cleaned = '\n'.join(cleaned_lines)
+
+        # Clean up any double newlines
+        while '\n\n\n' in cleaned:
+            cleaned = cleaned.replace('\n\n\n', '\n\n')
+
+        return cleaned
 
     def _filter_garbage_sentences(self, text: str) -> str:
         """Remove garbage sentences from explanation (P2b). Keeps only coherent parts."""
