@@ -421,6 +421,75 @@ class Pipeline:
             truncated = truncated[:last_space]
         return truncated.rstrip(".,;:") + suffix
 
+    # Specialized medical conditions that require specific products
+    _SPECIALIZED_DERMATOLOGY_TERMS = {
+        "атопична": {
+            "condition": "атопична кожа / атопичен дерматит",
+            "explanation": "Атопичният дерматит е хронично състояние, което изисква специализирани продукти с церамиди, колоиден овес или други специфични съставки.",
+            "recommendations": [
+                "La Roche-Posay Lipikar Baume AP+M",
+                "Eucerin AtopiControl",
+                "Mustela Stelatopia",
+                "Bioderma Atoderm Intensive",
+            ],
+            "fallback_advice": "Показаните продукти са за суха и чувствителна кожа, но за атопичен дерматит се препоръчват специализирани дерматологични продукти."
+        },
+        "атопичен дерматит": {
+            "condition": "атопичен дерматит",
+            "explanation": "Атопичният дерматит изисква специализирани продукти, разработени за силно раздразнена и склонна към екзема кожа.",
+            "recommendations": [
+                "La Roche-Posay Lipikar Baume AP+M",
+                "Eucerin AtopiControl",
+                "Mustela Stelatopia",
+            ],
+            "fallback_advice": "За атопичен дерматит консултирайте дерматолог за най-подходящия продукт."
+        },
+        "екзема": {
+            "condition": "екзема",
+            "explanation": "Екземата изисква специализирани продукти с противовъзпалителни и възстановяващи кожната бариера свойства.",
+            "recommendations": [
+                "La Roche-Posay Cicaplast Baume B5",
+                "Eucerin AtopiControl",
+                "Avène Cicalfate",
+            ],
+            "fallback_advice": "Показаните продукти могат да помогнат, но за екзема се препоръчват специализирани лечебни продукти."
+        },
+        "псориазис": {
+            "condition": "псориазис",
+            "explanation": "Псориазисът е автоимунно заболяване, което изисква специализирани продукти с кератолитици (салицилова киселина, урея).",
+            "recommendations": [
+                "La Roche-Posay Iso-Urea",
+                "Eucerin UreaRepair",
+                "Препарати с каменовъглен катран",
+            ],
+            "fallback_advice": "За псориазис е необходима консултация с дерматолог. Показаните продукти не са специализирани за това състояние."
+        },
+        "розацея": {
+            "condition": "розацея",
+            "explanation": "Розацеята изисква специални продукти за чувствителна кожа със склонност към зачервяване.",
+            "recommendations": [
+                "La Roche-Posay Rosaliac",
+                "Avène Antirougeurs",
+                "Bioderma Sensibio AR",
+            ],
+            "fallback_advice": "За розацея се препоръчват специализирани продукти с азелаинова киселина или ниацинамид."
+        },
+    }
+
+    def _detect_specialized_condition(self, query: str) -> dict:
+        """
+        Detect if query is for a specialized dermatological condition.
+
+        Returns dict with condition info if specialized term detected, None otherwise.
+        """
+        query_lower = query.lower()
+
+        for term, info in self._SPECIALIZED_DERMATOLOGY_TERMS.items():
+            if term in query_lower:
+                return info
+
+        return None
+
     def _format_catalog_response(self, search_term: str, products: list, original_query: str = "") -> str:
         """Format catalog response using VP template (safety, triage, footer).
         Aligns with e2e test expectations for 🛒 Подходящи продукти, ✔ Съдържа, ⚠️ Потърсете лекар, ℹ️.
@@ -430,9 +499,29 @@ class Pipeline:
             symptoms=[], likely_cause="", treatment_type="", warnings=[], see_doctor=False
         )
 
+        # Check if this is a specialized dermatology query
+        specialized_info = self._detect_specialized_condition(original_query or search_term)
+
         # ── SECTION 1: Symptom/query header ─────────────────────────────────
         parts.append(f"## 🔍 Информация при симптом: {search_term.title()}\n")
-        parts.append(f'*Намерени продукти за „{search_term}"*.\n')
+
+        # Add specialized condition notice if detected
+        if specialized_info:
+            parts.append(f"**Търсите продукти за: {specialized_info['condition']}**\n")
+            parts.append(f"⚠️ *{specialized_info['explanation']}*\n")
+
+            # Always show recommendations for specialized conditions (catalog gap)
+            parts.append(f"\n💡 **Важно**: {specialized_info['fallback_advice']}\n")
+            parts.append("\n**Препоръчани специализирани продукти:**")
+            for rec in specialized_info['recommendations']:
+                parts.append(f"• {rec}")
+
+            if products:
+                parts.append("\n**Алтернативи в наличност** (за суха/чувствителна кожа):\n")
+            else:
+                parts.append("\n*В момента нямаме специализирани продукти за това състояние в каталога.*\n")
+        else:
+            parts.append(f'*Намерени продукти за „{search_term}"*.\n')
 
         # ── SECTION 2: Active ingredients (derived from products) ─────────────
         # ALWAYS show this section when products exist (Issue #18)
@@ -485,6 +574,13 @@ class Pipeline:
         # ── SECTION 6: Footer ────────────────────────────────────────────────
         parts.append("---")
         parts.append("ℹ️ **Важна информация**")
+
+        # Add specialized condition reminder if applicable
+        if specialized_info:
+            parts.append(f"⚠️ За {specialized_info['condition']} се препоръчва консултация с дерматолог.")
+            if products:
+                parts.append("Показаните продукти са общи алтернативи, но не са специализирани за това състояние.")
+
         parts.append("Информацията има общ характер и не замества консултация с лекар или фармацевт.")
         parts.append("Преди употреба прочетете листовката.")
 
