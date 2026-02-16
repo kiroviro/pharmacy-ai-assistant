@@ -267,6 +267,28 @@ class Pipeline:
 
             lines.append("")
 
+        # Add active ingredients section (Issue #18 - template compliance)
+        lines.append("---")
+        lines.append("## 💊 Активни съставки\n")
+        # Extract ingredients from all products
+        all_products = []
+        for products in products_by_drug.values():
+            all_products.extend(products)
+
+        if all_products:
+            seen_ingredients = set()
+            for p in all_products:
+                for ing in extract_all_product_ingredients(p):
+                    seen_ingredients.add(ing)
+
+            if seen_ingredients:
+                for ing in list(seen_ingredients)[:5]:
+                    bg = INGREDIENT_BG_NAMES.get(ing, ing)
+                    lines.append(f"• **{bg}**")
+            else:
+                lines.append("*Проверете активните съставки в листовката на всеки продукт.*")
+            lines.append("")
+
         # Add recommendation
         lines.append("---")
         lines.append("**⚠️ Важно:** Изборът на лекарство зависи от конкретното състояние.")
@@ -411,18 +433,23 @@ class Pipeline:
         parts.append(f'*Намерени продукти за „{search_term}"*.\n')
 
         # ── SECTION 2: Active ingredients (derived from products) ─────────────
+        # ALWAYS show this section when products exist (Issue #18)
         parts.append("---")
         if products:
             seen_ingredients = set()
             for p in products[:5]:
                 for ing in extract_all_product_ingredients(p):
                     seen_ingredients.add(ing)
+
+            parts.append("## 💊 Подходящи активни съставки\n")
             if seen_ingredients:
-                parts.append("## 💊 Подходящи активни съставки\n")
                 for ing in list(seen_ingredients)[:5]:
                     bg = INGREDIENT_BG_NAMES.get(ing, ing)
                     parts.append(f"• **{bg}**")
-                parts.append("")
+            else:
+                # Fallback when ingredient extraction fails
+                parts.append("*Проверете активните съставки и дозировката в листовката на продукта.*")
+            parts.append("")
 
         # ── SECTION 3: Safety block ──────────────────────────────────────────
         parts.append("---")
