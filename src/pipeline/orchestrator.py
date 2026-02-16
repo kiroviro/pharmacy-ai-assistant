@@ -2158,7 +2158,7 @@ class Pipeline:
                 # Fallback when ingredient extraction fails (Issue #18)
                 parts.append("*Проверете активните съставки и дозировката в листовката на продукта.*")
 
-        # Self-care tips (inline 💧, max 2)
+        # Self-care tips (inline 💧, max 2) — filter garbage from LLM (Issue #17)
         if medical_reasoning.self_care_tips:
             for i, tip in enumerate(medical_reasoning.self_care_tips[:2]):
                 if not tip or len(tip) < 5:
@@ -2166,8 +2166,11 @@ class Pipeline:
                 translated_tip = get_translated(f"tip_{i}", tip, min_length=5)
                 if translated_tip:
                     translated_tip = self._truncate_for_display(translated_tip, self._MAX_TIP_LEN)
-                    if len(translated_tip) >= 5:
+                    # Validate self-care tip and filter garbage patterns
+                    if len(translated_tip) >= 5 and self._is_valid_self_care_tip(translated_tip):
                         parts.append(f"\n💧 {translated_tip}")
+                    elif len(translated_tip) >= 5:
+                        logger.warning(f"Filtered garbage from self-care tip: {translated_tip[:100]}")
 
         parts.append("")
 
@@ -2789,6 +2792,12 @@ class Pipeline:
         "белезникав", "хранителна добавка за",
         "приложете повече от една доза веднъж на всеки две седмици",
         "сметки на бюджетите", "това е всичко което",
+        # LLM hallucination patterns (Issue #17)
+        "зъбні протези", "зъбни протези", "грижа за зъбні протези",
+        "защита на личните", "средство за защита",
+        "репелент", "комар", "комари",
+        "пластмасов", "ламарин", "металокерамика",
+        "отпадъчни препарати",
     )
     # Valid self-care keywords — tip should have at least one
     _VALID_TIP_KEYWORDS = (
