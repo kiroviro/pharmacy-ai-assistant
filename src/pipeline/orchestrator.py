@@ -14,6 +14,7 @@ from src.config import get_settings
 from src.intent_classifier import get_intent_classifier
 from src.logging_config import get_logger
 from src.medical_model import MedicalReasoning, get_medical_model
+from src.medical_terms_validator import get_medical_validator
 from src.product_store import get_product_store
 from src.safety import get_safety_layer
 from src.translator import get_translator
@@ -69,9 +70,10 @@ class Pipeline:
         Args:
             lazy_load: If True, models are loaded on first use. If False, load immediately.
         """
-        # Initialize intent classifier and safety layer
+        # Initialize intent classifier, safety layer, and medical validator
         self.intent_classifier = get_intent_classifier()
         self.safety_layer = get_safety_layer()
+        self.medical_validator = get_medical_validator()
 
         # Product store (ChromaDB)
         self._product_store = None
@@ -2098,6 +2100,16 @@ class Pipeline:
         if translate_reasoning:
             texts_to_translate = self._collect_texts_for_translation(medical_reasoning)
             translated_texts = self._batch_translate_texts(texts_to_translate)
+
+            # Validate and correct medical terms in translated text
+            validated_texts = {}
+            for key, text in translated_texts.items():
+                if text:
+                    corrected_text, issues = self.medical_validator.validate_and_correct(text, context=key)
+                    validated_texts[key] = corrected_text
+                else:
+                    validated_texts[key] = text
+            translated_texts = validated_texts
         else:
             translated_texts = {}
 
