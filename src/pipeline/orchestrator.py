@@ -1132,9 +1132,22 @@ class Pipeline:
                 translated = self.translator.translate_to_bulgarian(warning)
                 if translated and self._calculate_bulgarian_ratio(translated) > 0.3:
                     warnings_bg.append(translated)
+
+        # Filter garbage from LLM-generated warnings (Issue #17)
         for w in warnings_bg:
-            items.append(w)
-            seen.add(w[:20])
+            w_lower = w.lower()
+            # Skip warnings containing garbage patterns
+            has_garbage = any(pattern in w_lower for pattern in [
+                "зъбні протези", "грижа за зъбні протези",
+                "защита на личните", "средство за защита",
+                "репелент", "комар", "комари",
+                "пластмасов", "ламарин", "металокерамика",
+            ])
+            if not has_garbage:
+                items.append(w)
+                seen.add(w[:20])
+            else:
+                logger.warning(f"Filtered garbage from triage warning: {w[:100]}")
 
         # Data-driven triage from products
         if products:
@@ -2218,8 +2231,19 @@ class Pipeline:
                 if translated:
                     translated = self._truncate_for_display(translated, self._MAX_WARNING_LEN)
                     if len(translated) >= 10:
-                        items.append(translated)
-                        seen.add(translated[:20])
+                        # Filter garbage from warnings (Issue #17)
+                        translated_lower = translated.lower()
+                        has_garbage = any(pattern in translated_lower for pattern in [
+                            "зъбні протези", "грижа за зъбні протези",
+                            "защита на личните", "средство за защита",
+                            "репелент", "комар", "комари",
+                            "пластмасов", "ламарин", "металокерамика",
+                        ])
+                        if not has_garbage:
+                            items.append(translated)
+                            seen.add(translated[:20])
+                        else:
+                            logger.warning(f"Filtered garbage from triage warning: {translated[:100]}")
 
         # Data-driven triage
         if products:
