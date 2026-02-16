@@ -56,7 +56,14 @@
       "Skill(reflect)",
       "Skill(doc-cleanup)",
       "Bash(pytest:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(echo:*)",
+      "Bash(open htmlcov/index.html)",
+      "Bash(PYTHONPATH=. python:*)",
+      "Bash(tee:*)",
+      "Bash(timeout 30 python3:*)",
+      "Bash(timeout 45 python3:*)"
     ]
   }
 }

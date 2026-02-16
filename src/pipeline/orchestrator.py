@@ -82,9 +82,10 @@ class Pipeline:
         self._unified_processor = None
         self._lazy_load = lazy_load
 
-        # Feature flag for unified processor
+        # Feature flags
         settings = get_settings()
         self._use_unified_processor = getattr(settings, 'unified_processor_enabled', False)
+        self._generate_bulgarian_directly = getattr(settings, 'generate_bulgarian_directly', False)
 
         if not lazy_load:
             self._load_medical_model()
@@ -1002,9 +1003,13 @@ class Pipeline:
         if reasoning.explanation_bg and self._calculate_bulgarian_ratio(reasoning.explanation_bg) >= 0.65:
             expl_text = reasoning.explanation_bg
         elif reasoning.explanation:
-            translated = self.translator.translate_to_bulgarian(reasoning.explanation)
-            if translated and self._calculate_bulgarian_ratio(translated) > 0.3:
-                expl_text = translated
+            # If generating Bulgarian directly, explanation is already in Bulgarian
+            if self._generate_bulgarian_directly:
+                expl_text = reasoning.explanation
+            else:
+                translated = self.translator.translate_to_bulgarian(reasoning.explanation)
+                if translated and self._calculate_bulgarian_ratio(translated) > 0.3:
+                    expl_text = translated
         if expl_text:
             filtered = self._filter_garbage_sentences(expl_text)
             if filtered:
@@ -1050,10 +1055,15 @@ class Pipeline:
         ]
         if not tips_bg and reasoning.self_care_tips:
             for tip in reasoning.self_care_tips[:3]:
-                translated = self.translator.translate_to_bulgarian(tip)
-                if translated and self._calculate_bulgarian_ratio(translated) > 0.3:
-                    if self._is_valid_self_care_tip(translated):
-                        tips_bg.append(translated)
+                # If generating Bulgarian directly, tips are already in Bulgarian
+                if self._generate_bulgarian_directly:
+                    if self._is_valid_self_care_tip(tip):
+                        tips_bg.append(tip)
+                else:
+                    translated = self.translator.translate_to_bulgarian(tip)
+                    if translated and self._calculate_bulgarian_ratio(translated) > 0.3:
+                        if self._is_valid_self_care_tip(translated):
+                            tips_bg.append(translated)
         if tips_bg:
             parts.append(f"\n💧 {tips_bg[0]}")
             for extra in tips_bg[1:2]:  # max 2 tips
@@ -1129,9 +1139,13 @@ class Pipeline:
         warnings_bg = [w for w in warnings_bg[:3] if w and self._calculate_bulgarian_ratio(w) >= 0.65]
         if not warnings_bg and reasoning.warnings:
             for warning in reasoning.warnings[:3]:
-                translated = self.translator.translate_to_bulgarian(warning)
-                if translated and self._calculate_bulgarian_ratio(translated) > 0.3:
-                    warnings_bg.append(translated)
+                # If generating Bulgarian directly, warnings are already in Bulgarian
+                if self._generate_bulgarian_directly:
+                    warnings_bg.append(warning)
+                else:
+                    translated = self.translator.translate_to_bulgarian(warning)
+                    if translated and self._calculate_bulgarian_ratio(translated) > 0.3:
+                        warnings_bg.append(translated)
 
         # Filter garbage from LLM-generated warnings (Issue #17)
         for w in warnings_bg:
@@ -2090,6 +2104,13 @@ class Pipeline:
         def get_translated(key: str, original: str, min_length: int = 3) -> str | None:
             if not original or len(original) <= min_length:
                 return None
+
+            # If generating Bulgarian directly, text is already in Bulgarian - no translation needed
+            if self._generate_bulgarian_directly:
+                if self._contains_garbage(original):
+                    return None
+                return self._clean_english_leaks(original)
+
             if not translate_reasoning:
                 return self._clean_english_leaks(original)
             translated = translated_texts.get(key, original)

@@ -189,7 +189,7 @@ def _ensure_list(value, default: list | None = None) -> list:
         return "\n\n".join(parts)
 
 
-# System prompt for medical reasoning with JSON output
+# System prompt for medical reasoning with JSON output (English)
 MEDICAL_SYSTEM_PROMPT = """You are a pharmacy product recommendation system. Analyze symptoms and output JSON.
 
 RULES:
@@ -241,6 +241,58 @@ Output: {"symptoms": ["drug interaction query"], "likely_cause": "safety concern
 Now analyze and output JSON:"""
 
 
+# System prompt for medical reasoning with JSON output (Bulgarian)
+MEDICAL_SYSTEM_PROMPT_BG = """Вие сте система за препоръчване на аптечни продукти. Анализирайте симптомите и изведете JSON на български.
+
+ПРАВИЛА:
+- Изведете САМО валиден JSON, нищо друго
+- За бебета/деца: задайте see_doctor=true
+- За хронични заболявания: споменете изискване за рецепта
+- За лекарствени взаимодействия: включете предупреждения за безопасност
+
+ВАЖНО - НЕ СПОМЕНАВАЙТЕ тези несвързани теми:
+- Защита на личните данни
+- Зъбни протези / грижа за зъбні протези
+- Репеленти срещу комари / комари (освен ако не се пита конкретно)
+- Общи средства за защита
+- Каквито и да е неmedицински административни или правни теми
+
+Фокусирайте се САМО върху:
+- Конкретните симптоми, които са представени
+- Безрецептурни лекарства, които лекуват тези симптоми
+- Съвети за домашна грижа за състоянието
+- Кога да потърсите медицинска помощ
+
+JSON формат (всички полета на БЪЛГАРСКИ):
+{
+  "symptoms": ["симптом1", "симптом2"],
+  "likely_cause": "кратко описание на причината",
+  "explanation": "какво се случва в тялото и защо",
+  "treatment_type": "категория безрецептурни лекарства",
+  "how_it_helps": "как лечението помага при симптомите",
+  "self_care": ["съвет за домашна грижа 1", "съвет 2"],
+  "recovery": "кога да очаквате подобрение",
+  "warnings": ["кога да посетите лекар"],
+  "see_doctor": false
+}
+
+ПРИМЕРИ:
+
+Вход: "главоболие"
+Изход: {"symptoms": ["главоболие"], "likely_cause": "напрежение или стрес", "explanation": "Тензионните главоболия се появяват когато мускулите на главата и врата се стягат, често от стрес или лоша стойка.", "treatment_type": "болкоуспокояващи", "how_it_helps": "Болкоуспокояващите блокират болковите сигнали и намаляват възпалението, осигурявайки облекчение за 30-60 минути.", "self_care": ["Почивайте в тиха стая", "Приложете студен компрес", "Хидратирайте се", "Масажирайте слепоочията"], "recovery": "Повечето главоболия се подобряват за 2-4 часа с лечение.", "warnings": ["Вижте лекар ако е внезапно и силно", "Потърсете помощ ако е с температура или вцепенен врат"], "see_doctor": false}
+
+Вход: "бебе на 6 месеца има температура"
+Изход: {"symptoms": ["температура", "бебе"], "likely_cause": "вирусна инфекция", "explanation": "Температурата е начин тялото да се бори с инфекцията. Бебетата са податливи докато майчините антитела намаляват.", "treatment_type": "педиатрични жаропонижаващи", "how_it_helps": "Намалява температурата и прави бебето по-комфортно. Използвайте дозиране подходящо за възрастта.", "self_care": ["Облечете бебето леко", "Предлагайте течности често", "Следете мокрите пелени", "Хладка гъба за баня"], "recovery": "Вирусните температури траят 2-3 дни. Подобрение в рамките на 1 час след лекарството.", "warnings": ["Консултирайте се с педиатър за бебета под 1 година", "Спешна помощ ако температурата надвиши 38.5°C"], "see_doctor": true}
+
+Вход: "болки в гърлото с температура 3 дни"
+Изход: {"symptoms": ["болки в гърлото", "температура", "3 дни"], "likely_cause": "вирусна инфекция, вероятно грип", "explanation": "Комбинацията предполага вирусна инфекция. Имунната система причинява възпаление и освобождава цитокини, причиняващи температура и болки.", "treatment_type": "жаропонижаващи и таблетки за гърло", "how_it_helps": "Жаропонижаващите намаляват температурата. Таблетките успокояват гърлото и осигуряват лека облага от болката.", "self_care": ["Гаргара със солена вода", "Пийте топли напитки с мед", "Почивайте", "Използвайте овлажнител"], "recovery": "Вирусните инфекции отминават за 7-10 дни. Температурата спада за 3-4 дни.", "warnings": ["Вижте лекар ако температурата продължава над 4 дни", "Затруднено преглъщане или дишане"], "see_doctor": false}
+
+Вход: "мога ли да взема ибупрофен с алкохол"
+Изход: {"symptoms": ["запитване за лекарствено взаимодействие"], "likely_cause": "безопасност", "explanation": "И двете дразнят стомашната лигавица. Заедно увеличават риска от стомашно кървене.", "treatment_type": "избягвайте комбинацията", "how_it_helps": "Парацетамолът е по-безопасна алтернатива за случайна употреба с умерен алкохол.", "self_care": ["Изчакайте 24 часа след пиене", "Хидратирайте се", "Помислете за почивка вместо лекарство"], "recovery": "Алкохолът се изчиства от системата за 12-24 часа.", "warnings": ["Никога не вземайте ибупрофен на празен стомах", "Потърсете помощ при стомашна болка или тъмен стол"], "see_doctor": false}
+
+Сега анализирайте и изведете JSON:"""
+
+
 class MedicalModel:
     """
     Wrapper for MedGemma model inference.
@@ -249,18 +301,25 @@ class MedicalModel:
     Includes LRU caching for repeated queries to improve performance.
     """
 
-    def __init__(self, model_path: str = "./models/medgemma-4b-it-bf16", cache_size: int = REASONING_CACHE_SIZE):
+    def __init__(
+        self,
+        model_path: str = "./models/medgemma-4b-it-bf16",
+        cache_size: int = REASONING_CACHE_SIZE,
+        use_bulgarian: bool = False
+    ):
         """
         Initialize the medical model.
 
         Args:
             model_path: Path to the MedGemma model directory
             cache_size: Maximum number of cached reasoning results
+            use_bulgarian: If True, generate Bulgarian responses directly (skip translation)
         """
         self.model_path = model_path
         self.model = None
         self.tokenizer = None
         self._loaded = False
+        self.use_bulgarian = use_bulgarian
 
         # LRU cache for medical reasoning results
         self._cache: OrderedDict[str, dict] = OrderedDict()
@@ -384,7 +443,8 @@ class MedicalModel:
             Formatted prompt string
         """
         if system_prompt is None:
-            system_prompt = MEDICAL_SYSTEM_PROMPT
+            # Use Bulgarian prompt if configured, otherwise English
+            system_prompt = MEDICAL_SYSTEM_PROMPT_BG if self.use_bulgarian else MEDICAL_SYSTEM_PROMPT
 
         # Gemma 3 format: system prompt prepended to first user message
         # <start_of_turn>user\n{system}\n\n{user}<end_of_turn>\n<start_of_turn>model\n
@@ -887,9 +947,17 @@ def get_medical_model() -> MedicalModel:
     """Get or create the global medical model instance."""
     global _medical_model
     if _medical_model is None:
+        from src.config import get_settings
+        settings = get_settings()
+
         model_path = os.environ.get(
             "MEDGEMMA_MODEL_PATH",
-            "./models/medgemma-4b-it-bf16"
+            settings.medgemma_model_path
         )
-        _medical_model = MedicalModel(model_path)
+        use_bulgarian = settings.generate_bulgarian_directly
+
+        _medical_model = MedicalModel(
+            model_path=model_path,
+            use_bulgarian=use_bulgarian
+        )
     return _medical_model

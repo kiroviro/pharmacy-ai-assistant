@@ -109,6 +109,14 @@ class Settings(BaseSettings):
     prewarm_models: bool = Field(default=True, description="Pre-load models on startup")
 
     # ==========================================================================
+    # Translation & Language Settings
+    # ==========================================================================
+    generate_bulgarian_directly: bool = Field(
+        default=False,
+        description="Generate Bulgarian responses directly from MedGemma (skip translation, faster)"
+    )
+
+    # ==========================================================================
     # Unified Processor (LLM-driven architecture)
     # ==========================================================================
     unified_processor_enabled: bool = Field(
