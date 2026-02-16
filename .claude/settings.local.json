@@ -63,7 +63,9 @@
       "Bash(PYTHONPATH=. python:*)",
       "Bash(tee:*)",
       "Bash(timeout 30 python3:*)",
-      "Bash(timeout 45 python3:*)"
+      "Bash(timeout 45 python3:*)",
+      "Bash(system_profiler:*)",
+      "Bash(timeout 300 python3:*)"
     ]
   }
 }
