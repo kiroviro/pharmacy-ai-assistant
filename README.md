@@ -146,8 +146,10 @@ Or create a `.env` file (see `.env.example`).
 
 ## Testing
 
+### Unit Tests
+
 ```bash
-# Run all tests
+# Run all unit tests
 pytest tests/ -v
 
 # Run with coverage (enforced minimum: 35%)
@@ -170,6 +172,37 @@ Coverage by component:
 - 🔴 Product Store: 18%
 
 **Goal**: Increase to 60% by Q2 2026, 80% by Q3 2026
+
+### End-to-End (E2E) Quality Tests
+
+Comprehensive quality validation with 352 real Bulgarian medical queries:
+
+```bash
+# Run E2E tests with full quality checks
+python e2e_query_tests.py
+
+# Results saved to: output/test_results.json, test_results.txt
+```
+
+**Test Coverage**:
+- 352 real-world Bulgarian medical queries
+- Symptom queries (headache, fever, cough, etc.)
+- Medication queries (product names, comparisons)
+- Safety validation (emergency detection)
+- Template compliance checks
+- Language quality validation
+
+**Quality Metrics Tracked**:
+- Garbage text detection (target: <1%)
+- Template compliance (target: >95% with ingredients)
+- Language quality (target: >95% Bulgarian)
+- Response time (target: <10s p99)
+- Product relevance (target: >99%)
+
+**Last E2E Run**: February 14, 2026
+- 322/352 queries passed core functionality (91.5%)
+- 6 CRITICAL garbage text issues
+- 231 template compliance warnings
 
 ## Architecture
 

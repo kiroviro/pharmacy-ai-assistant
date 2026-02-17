@@ -82,8 +82,10 @@ pharmacy-ai-assistant/
 
 ### Running Tests
 
+#### Unit Tests
+
 ```bash
-# Run all tests
+# Run all unit tests
 pytest tests/ -v
 
 # Run specific test file
@@ -95,6 +97,28 @@ pytest tests/ --cov=src --cov-report=term-missing
 # Run only fast tests (skip slow LLM tests)
 pytest tests/ -v -m "not slow"
 ```
+
+#### End-to-End (E2E) Quality Tests
+
+```bash
+# Run comprehensive E2E quality tests
+python e2e_query_tests.py
+
+# Results are saved to:
+# - output/test_results.json (structured data)
+# - test_results.txt (human-readable report)
+```
+
+**What E2E Tests Check**:
+- **Garbage text detection**: Ensures no irrelevant text in responses
+- **Template compliance**: Validates response structure (ingredients, safety warnings, etc.)
+- **Language quality**: Confirms responses are >95% Bulgarian
+- **Product relevance**: Verifies recommended products match symptoms
+- **Safety validation**: Tests emergency detection and triage
+- **Performance**: Tracks response times (target <10s)
+
+**E2E Test Results**:
+The E2E tests run 352 real Bulgarian medical queries and generate a detailed quality report. Review `test_results.txt` for issues before making PRs.
 
 ### Writing Tests
 

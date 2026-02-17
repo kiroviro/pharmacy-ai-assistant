@@ -181,11 +181,11 @@ def mock_pipeline():
     mock_intent = MockIntentClassifier()
     mock_safety = MockSafetyLayer()
 
-    with patch('src.pipeline.get_translator', return_value=mock_translator):
-        with patch('src.pipeline.get_medical_model', return_value=mock_model):
-            with patch('src.pipeline.get_product_store', return_value=mock_store):
-                with patch('src.pipeline.get_intent_classifier', return_value=mock_intent):
-                    with patch('src.pipeline.get_safety_layer', return_value=mock_safety):
+    with patch('src.translator.get_translator', return_value=mock_translator):
+        with patch('src.medical_model.get_medical_model', return_value=mock_model):
+            with patch('src.product_store.get_product_store', return_value=mock_store):
+                with patch('src.intent_classifier.get_intent_classifier', return_value=mock_intent):
+                    with patch('src.safety.get_safety_layer', return_value=mock_safety):
                         # Clear the global pipeline instance
                         import src.pipeline as pipeline_module
                         pipeline_module._pipeline = None
