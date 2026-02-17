@@ -1,7 +1,7 @@
 [project]
-name = "viapharma-medgemma"
+name = "pharmacy-ai-assistant"
 version = "1.0.0"
-description = "Bulgarian medical chatbot for OTC product recommendations"
+description = "AI-powered pharmacy assistant for OTC product recommendations"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}

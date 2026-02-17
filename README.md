@@ -1,11 +1,20 @@
-# ViaPharma OTC Chatbot
+# Pharmacy AI Assistant
 
-[![CI](https://github.com/kiril/medgemma/actions/workflows/ci.yml/badge.svg)](https://github.com/kiril/medgemma/actions/workflows/ci.yml)
+[![CI](https://github.com/kiril/pharmacy-ai-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/kiril/pharmacy-ai-assistant/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Coverage](https://img.shields.io/badge/coverage-39%25-yellow.svg)](htmlcov/index.html)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Bulgarian-language medical chatbot that recommends OTC products based on symptoms. Powered by MedGemma on Mac M-series.
+AI-powered pharmacy assistant for Bulgarian-language medical consultations. Recommends OTC products based on symptoms using MedGemma medical AI, multi-stage retrieval, and safety validation.
+
+## Integrations
+
+This chatbot integrates seamlessly with the ViaPharma ecosystem:
+
+- **[viapharma.us](https://viapharma.us)** - Main pharmacy platform for product catalog and customer service
+- **pharmacy-to-shopify** - Product synchronization pipeline that imports OTC products into the chatbot's recommendation database
+
+The chatbot serves as an intelligent product recommendation layer, helping customers find the right OTC medications based on their symptoms while directing them to viapharma.us for purchase.
 
 ## Architecture
 
@@ -95,7 +104,7 @@ docker run -d --name open-webui -p 3000:8080 \
   ghcr.io/open-webui/open-webui:main
 ```
 
-Open `http://localhost:3000` and select the `viapharma-medgemma` model.
+Open `http://localhost:3000` and select the `viapharma-assistant` model.
 
 ## API Endpoints
 
@@ -117,8 +126,8 @@ Open `http://localhost:3000` and select the `viapharma-medgemma` model.
 docker-compose up -d
 
 # Or build manually
-docker build -t viapharma-medgemma .
-docker run -p 8000:8000 -v ./output:/app/output:ro viapharma-medgemma
+docker build -t pharmacy-ai-assistant .
+docker run -p 8000:8000 -v ./output:/app/output:ro pharmacy-ai-assistant
 ```
 
 The API will be available at `http://localhost:8000/docs` (Swagger UI).

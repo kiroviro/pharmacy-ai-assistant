@@ -1,6 +1,6 @@
-# Contributing to ViaPharma OTC Chatbot
+# Contributing to Pharmacy AI Assistant
 
-Thank you for your interest in contributing to the ViaPharma OTC Chatbot project!
+Thank you for your interest in contributing to the Pharmacy AI Assistant project!
 
 ## Development Setup
 
@@ -14,8 +14,8 @@ Thank you for your interest in contributing to the ViaPharma OTC Chatbot project
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd medgemma
+git clone https://github.com/kiril/pharmacy-ai-assistant.git
+cd pharmacy-ai-assistant
 
 # Create virtual environment
 python -m venv venv
@@ -36,7 +36,7 @@ pytest tests/ -v
 ## Project Structure
 
 ```
-medgemma/
+pharmacy-ai-assistant/
 ├── src/                    # Source code
 │   ├── pipeline/           # Main pipeline (modular)
 │   │   ├── orchestrator.py # Pipeline class

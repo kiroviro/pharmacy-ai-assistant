@@ -179,7 +179,7 @@ class TestModelsEndpoint:
         response = client.get("/v1/models")
         data = response.json()
         model = data["data"][0]
-        assert model["id"] == "viapharma-medgemma"
+        assert model["id"] == "viapharma-assistant"
         assert model["owned_by"] == "viapharma"
         assert "description" in model
         assert "meta" in model
@@ -192,7 +192,7 @@ class TestChatCompletions:
     def test_basic_chat_request(self, client):
         """Basic chat request should return valid response."""
         response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-medgemma",
+            "model": "viapharma-assistant",
             "messages": [{"role": "user", "content": "Имам главоболие"}]
         })
         assert response.status_code == 200
@@ -205,7 +205,7 @@ class TestChatCompletions:
     def test_chat_response_format(self, client):
         """Chat response should match OpenAI format."""
         response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-medgemma",
+            "model": "viapharma-assistant",
             "messages": [{"role": "user", "content": "тест"}]
         })
         data = response.json()
@@ -228,7 +228,7 @@ class TestChatCompletions:
     def test_empty_message_rejected(self, client):
         """Empty messages should be rejected."""
         response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-medgemma",
+            "model": "viapharma-assistant",
             "messages": [{"role": "user", "content": ""}]
         })
         assert response.status_code == 400
@@ -236,7 +236,7 @@ class TestChatCompletions:
     def test_no_user_message_rejected(self, client):
         """Request without user message should be rejected."""
         response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-medgemma",
+            "model": "viapharma-assistant",
             "messages": [{"role": "system", "content": "test"}]
         })
         assert response.status_code == 400
@@ -244,7 +244,7 @@ class TestChatCompletions:
     def test_short_message_rejected(self, client):
         """Very short messages should be rejected."""
         response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-medgemma",
+            "model": "viapharma-assistant",
             "messages": [{"role": "user", "content": "a"}]
         })
         assert response.status_code == 400
@@ -252,7 +252,7 @@ class TestChatCompletions:
     def test_response_headers(self, client):
         """Response should include custom headers."""
         response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-medgemma",
+            "model": "viapharma-assistant",
             "messages": [{"role": "user", "content": "тест заявка"}]
         })
         assert "X-Request-ID" in response.headers
@@ -266,7 +266,7 @@ class TestInputValidation:
         """Messages exceeding max length should be rejected."""
         long_message = "а" * 2001  # Over default 2000 limit
         response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-medgemma",
+            "model": "viapharma-assistant",
             "messages": [{"role": "user", "content": long_message}]
         })
         assert response.status_code == 400
@@ -275,7 +275,7 @@ class TestInputValidation:
     def test_whitespace_only_rejected(self, client):
         """Whitespace-only messages should be rejected."""
         response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-medgemma",
+            "model": "viapharma-assistant",
             "messages": [{"role": "user", "content": "   \n\t   "}]
         })
         assert response.status_code == 400
@@ -283,7 +283,7 @@ class TestInputValidation:
     def test_valid_message_accepted(self, client):
         """Valid messages should be accepted."""
         response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-medgemma",
+            "model": "viapharma-assistant",
             "messages": [{"role": "user", "content": "Имам температура"}]
         })
         assert response.status_code == 200
@@ -300,7 +300,7 @@ class TestAlternativeEndpoints:
     def test_chat_without_v1(self, client):
         """Chat endpoint should work without /v1 prefix."""
         response = client.post("/chat/completions", json={
-            "model": "viapharma-medgemma",
+            "model": "viapharma-assistant",
             "messages": [{"role": "user", "content": "тест"}]
         })
         assert response.status_code == 200

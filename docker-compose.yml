@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: viapharma-api
+    container_name: pharmacy-ai-assistant
     ports:
       - "8000:8000"
     volumes:

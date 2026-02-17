@@ -88,7 +88,7 @@ Then configure the API endpoint in the UI settings.
 ## Step 4: Select the Model
 
 1. In the chat interface, click on the model selector (top left)
-2. Select **viapharma-medgemma**
+2. Select **viapharma-assistant**
 3. Start chatting in Bulgarian!
 
 ## Optional: Configure System Prompt
@@ -96,7 +96,7 @@ Then configure the API endpoint in the UI settings.
 To set up the Bulgarian pharmacy assistant persona:
 
 1. Go to **Settings** → **Models**
-2. Click on **viapharma-medgemma**
+2. Click on **viapharma-assistant**
 3. Add a system prompt:
 
 ```

@@ -265,7 +265,7 @@ def send_question(question: str) -> tuple[str, float, Optional[str]]:
         return "", 0.0, "Empty question"
 
     payload = {
-        "model": "viapharma-medgemma",
+        "model": "viapharma-assistant",
         "messages": [{"role": "user", "content": question}],
         "stream": False,
     }

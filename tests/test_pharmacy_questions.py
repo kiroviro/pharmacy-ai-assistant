@@ -183,7 +183,7 @@ EXPECTED = {
 def send_question(question: str) -> tuple[str, float, Optional[str]]:
     """Send a question to the API and return response, time, error."""
     payload = {
-        "model": "viapharma-medgemma",
+        "model": "viapharma-assistant",
         "messages": [{"role": "user", "content": question}],
         "stream": False,
     }

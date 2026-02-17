@@ -1,8 +1,18 @@
-# ViaPharma OTC Chatbot with MedGemma
+# Pharmacy AI Assistant
 
 ## Overview
 
-Build a Bulgarian-language medical chatbot for viapharma.us that understands symptoms and recommends OTC products from a catalogue of ~10-11k items. Runs locally on Mac M-series with option to scale later.
+AI-powered pharmacy assistant for viapharma.us that understands Bulgarian-language symptom descriptions and recommends OTC products from a catalogue of ~10-11k items. Built with MedGemma medical AI, runs locally on Mac M-series with option to scale later.
+
+## Ecosystem Integration
+
+This AI assistant is part of the ViaPharma pharmacy technology stack:
+
+- **Product Data Source**: Receives product catalog updates from the **pharmacy-to-shopify** synchronization pipeline
+- **Customer Touchpoint**: Integrated with **[viapharma.us](https://viapharma.us)** to provide intelligent product recommendations
+- **Data Flow**: `pharmacy-to-shopify` → Product CSV → ChromaDB embeddings → MedGemma recommendations → Customer interface
+
+The chatbot serves as an AI-powered recommendation engine that bridges customer symptoms with the right OTC products available at viapharma.us.
 
 ## Architecture
 

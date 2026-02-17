@@ -126,7 +126,7 @@ class Message(BaseModel):
 
 
 class ChatCompletionRequest(BaseModel):
-    model: str = "viapharma-medgemma"
+    model: str = "viapharma-assistant"
     messages: list[Message]
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = 2048
@@ -672,7 +672,7 @@ async def list_models():
     return ModelsResponse(
         data=[
             ModelInfo(
-                id="viapharma-medgemma",
+                id="viapharma-assistant",
                 created=int(time.time()),
                 owned_by="viapharma",
                 description=MODEL_DESCRIPTION,
