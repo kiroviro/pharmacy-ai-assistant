@@ -1,0 +1,42 @@
+======================================================================
+PRICE VALIDATION REPORT
+Generated: 2026-02-17T18:50:23.167020
+======================================================================
+
+SUMMARY
+----------------------------------------
+Total products checked:  30
+Prices match:            3 (10.0%)
+Price mismatches:        27 (90.0%)
+Not found on benu.bg:    0 (0.0%)
+Errors:                  0 (0.0%)
+
+PRICE MISMATCHES (sorted by difference)
+----------------------------------------------------------------------
+↓ InoPharm Pure elements Серум за лице с 6 | CSV:  225.90 BGN | Benu:   17.29 BGN | Diff: -208.61 (-92.3%)
+↓ Здраве Акне Стоп мицеларна вода с активе | CSV:   48.49 BGN | Benu:    4.09 BGN | Diff:  -44.40 (-91.6%)
+↑ Apivita Beevine Elixir Коригичащ и стяга | CSV:   19.79 BGN | Benu:   59.83 BGN | Diff:  +40.04 (+202.3%)
+↓ Коприва капсули за сърдечно-съдовата сис | CSV:   43.60 BGN | Benu:    9.00 BGN | Diff:  -34.60 (-79.4%)
+↓ Taurine капсули 500мг х100               | CSV:   44.98 BGN | Benu:   22.98 BGN | Diff:  -22.00 (-48.9%)
+↑ Риган органик масло за силна защита на и | CSV:    5.89 BGN | Benu:   27.75 BGN | Diff:  +21.86 (+371.1%)
+↓ Bellis perennis 9 ch                     | CSV:   26.38 BGN | Benu:    5.09 BGN | Diff:  -21.29 (-80.7%)
+↑ Klorane шампоан с органична коприва за м | CSV:   14.30 BGN | Benu:   34.99 BGN | Diff:  +20.69 (+144.7%)
+↓ Garnier skin naturals vitamin c мицеларн | CSV:   30.78 BGN | Benu:   10.70 BGN | Diff:  -20.08 (-65.2%)
+↓ LIVSANE Premium universal Лента пластир  | CSV:   20.79 BGN | Benu:    3.19 BGN | Diff:  -17.60 (-84.7%)
+↑ Citoplast universal 19мм/72мм х300 кутия | CSV:    3.70 BGN | Benu:   20.99 BGN | Diff:  +17.29 (+467.3%)
+↑ Омникод Имуно сироп за деца за подпомага | CSV:    9.00 BGN | Benu:   25.39 BGN | Diff:  +16.39 (+182.1%)
+↓ Простамол Уно капсули при проблеми с про | CSV:   40.00 BGN | Benu:   24.00 BGN | Diff:  -16.00 (-40.0%)
+↑ Реновакс рапид таблетки за здрави стави  | CSV:   34.48 BGN | Benu:   49.99 BGN | Diff:  +15.51 (+45.0%)
+↑ Капси 3 крем при болки и възпаления в гъ | CSV:    7.49 BGN | Benu:   21.18 BGN | Diff:  +13.69 (+182.8%)
+↓ Bioderma promo sensibio defensive rich 4 | CSV:   55.90 BGN | Benu:   44.49 BGN | Diff:  -11.41 (-20.4%)
+↓ Имунохелт кидс за имунитет 100мл Abophar | CSV:   38.78 BGN | Benu:   28.09 BGN | Diff:  -10.69 (-27.6%)
+↑ Бронховитал кидс имуно сироп за имунитет | CSV:    8.68 BGN | Benu:   18.19 BGN | Diff:   +9.51 (+109.6%)
+↑ Менопейс оригинал таблетки за хормонален | CSV:   20.89 BGN | Benu:   27.99 BGN | Diff:   +7.10 (+34.0%)
+↑ Neutrogena Норвежка формула дълбоко хидр | CSV:   11.79 BGN | Benu:   18.80 BGN | Diff:   +7.01 (+59.5%)
+↑ Хондросейв таблетки за стави х60 Ecophar | CSV:   32.00 BGN | Benu:   37.59 BGN | Diff:   +5.59 (+17.5%)
+↑ Гелоривойс бъз таблетки при пресипналост | CSV:   10.70 BGN | Benu:   14.98 BGN | Diff:   +4.28 (+40.0%)
+↓ Ръкавици нитрилни без пудра L х 100      | CSV:   11.99 BGN | Benu:    9.19 BGN | Diff:   -2.80 (-23.4%)
+↑ Amix super omega3 fish oil капсули х90   | CSV:   20.99 BGN | Benu:   22.98 BGN | Diff:   +1.99 ( +9.5%)
+↓ Gynofit Измивен лосион с парфюм за ежедн | CSV:   22.98 BGN | Benu:   22.20 BGN | Diff:   -0.78 ( -3.4%)
+↓ Масло бадемово ривана 100мл              | CSV:    5.89 BGN | Benu:    5.28 BGN | Diff:   -0.61 (-10.4%)
+↑ Сладки сънища форте капсули за спокоен и | CSV:   14.98 BGN | Benu:   15.49 BGN | Diff:   +0.51 ( +3.4%)

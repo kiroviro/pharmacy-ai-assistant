@@ -71,7 +71,17 @@
       "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch:*)",
       "Bash(git diff-index:*)",
       "Bash(ruff check:*)",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "Bash(git push:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run watch:*)",
+      "Bash(gh run view:*)",
+      "Bash(ruff format:*)",
+      "Bash(bandit:*)",
+      "WebFetch(domain:benu.bg)",
+      "WebFetch(domain:viapharma.us)",
+      "Bash(shuf:*)",
+      "Bash(xargs ls:*)"
     ]
   }
 }
