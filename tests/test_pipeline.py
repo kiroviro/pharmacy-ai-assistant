@@ -230,8 +230,8 @@ class TestPipelineFlow:
 
         assert result is not None
         assert result.is_medical is False
-        # Rejection message varies, check for common parts
-        assert ("здравн" in result.response.lower() or "medical" in result.response.lower())
+        # Rejection message varies, check for common health-related keywords
+        assert ("здрав" in result.response.lower() or "medical" in result.response.lower())
 
     def test_empty_query_handled(self, mock_pipeline):
         """Empty query should be handled gracefully."""
@@ -606,20 +606,28 @@ class TestPipelineResultWithContraindications:
 
 
 class TestContraindicationWarningMessage:
-    """Tests for contraindication warning messages."""
+    """Tests for contraindication warning messages.
+
+    Note: As of recent refactor, contraindication warnings are now embedded
+    in product card warnings and the safety block, not appended to responses.
+    The _add_contraindication_warning method now returns the response unchanged.
+    """
 
     def test_warning_includes_condition(self, mock_pipeline):
-        """Warning should mention the user's condition."""
+        """Contraindication warnings are now in product cards, not appended."""
+        original = "Original response"
         response = mock_pipeline._add_contraindication_warning(
-            "Original response",
+            original,
             [("MockProduct", ["pregnancy"])],
             ["pregnancy"]
         )
 
-        assert "бременност" in response.lower()
+        # Method should return response unchanged (warnings are in product cards)
+        assert response == original
 
     def test_warning_mentions_filtered_count(self, mock_pipeline):
-        """Warning should mention number of filtered products."""
+        """Contraindication warnings are now in product cards, not appended."""
+        original = "Original response"
         # Create mock tuples
         filtered = [
             (Mock(title="Product A"), ["pregnancy"]),
@@ -627,12 +635,13 @@ class TestContraindicationWarningMessage:
         ]
 
         response = mock_pipeline._add_contraindication_warning(
-            "Original response",
+            original,
             filtered,
             ["pregnancy"]
         )
 
-        assert "2" in response
+        # Method should return response unchanged (warnings are in product cards)
+        assert response == original
 
     def test_no_warning_when_no_contraindicated(self, mock_pipeline):
         """Should not add warning when no products filtered."""

@@ -9,7 +9,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 from src.medical_model import MedicalReasoning
 from src.pipeline.models import Product
 from src.pipeline.orchestrator import Pipeline
-from src.unified_processor import ExtractionResult, ReasoningResult, UnifiedProcessorResult
+from src.unified_processor import (
+    ExtractionResult,
+    IntentResult,
+    ReasoningResult,
+    SafetyResult,
+    UnifiedProcessorResult,
+)
 
 
 def test_ingredients_section_always_shown():
@@ -19,17 +25,19 @@ def test_ingredients_section_always_shown():
     # Create mock products
     mock_products = [
         Product(
+            id="dialgin-001",
             title="Диалгин",
             category="Болкоуспокояващи",
             description="За температура и болка",
-            active_ingredients="Парацетамол",
+            composition="Парацетамол",
             image_url=""
         ),
         Product(
+            id="nurofen-001",
             title="Нурофен",
             category="Болкоуспокояващи",
             description="За възпаление и болка",
-            active_ingredients="Ибупрофен",
+            composition="Ибупрофен",
             image_url=""
         ),
     ]
@@ -40,6 +48,14 @@ def test_ingredients_section_always_shown():
     print("=" * 80)
 
     mock_llm_result = UnifiedProcessorResult(
+        intent=IntentResult(
+            is_pharmacy_related=True,
+            confidence=0.95
+        ),
+        safety=SafetyResult(
+            level="safe",
+            action="proceed"
+        ),
         reasoning=ReasoningResult(
             treatment_category="",  # Empty - should trigger fallback
             explanation="Температурата е симптом на инфекция.",
@@ -85,9 +101,9 @@ def test_ingredients_section_always_shown():
         likely_cause="viral infection",
         explanation="Fever indicates infection",
         treatment_type="",  # Empty - should trigger fallback
-        how_it_helps="",
+        how_treatment_helps="",
         self_care_tips=["Rest", "Hydrate"],
-        recovery_timeline="2-3 days",
+        duration_guidance="2-3 days",
         warnings=["See doctor if..."]
     )
 
