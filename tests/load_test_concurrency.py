@@ -269,7 +269,7 @@ def print_recommendations(results):
         print("   📝 ADD: Comment explaining this test validated the limitation")
         print("\n   Next steps:")
         print("   - Keep current configuration")
-        print("   - Document this finding in TECHNICAL_DEBT.md")
+        print("   - Document this finding in docs/TECHNICAL_DEBT.md")
         print("   - Consider alternative scaling (horizontal pods)")
         return
 

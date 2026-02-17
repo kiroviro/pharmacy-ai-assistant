@@ -207,7 +207,7 @@ python e2e_query_tests.py
 
 ## Architecture
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system design.
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design.
 
 ## Safety Features
 

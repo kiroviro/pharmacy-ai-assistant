@@ -235,7 +235,7 @@ def test_new_term_translation(self, translator, english, expected_bulgarian):
 ## Getting Help
 
 - Check existing documentation in `docs/`
-- Review the `ARCHITECTURE.md` for system design
+- Review the `docs/ARCHITECTURE.md` for system design
 - Open an issue for questions
 
 ## Code of Conduct

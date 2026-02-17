@@ -69,7 +69,9 @@
       "Bash(EDITOR='sed -i \"\"\"\" \"\"s/^pick c64937f/drop c64937f/\"\"' git rebase -i 3b992cc)",
       "Bash(git log:*)",
       "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch:*)",
-      "Bash(git diff-index:*)"
+      "Bash(git diff-index:*)",
+      "Bash(ruff check:*)",
+      "Bash(git mv:*)"
     ]
   }
 }

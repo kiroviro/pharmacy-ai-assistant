@@ -5,7 +5,7 @@ This module provides validation to catch MedGemma 4B hallucinations
 where the model inserts irrelevant Bulgarian text (e.g., "защита на личните данни",
 "зъбні протези") into medical reasoning outputs.
 
-Root Cause: LLM hallucination (see TECHNICAL_DEBT.md Issue #17)
+Root Cause: LLM hallucination (see docs/TECHNICAL_DEBT.md Issue #17)
 Fix: Pattern-based detection + fallback handling
 """
 from typing import List, Tuple
