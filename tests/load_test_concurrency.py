@@ -19,8 +19,8 @@ Expected outcomes:
 """
 import concurrent.futures
 import time
-from concurrent.futures import ThreadPoolExecutor
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 
 try:
     import mlx.core as mx
@@ -162,7 +162,7 @@ def test_concurrent_inference():
         }
 
     except Exception as e:
-        print(f"\n   ❌ FAILED: Parallel execution with 2 workers crashed!")
+        print("\n   ❌ FAILED: Parallel execution with 2 workers crashed!")
         print(f"   Error: {e}")
         traceback.print_exc()
         results['parallel_2'] = {'crashed': True, 'error': str(e)}
@@ -221,7 +221,7 @@ def test_concurrent_inference():
         }
 
     except Exception as e:
-        print(f"\n   ❌ FAILED: Parallel execution with 4 workers crashed!")
+        print("\n   ❌ FAILED: Parallel execution with 4 workers crashed!")
         print(f"   Error: {e}")
         traceback.print_exc()
         results['parallel_4'] = {'crashed': True, 'error': str(e)}
@@ -238,13 +238,13 @@ def test_concurrent_inference():
     if 'crashed' not in results.get('parallel_2', {}):
         print(f"Parallel (2 workers):   {results['parallel_2']['time']:.2f}s  ({results['parallel_2']['speedup']:.2f}x speedup)")
     else:
-        print(f"Parallel (2 workers):   CRASHED ❌")
+        print("Parallel (2 workers):   CRASHED ❌")
 
     if 'parallel_4' in results:
         if 'crashed' not in results['parallel_4']:
             print(f"Parallel (4 workers):   {results['parallel_4']['time']:.2f}s  ({results['parallel_4']['speedup']:.2f}x speedup)")
         else:
-            print(f"Parallel (4 workers):   CRASHED ❌")
+            print("Parallel (4 workers):   CRASHED ❌")
 
     # ========================================================================
     # RECOMMENDATIONS

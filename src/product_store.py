@@ -7,12 +7,11 @@ multilingual embeddings. Includes async wrappers for non-blocking operations.
 
 import asyncio
 from pathlib import Path
-from typing import Optional
 
 import chromadb
 from chromadb.config import Settings
 
-from src.data_loader import ParsedProduct, load_products
+from src.data_loader import load_products
 from src.logging_config import get_logger
 
 logger = get_logger("viapharma.product_store")
@@ -222,8 +221,8 @@ class ProductStore:
                 self.client.delete_collection(COLLECTION_NAME)
                 self._collection = None
                 logger.info("Deleted existing collection.")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Collection deletion failed (collection may not exist): {e}")
 
         # Load and parse products
         products = load_products(data_dir)
@@ -281,7 +280,7 @@ class ProductStore:
         self,
         query: str,
         n_results: int = 10,
-        where: Optional[dict] = None,
+        where: dict | None = None,
         min_score: float = MIN_SIMILARITY_THRESHOLD,
     ) -> list[dict]:
         """
@@ -347,7 +346,7 @@ class ProductStore:
         self,
         query: str,
         n_results: int = 10,
-        where: Optional[dict] = None,
+        where: dict | None = None,
         keyword_boost: float = KEYWORD_BOOST_PER_MATCH,
         preferred_ingredients: list[str] | None = None,
     ) -> list[dict]:
@@ -510,7 +509,7 @@ class ProductStore:
             preferred_ingredients=preferred_ingredients,
         )
 
-    def get_product_by_sku(self, sku: str) -> Optional[dict]:
+    def get_product_by_sku(self, sku: str) -> dict | None:
         """Get a specific product by SKU."""
         results = self.collection.get(
             ids=[sku],
@@ -536,7 +535,7 @@ class ProductStore:
         self,
         query: str,
         n_results: int = 10,
-        where: Optional[dict] = None,
+        where: dict | None = None,
         min_score: float = MIN_SIMILARITY_THRESHOLD,
     ) -> list[dict]:
         """
@@ -559,7 +558,7 @@ class ProductStore:
         self,
         query: str,
         n_results: int = 10,
-        where: Optional[dict] = None,
+        where: dict | None = None,
         keyword_boost: float = KEYWORD_BOOST_PER_MATCH,
     ) -> list[dict]:
         """
@@ -601,7 +600,7 @@ class ProductStore:
 
 
 # Global store instance
-_store: Optional[ProductStore] = None
+_store: ProductStore | None = None
 
 
 def get_product_store() -> ProductStore:

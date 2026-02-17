@@ -14,14 +14,14 @@ import re
 import time
 from collections import OrderedDict
 from dataclasses import asdict, dataclass, field
-from typing import Literal, Optional
+from typing import Literal
 
 from mlx_lm import generate, load
 from mlx_lm.sample_utils import make_sampler
 
 from src.config import get_settings
 from src.logging_config import get_logger
-from src.prompts.unified_prompt import build_prompt, UNIFIED_SYSTEM_PROMPT
+from src.prompts.unified_prompt import UNIFIED_SYSTEM_PROMPT, build_prompt
 
 logger = get_logger("viapharma.unified_processor")
 
@@ -35,7 +35,7 @@ class IntentResult:
     """Intent classification result."""
     is_pharmacy_related: bool
     confidence: float
-    rejection_reason: Optional[str] = None
+    rejection_reason: str | None = None
 
 
 @dataclass
@@ -51,7 +51,7 @@ class ExtractionResult:
     """Extracted information from query."""
     symptoms: list[str] = field(default_factory=list)  # English
     user_conditions: list[str] = field(default_factory=list)  # pregnancy, child, diabetes, etc.
-    age_group: Optional[Literal["infant", "child", "adult", "elderly"]] = None
+    age_group: Literal["infant", "child", "adult", "elderly"] | None = None
     query_translated: str = ""  # Bulgarian → English translation
 
 
@@ -83,7 +83,7 @@ class UnifiedProcessorResult:
     intent: IntentResult
     safety: SafetyResult
     extraction: ExtractionResult
-    reasoning: Optional[ReasoningResult] = None
+    reasoning: ReasoningResult | None = None
 
     # Metadata
     processing_time_ms: float = 0.0
@@ -140,7 +140,7 @@ class ProcessorCache:
         normalized = self._normalize_query(query)
         return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
-    def get(self, query: str) -> Optional[UnifiedProcessorResult]:
+    def get(self, query: str) -> UnifiedProcessorResult | None:
         """Get cached result if available."""
         cache_key = self._get_cache_key(query)
         if cache_key in self._cache:
@@ -322,7 +322,7 @@ class UnifiedProcessor:
             logger.warning(f"Failed to build result from JSON: {e}", extra={"json_data": json_data})
             return self._fallback_result(original_query)
 
-    def _extract_json(self, response: str) -> Optional[dict]:
+    def _extract_json(self, response: str) -> dict | None:
         """Extract JSON object from response string."""
         # Try direct parse first
         try:
@@ -447,7 +447,7 @@ class UnifiedProcessor:
 # GLOBAL INSTANCE
 # =============================================================================
 
-_unified_processor: Optional[UnifiedProcessor] = None
+_unified_processor: UnifiedProcessor | None = None
 
 
 def get_unified_processor() -> UnifiedProcessor:

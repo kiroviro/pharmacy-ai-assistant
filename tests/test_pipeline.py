@@ -5,12 +5,13 @@ Tests the pipeline flow with mocked components to verify correct orchestration
 without loading the actual ML models.
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from dataclasses import dataclass
-
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 

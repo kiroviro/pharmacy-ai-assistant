@@ -10,20 +10,19 @@ Tests cover:
 """
 
 import json
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from src.unified_processor import (
+    ExtractionResult,
+    IntentResult,
+    ProcessorCache,
+    ReasoningResult,
+    SafetyResult,
     UnifiedProcessor,
     UnifiedProcessorResult,
-    IntentResult,
-    SafetyResult,
-    ExtractionResult,
-    ReasoningResult,
-    ProcessorCache,
-    get_unified_processor,
 )
-
 
 # =============================================================================
 # DATA CLASS TESTS

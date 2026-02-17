@@ -5,13 +5,14 @@ Tests the FastAPI endpoints without loading the full ML models.
 Uses mocking for the pipeline to enable fast testing.
 """
 
-import pytest
-from unittest.mock import Mock, patch
-from fastapi.testclient import TestClient
-
 # Import after setting up mocks
 import sys
 from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 

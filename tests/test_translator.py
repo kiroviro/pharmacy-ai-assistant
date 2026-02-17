@@ -5,7 +5,8 @@ Ensures medical dictionary translations work correctly and don't regress.
 """
 
 import pytest
-from src.translator import Translator, get_translator
+
+from src.translator import Translator
 
 
 class TestMedicalDictionary:

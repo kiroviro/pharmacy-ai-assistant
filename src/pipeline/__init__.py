@@ -16,22 +16,22 @@ Modules:
 """
 
 # Re-export main classes for backward compatibility
-from src.pipeline.models import Product, PipelineResult
 from src.pipeline.conditions import (
-    extract_user_conditions,
     check_contraindication,
+    extract_user_conditions,
     filter_by_contraindications,
 )
 from src.pipeline.constants import (
-    USER_CONDITION_PATTERNS,
-    CONTRAINDICATION_KEYWORDS,
+    CATALOG_CATEGORIES,
     CATALOG_PATTERNS_BG,
     CATALOG_PATTERNS_EN,
-    CATALOG_CATEGORIES,
     CHILD_KEYWORDS,
-    SAFETY_KEYWORDS,
     CHRONIC_DISEASE_KEYWORDS,
+    CONTRAINDICATION_KEYWORDS,
+    SAFETY_KEYWORDS,
+    USER_CONDITION_PATTERNS,
 )
+from src.pipeline.models import PipelineResult, Product
 from src.pipeline.orchestrator import Pipeline, get_pipeline
 
 __all__ = [

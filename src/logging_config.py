@@ -13,8 +13,8 @@ import sys
 import time
 import uuid
 from contextvars import ContextVar
+from datetime import UTC
 from functools import wraps
-from typing import Optional
 
 # Context variable for request tracking
 request_id_var: ContextVar[str] = ContextVar("request_id", default="")
@@ -90,7 +90,7 @@ class JsonFormatter(logging.Formatter):
 def setup_logging(
     level: str = "INFO",
     json_format: bool = False,
-    log_file: Optional[str] = None,
+    log_file: str | None = None,
 ) -> logging.Logger:
     """
     Configure application logging.
@@ -139,7 +139,7 @@ def get_logger(name: str = "viapharma") -> logging.Logger:
     return logging.getLogger(name)
 
 
-def set_request_id(request_id: Optional[str] = None) -> str:
+def set_request_id(request_id: str | None = None) -> str:
     """Set the request ID for the current context."""
     if request_id is None:
         request_id = uuid.uuid4().hex[:8]
@@ -152,7 +152,7 @@ def get_request_id() -> str:
     return request_id_var.get() or ""
 
 
-def log_timing(logger: Optional[logging.Logger] = None):
+def log_timing(logger: logging.Logger | None = None):
     """Decorator to log function execution time."""
     def decorator(func):
         @wraps(func)
@@ -182,7 +182,7 @@ def log_timing(logger: Optional[logging.Logger] = None):
 
 
 # Initialize default logger on module import
-_default_logger: Optional[logging.Logger] = None
+_default_logger: logging.Logger | None = None
 
 
 def init_default_logger(level: str = "INFO", json_format: bool = False):
@@ -196,7 +196,7 @@ def init_default_logger(level: str = "INFO", json_format: bool = False):
 # Audit Logging for Medical Queries (Regulatory Compliance)
 # =============================================================================
 
-_audit_logger: Optional[logging.Logger] = None
+_audit_logger: logging.Logger | None = None
 
 
 def get_audit_logger() -> logging.Logger:
@@ -222,7 +222,6 @@ def get_audit_logger() -> logging.Logger:
         _audit_logger.addHandler(console_handler)
 
         # File handler for persistent audit trail
-        import os
         from pathlib import Path
 
         audit_dir = Path("logs/audit")
@@ -266,15 +265,14 @@ def log_medical_query(
         client_ip_hash: Hashed client IP (privacy-preserving)
         duration_ms: Request processing time
     """
-    import hashlib
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     audit = get_audit_logger()
     audit.info(
         "medical_query_processed",
         extra={
             "event_type": "medical_query",
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "timestamp_utc": datetime.now(UTC).isoformat(),
             "query_hash": query_hash,
             "client_ip_hash": client_ip_hash,
             "is_medical": is_medical,

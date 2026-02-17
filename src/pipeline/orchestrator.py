@@ -8,48 +8,47 @@ Pipeline follows the Perplexity two-stage retrieval pattern:
 
 import re
 import time
-from typing import Optional
 
 from src.config import get_settings
 from src.intent_classifier import get_intent_classifier
 from src.logging_config import get_logger
 from src.medical_model import MedicalReasoning, get_medical_model
 from src.medical_terms_validator import get_medical_validator
-from src.product_store import get_product_store
-from src.safety import get_safety_layer
-from src.translator import get_translator
-from src.unified_processor import get_unified_processor, UnifiedProcessorResult
-
-# Import from pipeline submodules
-from src.pipeline.models import Product, PipelineResult
 from src.pipeline.conditions import (
     extract_user_conditions,
     filter_by_contraindications,
 )
-from src.pipeline.product_ingredients import (
-    INGREDIENT_PATTERNS_GLOBAL,
-    INGREDIENT_BG_NAMES,
-    extract_product_ingredient,
-    extract_all_product_ingredients,
-    is_combination_product,
-    extract_composition_summary,
-    extract_contraindication_summary,
-    build_ingredient_duplication_warning,
-    get_recommended_ingredients,
-)
-from src.pipeline.query_router import (
-    is_catalog_query,
-    is_comparison_query,
-    is_single_drug_name_query,
-    is_help_clarification_query,
-    get_help_clarification_message,
-)
 from src.pipeline.constants import (
     CHILD_KEYWORDS,
-    SAFETY_KEYWORDS,
     CHRONIC_DISEASE_KEYWORDS,
+    SAFETY_KEYWORDS,
     USER_CONDITION_PATTERNS,
 )
+
+# Import from pipeline submodules
+from src.pipeline.models import PipelineResult, Product
+from src.pipeline.product_ingredients import (
+    INGREDIENT_BG_NAMES,
+    INGREDIENT_PATTERNS_GLOBAL,
+    build_ingredient_duplication_warning,
+    extract_all_product_ingredients,
+    extract_composition_summary,
+    extract_contraindication_summary,
+    extract_product_ingredient,
+    get_recommended_ingredients,
+    is_combination_product,
+)
+from src.pipeline.query_router import (
+    get_help_clarification_message,
+    is_catalog_query,
+    is_comparison_query,
+    is_help_clarification_query,
+    is_single_drug_name_query,
+)
+from src.product_store import get_product_store
+from src.safety import get_safety_layer
+from src.translator import get_translator
+from src.unified_processor import UnifiedProcessorResult, get_unified_processor
 
 logger = get_logger("viapharma.pipeline")
 
@@ -160,7 +159,7 @@ class Pipeline:
         about the compared medications and show products for each drug.
         """
         start_time = time.perf_counter()
-        logger.info(f"Processing comparison query", extra={"drugs": drug_names})
+        logger.info("Processing comparison query", extra={"drugs": drug_names})
 
         # Search for products containing each drug
         all_products = []
@@ -187,7 +186,7 @@ class Pipeline:
         response = self._format_comparison_response(drug_names, products_by_drug)
 
         duration_ms = (time.perf_counter() - start_time) * 1000
-        logger.info(f"Comparison query completed", extra={
+        logger.info("Comparison query completed", extra={
             "duration_ms": round(duration_ms, 2),
             "drugs": drug_names,
             "products_found": len(all_products)
@@ -360,7 +359,7 @@ class Pipeline:
         Now uses hybrid search for better brand/product name matching.
         """
         start_time = time.perf_counter()
-        logger.info(f"Processing catalog query", extra={"search_term": search_term})
+        logger.info("Processing catalog query", extra={"search_term": search_term})
 
         # Direct product search - no medical reasoning needed
         if self.product_store.collection.count() == 0:
@@ -386,7 +385,7 @@ class Pipeline:
         response = self._format_catalog_response(search_term, products, user_input)
 
         duration_ms = (time.perf_counter() - start_time) * 1000
-        logger.info(f"Catalog query completed", extra={
+        logger.info("Catalog query completed", extra={
             "duration_ms": round(duration_ms, 2),
             "products_found": len(products)
         })
@@ -608,7 +607,7 @@ class Pipeline:
         If unified_processor_enabled=True, uses LLM-driven processing instead.
         """
         start_time = time.perf_counter()
-        logger.info(f"Processing query", extra={
+        logger.info("Processing query", extra={
             "query_length": len(user_input),
             "query_preview": user_input[:50] + "..." if len(user_input) > 50 else user_input,
             "unified_processor": self._use_unified_processor,
@@ -669,7 +668,7 @@ class Pipeline:
         # Legacy processing path (or fallback if unified processor fails)
         # Step 1: Intent Classification
         is_medical, confidence, reason = self.intent_classifier.is_medical_query(user_input)
-        logger.debug(f"Intent classification", extra={
+        logger.debug("Intent classification", extra={
             "is_medical": is_medical,
             "confidence": confidence,
             "reason": reason
@@ -681,7 +680,7 @@ class Pipeline:
                 try:
                     products = self.product_store.search(user_input, top_k=5)
                     if products and len(products) > 0:
-                        logger.info(f"Short query matched products in catalog", extra={
+                        logger.info("Short query matched products in catalog", extra={
                             "query": user_input,
                             "products_found": len(products)
                         })
@@ -721,9 +720,9 @@ class Pipeline:
 
         # Step 4: Safety Check (check BOTH original Bulgarian and translated English)
         is_red_flag, safety_message = self._check_safety(user_input, translated, medical_reasoning)
-        logger.debug(f"Safety check", extra={"is_red_flag": is_red_flag})
+        logger.debug("Safety check", extra={"is_red_flag": is_red_flag})
         if is_red_flag:
-            logger.warning(f"Red flag detected, referring to doctor")
+            logger.warning("Red flag detected, referring to doctor")
             # Safety messages are already in Bulgarian, no translation needed
             return PipelineResult(
                 response=safety_message,
@@ -798,7 +797,7 @@ class Pipeline:
             )
 
         duration_ms = (time.perf_counter() - start_time) * 1000
-        logger.info(f"Pipeline completed", extra={
+        logger.info("Pipeline completed", extra={
             "duration_ms": round(duration_ms, 2),
             "candidates": len(candidate_products),
             "selected": len(selected_products),
@@ -1091,8 +1090,8 @@ class Pipeline:
             if symptom_count <= 1:
                 any_combo = any(
                     len(extract_all_product_ingredients(p)) >= 2
-                    or "грип" in (getattr(p, "title") or "").lower()
-                    or "настинка" in (getattr(p, "title") or "").lower()
+                    or "грип" in (p.title or "").lower()
+                    or "настинка" in (p.title or "").lower()
                     for p in displayed_products
                 )
                 if any_combo:
@@ -1547,7 +1546,7 @@ class Pipeline:
         'сърбеж': 'antihistamines',
     }
 
-    def _extract_treatment_from_query(self, query: str) -> Optional[str]:
+    def _extract_treatment_from_query(self, query: str) -> str | None:
         """
         Extract treatment type from original Bulgarian query keywords.
 
@@ -1629,7 +1628,7 @@ class Pipeline:
             try:
                 products.append(Product.from_chromadb(result))
             except Exception as e:
-                logger.warning(f"Failed to parse product", extra={"error": str(e)})
+                logger.warning("Failed to parse product", extra={"error": str(e)})
         return products
 
     def _refine_product_selection(
@@ -2059,8 +2058,7 @@ class Pipeline:
         # More truncated/garbled patterns
         "_____", "____", "___",
         " ст ", " ст,", ",ст,", "ст ст",
-        "мои___", "мои____", "мои_____",
-        # English fragments that shouldn't appear in BG output
+        "мои___", "мои____", # English fragments that shouldn't appear in BG output
         "keep baby", "offer fluids", "lightly dressed",
         "keep бебе", "keep дете",  # Mixed English/BG
         "immediate care if fever", "immediate care if",
@@ -2480,7 +2478,7 @@ class Pipeline:
         is_child_query = any(
             kw in query_lower for kw in ["бебе", "дете", "детето", "месец", "бебет"]
         )
-        is_baby_query = any(
+        any(
             kw in query_lower for kw in ["бебе", "бебет", "месец"]
         )
 
@@ -2578,7 +2576,7 @@ class Pipeline:
         is_combo = len(all_ingredients) >= 2
         # Also treat cold/flu multi-symptom products as combo (title/desc keywords)
         if not is_combo:
-            td = f"{(getattr(product, 'title') or '')} {(getattr(product, 'description') or '')}".lower()
+            td = f"{(product.title or '')} {(product.description or '')}".lower()
             combo_keywords = [
                 "грип и настинка", "при грип", "за грип", "грипни симптоми",
                 "простуд", "простуда и грип", "при простуда"
@@ -2665,7 +2663,7 @@ class Pipeline:
 
         try:
             translated_values = self.translator.translate_batch_to_bulgarian(values)
-            return dict(zip(keys, translated_values))
+            return dict(zip(keys, translated_values, strict=False))
         except Exception as e:
             logger.warning(f"Batch translation failed, falling back to originals: {e}")
             return texts
@@ -2931,7 +2929,7 @@ class Pipeline:
 
 
 # Global pipeline instance
-_pipeline: Optional[Pipeline] = None
+_pipeline: Pipeline | None = None
 
 
 def get_pipeline() -> Pipeline:

@@ -2,23 +2,18 @@
 Pytest configuration and fixtures for ViaPharma tests.
 """
 
-import pytest
 import sys
 from pathlib import Path
+
+import pytest
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.safety import SafetyLayer
-from src.intent_classifier import IntentClassifier
-from src.unified_processor import (
-    UnifiedProcessor,
-    UnifiedProcessorResult,
-    IntentResult,
-    SafetyResult,
-    ExtractionResult,
-    ReasoningResult,
+from src.intent_classifier import IntentClassifier  # noqa: E402
+from src.safety import SafetyLayer  # noqa: E402
+from src.unified_processor import (  # noqa: E402
     ProcessorCache,
 )
 

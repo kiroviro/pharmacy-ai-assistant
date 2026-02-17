@@ -5,7 +5,6 @@ Contains Product and PipelineResult dataclasses.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from src.config import get_settings
 from src.medical_model import MedicalReasoning
@@ -126,7 +125,7 @@ class PipelineResult:
     is_red_flag: bool = False
     original_text: str = ""
     translated_text: str = ""
-    medical_reasoning: Optional[MedicalReasoning] = None
+    medical_reasoning: MedicalReasoning | None = None
     candidate_products: list = field(default_factory=list)  # Stage 1: top-K from vector DB
     selected_products: list = field(default_factory=list)   # Stage 2: LLM-refined selection
     # Contraindication filtering results

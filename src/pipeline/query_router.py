@@ -8,18 +8,17 @@ relevant search terms or drug names for downstream processing.
 import re
 
 from src.logging_config import get_logger
-
 from src.pipeline.constants import (
+    CATALOG_CATEGORIES,
     CATALOG_PATTERNS_BG,
     CATALOG_PATTERNS_EN,
-    CATALOG_CATEGORIES,
     CATALOG_REMOVE_PATTERNS,
+    COMMON_DRUG_NAMES,
+    COMPARISON_CANONICAL_MAP,
     COMPARISON_PATTERNS_BG,
     COMPARISON_PATTERNS_EN,
-    COMPARISON_CANONICAL_MAP,
-    COMMON_DRUG_NAMES,
-    SYMPTOM_WORDS,
     HELP_CLARIFICATION_WORDS,
+    SYMPTOM_WORDS,
 )
 
 logger = get_logger("viapharma.pipeline")

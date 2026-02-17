@@ -15,11 +15,11 @@ Tests 60 Bulgarian pharmacy questions across categories:
 
 import json
 import time
-import httpx
 from dataclasses import dataclass, field
-from typing import Optional
 from datetime import datetime
 from pathlib import Path
+
+import httpx
 
 API_URL = "http://localhost:8000/v1/chat/completions"
 
@@ -35,7 +35,7 @@ class TestResult:
     has_safety_warning: bool = False
     has_disclaimer: bool = False
     response_time_ms: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
 
     # Quality indicators
     is_relevant: bool = True  # Response matches question intent
@@ -180,7 +180,7 @@ EXPECTED = {
 }
 
 
-def send_question(question: str) -> tuple[str, float, Optional[str]]:
+def send_question(question: str) -> tuple[str, float, str | None]:
     """Send a question to the API and return response, time, error."""
     payload = {
         "model": "viapharma-assistant",
@@ -243,7 +243,7 @@ def analyze_response(question: str, response: str, category: str) -> TestResult:
     issues = []
 
     # Category-specific checks
-    expected = EXPECTED.get(category, {})
+    EXPECTED.get(category, {})
 
     if category in ["delivery", "payment"]:
         # These should be classified as non-medical
@@ -308,7 +308,7 @@ def analyze_response(question: str, response: str, category: str) -> TestResult:
     return result
 
 
-def run_tests(categories: Optional[list] = None, verbose: bool = True) -> dict:
+def run_tests(categories: list | None = None, verbose: bool = True) -> dict:
     """Run all tests and return results."""
 
     if categories is None:
@@ -425,12 +425,12 @@ def generate_improvement_plan(test_data: dict) -> str:
 
     summary = test_data["summary"]
     reports = test_data["category_reports"]
-    results = test_data["results"]
+    test_data["results"]
 
     plan = []
     plan.append("# ViaPharma Chatbot - План за подобрения")
     plan.append(f"\nДата: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    plan.append(f"\n## Обобщение на тестовете")
+    plan.append("\n## Обобщение на тестовете")
     plan.append(f"- Общо въпроси: {summary['total_questions']}")
     plan.append(f"- Преминали: {summary['passed']} ({summary['pass_rate']})")
     plan.append(f"- Проблемни: {summary['failed']}")
@@ -677,8 +677,8 @@ if __name__ == "__main__":
                 if h.status_code == 200:
                     health = h.json()
                     print(f"Products: {health.get('products_count', 'unknown')}")
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"  (Could not fetch product count: {e})")
     except Exception as e:
         print(f"⚠️  API not available: {e}")
         print("Start the API server: python api_server.py")

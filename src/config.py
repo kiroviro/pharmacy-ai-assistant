@@ -6,10 +6,8 @@ All hardcoded values should be moved here.
 """
 
 from functools import lru_cache
-from typing import Optional
 
 from pydantic import Field
-
 
 # Check if pydantic-settings is available, fallback to dataclass if not
 try:
@@ -99,7 +97,7 @@ class Settings(BaseSettings):
     # ==========================================================================
     log_level: str = Field(default="INFO", description="Log level (DEBUG, INFO, WARNING, ERROR)")
     log_json: bool = Field(default=True, description="Use JSON format for logs (recommended for production)")
-    log_file: Optional[str] = Field(default=None, description="Optional log file path")
+    log_file: str | None = Field(default=None, description="Optional log file path")
 
     # ==========================================================================
     # Feature Flags

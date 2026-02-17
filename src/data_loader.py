@@ -9,7 +9,6 @@ import re
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 
@@ -34,7 +33,7 @@ class ParsedProduct:
     # Pricing
     price_bgn: float
     price_eur: float
-    compare_at_price: Optional[float] = None
+    compare_at_price: float | None = None
 
     # Brand/Vendor
     brand: str = ""  # Марка (from Vendor column)

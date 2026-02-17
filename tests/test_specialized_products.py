@@ -3,9 +3,11 @@ Test specialized product detection and helpful messaging.
 """
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.pipeline import get_pipeline
+
 
 def test_atopic_skin_query():
     """Test that atopic skin query gets helpful message about missing specialized products."""

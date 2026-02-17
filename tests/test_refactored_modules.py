@@ -56,7 +56,7 @@ def test_extract_product_ingredient():
 
 def test_is_combination_product():
     """Test combination product detection."""
-    from src.pipeline.product_ingredients import extract_all_product_ingredients, is_combination_product
+    from src.pipeline.product_ingredients import is_combination_product
 
     class MockProduct:
         def __init__(self, composition, title=""):
@@ -84,7 +84,7 @@ def test_query_router_imports():
 
 def test_catalog_query_detection():
     """Test catalog query routing."""
-    from src.pipeline.query_router import is_catalog_query, extract_catalog_search_term
+    from src.pipeline.query_router import is_catalog_query
 
     ok, term = is_catalog_query("покажи ми слънцезащитен крем")
     assert ok
@@ -124,7 +124,7 @@ def test_single_drug_name_query():
 
 def test_help_clarification_query():
     """Test help/greeting detection."""
-    from src.pipeline.query_router import is_help_clarification_query, get_help_clarification_message
+    from src.pipeline.query_router import get_help_clarification_message, is_help_clarification_query
 
     assert is_help_clarification_query("помощ")
     assert is_help_clarification_query("здравей")

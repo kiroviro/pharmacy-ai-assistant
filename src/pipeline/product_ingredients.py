@@ -6,7 +6,6 @@ and extraction helpers for product composition and contraindications.
 """
 
 import re
-from typing import Optional
 
 # =============================================================================
 # ACTIVE INGREDIENT RECOGNITION

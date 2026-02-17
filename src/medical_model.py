@@ -12,7 +12,6 @@ import re
 import time
 from collections import OrderedDict
 from dataclasses import asdict, dataclass
-from typing import Optional
 
 from mlx_lm import generate, load
 from mlx_lm.sample_utils import make_sampler
@@ -337,7 +336,7 @@ class MedicalModel:
         self.model, self.tokenizer = load(self.model_path)
         self._loaded = True
         duration = time.perf_counter() - start_time
-        logger.info(f"MedGemma loaded successfully", extra={"load_time_s": round(duration, 2)})
+        logger.info("MedGemma loaded successfully", extra={"load_time_s": round(duration, 2)})
 
     # =========================================================================
     # CACHING METHODS
@@ -374,7 +373,7 @@ class MedicalModel:
         key_input = f"{normalized}|temp={temperature:.2f}"
         return hashlib.sha256(key_input.encode()).hexdigest()[:16]
 
-    def _get_from_cache(self, cache_key: str) -> Optional[MedicalReasoning]:
+    def _get_from_cache(self, cache_key: str) -> MedicalReasoning | None:
         """
         Get cached reasoning result if available.
 
@@ -385,7 +384,7 @@ class MedicalModel:
             self._cache.move_to_end(cache_key)
             self._cache_hits += 1
             cached_data = self._cache[cache_key]
-            logger.debug(f"Cache HIT", extra={"cache_key": cache_key})
+            logger.debug("Cache HIT", extra={"cache_key": cache_key})
             return MedicalReasoning.from_dict(cached_data)
         self._cache_misses += 1
         return None
@@ -399,10 +398,10 @@ class MedicalModel:
         # Evict oldest if at capacity
         while len(self._cache) >= self._cache_size:
             evicted_key, _ = self._cache.popitem(last=False)
-            logger.debug(f"Cache eviction", extra={"evicted_key": evicted_key})
+            logger.debug("Cache eviction", extra={"evicted_key": evicted_key})
 
         self._cache[cache_key] = reasoning.to_dict()
-        logger.debug(f"Cache STORE", extra={
+        logger.debug("Cache STORE", extra={
             "cache_key": cache_key,
             "cache_size": len(self._cache)
         })
@@ -940,7 +939,7 @@ Replace the numbers with your chosen product numbers. Output nothing else.
 
 
 # Global model instance (lazy loaded)
-_medical_model: Optional[MedicalModel] = None
+_medical_model: MedicalModel | None = None
 
 
 def get_medical_model() -> MedicalModel:

@@ -18,11 +18,11 @@ Tests 124 Bulgarian questions across 12 categories:
 
 import json
 import time
-import httpx
 from dataclasses import dataclass, field
-from typing import Optional
 from datetime import datetime
 from pathlib import Path
+
+import httpx
 
 API_URL = "http://localhost:8000/v1/chat/completions"
 
@@ -34,7 +34,7 @@ class TestResult:
     category: str
     response: str
     response_time_ms: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
     passed: bool = True
     issues: list = field(default_factory=list)
 
@@ -259,7 +259,7 @@ EXPECTED_BEHAVIORS = {
 }
 
 
-def send_question(question: str) -> tuple[str, float, Optional[str]]:
+def send_question(question: str) -> tuple[str, float, str | None]:
     """Send a question to the API and return response, time, error."""
     if not question.strip():
         return "", 0.0, "Empty question"
@@ -300,7 +300,7 @@ def analyze_response(question: str, response: str, category: str) -> TestResult:
         return result
 
     response_lower = response.lower()
-    expected = EXPECTED_BEHAVIORS.get(category, {})
+    EXPECTED_BEHAVIORS.get(category, {})
 
     # Check for emergency/doctor referral
     has_doctor_referral = any(phrase in response_lower for phrase in [
@@ -352,7 +352,7 @@ def analyze_response(question: str, response: str, category: str) -> TestResult:
     elif category in ["prices", "orders", "delivery", "returns", "account", "navigation", "legal"]:
         # Non-medical categories should be rejected
         if has_products:
-            issues.append(f"Should reject as non-medical but got product recommendations")
+            issues.append("Should reject as non-medical but got product recommendations")
             result.passed = False
 
     elif category == "products":
@@ -376,7 +376,7 @@ def analyze_response(question: str, response: str, category: str) -> TestResult:
     return result
 
 
-def run_tests(categories: Optional[list] = None, verbose: bool = True) -> dict:
+def run_tests(categories: list | None = None, verbose: bool = True) -> dict:
     """Run all tests and return results."""
 
     if categories is None:
@@ -403,7 +403,7 @@ def run_tests(categories: Optional[list] = None, verbose: bool = True) -> dict:
         failed = 0
         total_time = 0.0
 
-        for i, question in enumerate(questions, 1):
+        for _i, question in enumerate(questions, 1):
             question_num += 1
             if verbose:
                 print(f"\n[{question_num}/{total_questions}] {question[:60]}{'...' if len(question) > 60 else ''}")

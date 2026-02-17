@@ -5,10 +5,10 @@ Compares user input against known dangerous phrase embeddings.
 No fine-tuning required - uses semantic similarity for detection.
 """
 
-import numpy as np
 from dataclasses import dataclass
+
+import numpy as np
 from sentence_transformers import SentenceTransformer
-from typing import Optional
 
 from src.logging_config import get_logger
 
@@ -20,7 +20,7 @@ class EmbeddingSafetyResult:
     """Result from embedding-based safety classification."""
     severity: str  # emergency, urgent, warning, safe
     confidence: float
-    matched_phrase: Optional[str]
+    matched_phrase: str | None
     similarity_score: float
 
 
@@ -191,7 +191,7 @@ class EmbeddingSafetyClassifier:
 
 
 # Singleton (lazy loaded)
-_classifier: Optional[EmbeddingSafetyClassifier] = None
+_classifier: EmbeddingSafetyClassifier | None = None
 
 
 def get_embedding_safety_classifier() -> EmbeddingSafetyClassifier:

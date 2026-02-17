@@ -3,12 +3,14 @@ Quick test to verify active ingredients section is always shown when products ex
 """
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.pipeline.orchestrator import Pipeline
-from src.pipeline.models import Product
 from src.medical_model import MedicalReasoning
-from src.unified_processor import UnifiedProcessorResult, ReasoningResult, ExtractionResult
+from src.pipeline.models import Product
+from src.pipeline.orchestrator import Pipeline
+from src.unified_processor import ExtractionResult, ReasoningResult, UnifiedProcessorResult
+
 
 def test_ingredients_section_always_shown():
     """Test that active ingredients section appears even when extraction fails."""
@@ -66,7 +68,7 @@ def test_ingredients_section_always_shown():
 
     print(f"✅ Has ingredients header: {has_ingredients_header}")
     print(f"✅ Has fallback message: {has_fallback_message}")
-    print(f"\nResponse excerpt (ingredients section):")
+    print("\nResponse excerpt (ingredients section):")
     if "## 💊" in response:
         start = response.index("## 💊")
         end = response.index("---", start + 10) if "---" in response[start+10:] else start + 300
@@ -101,7 +103,7 @@ def test_ingredients_section_always_shown():
 
     print(f"✅ Has ingredients header: {has_ingredients_header2}")
     print(f"✅ Has fallback message or ingredient list: {has_fallback_message2 or 'Парацетамол' in response2 or 'Ибупрофен' in response2}")
-    print(f"\nResponse excerpt (ingredients section):")
+    print("\nResponse excerpt (ingredients section):")
     if "## 💊" in response2:
         start = response2.index("## 💊")
         end = response2.index("---", start + 10) if "---" in response2[start+10:] else start + 300

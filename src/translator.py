@@ -25,12 +25,11 @@ DEPRECATION NOTICE:
 """
 
 from collections import OrderedDict
-from typing import Optional
 
 from transformers import MarianMTModel, MarianTokenizer
 
-from src.logging_config import get_logger
 from src.config import get_settings
+from src.logging_config import get_logger
 
 logger = get_logger("viapharma.translator")
 
@@ -48,7 +47,7 @@ class LRUCache:
         self._hits = 0
         self._misses = 0
 
-    def get(self, key: str) -> Optional[str]:
+    def get(self, key: str) -> str | None:
         """Get a value from cache, moving it to end (most recently used)."""
         if key in self._cache:
             self._cache.move_to_end(key)
@@ -65,7 +64,7 @@ class LRUCache:
             if len(self._cache) >= self._max_size:
                 # Evict oldest (first) item
                 evicted_key, _ = self._cache.popitem(last=False)
-                logger.debug(f"Cache evicted entry", extra={"evicted_key_len": len(evicted_key)})
+                logger.debug("Cache evicted entry", extra={"evicted_key_len": len(evicted_key)})
         self._cache[key] = value
 
     def clear(self) -> None:
@@ -423,11 +422,8 @@ class Translator:
         "due to": "поради",
         "because of": "поради",
         "upper respiratory tract infection": "инфекция на горните дихателни пътища",
-        "upper respiratory infection": "инфекция на горните дихателни пътища",
-        "respiratory infection": "респираторна инфекция",
         "rhinoviruses": "риновируси",
         "rhinovirus": "риновирус",
-        "symptoms": "симптоми",
         "persist beyond": "продължат повече от",
         "persist": "продължават",
         "difficulty breathing": "затруднено дишане",
@@ -700,7 +696,7 @@ class Translator:
             return output
 
         # Second pass: model translation for remaining texts
-        indices, valid_texts = zip(*needs_model_translation)
+        indices, valid_texts = zip(*needs_model_translation, strict=False)
         inputs = self._en_to_bg_tokenizer(
             list(valid_texts),
             return_tensors="pt",
@@ -712,7 +708,7 @@ class Translator:
         results = [self._en_to_bg_tokenizer.decode(t, skip_special_tokens=True) for t in translated]
 
         # Apply dictionary, cleanup, and validate each result
-        for idx, original, result in zip(indices, valid_texts, results):
+        for idx, original, result in zip(indices, valid_texts, results, strict=False):
             # Apply dictionary to model output (catches terms model missed)
             result = self._apply_medical_dictionary(result)
             # Final cleanup: replace English remnants (Issue 6: mixed language)
@@ -787,7 +783,7 @@ class Translator:
 
 
 # Global translator instance (lazy loaded)
-_translator: Optional[Translator] = None
+_translator: Translator | None = None
 
 
 def get_translator() -> Translator:

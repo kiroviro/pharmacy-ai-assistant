@@ -6,9 +6,11 @@ are correctly filtered out before being shown to users.
 """
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.pipeline import get_pipeline
+
 
 def test_triage_garbage_filtering():
     """Test that garbage patterns in triage warnings are filtered out."""
@@ -89,7 +91,7 @@ def test_triage_garbage_filtering():
         # Evaluate
         passed = len(found_forbidden) == 0
         if passed:
-            print(f"\n✅ PASS: No forbidden patterns found")
+            print("\n✅ PASS: No forbidden patterns found")
             status = "PASS"
         else:
             print(f"\n❌ FAIL: Found forbidden patterns: {found_forbidden}")

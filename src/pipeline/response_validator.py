@@ -8,7 +8,6 @@ where the model inserts irrelevant Bulgarian text (e.g., "защита на ли
 Root Cause: LLM hallucination (see docs/TECHNICAL_DEBT.md Issue #17)
 Fix: Pattern-based detection + fallback handling
 """
-from typing import List, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,7 +35,7 @@ SEVERE_HALLUCINATION_PATTERNS = [
 ]
 
 
-def validate_response(response: str) -> Tuple[bool, List[str], str]:
+def validate_response(response: str) -> tuple[bool, list[str], str]:
     """
     Validate response for garbage text patterns.
 
@@ -73,7 +72,7 @@ def validate_response(response: str) -> Tuple[bool, List[str], str]:
     return is_valid, all_patterns, severity
 
 
-def extract_garbage_context(response: str, patterns: List[str], context_chars: int = 100) -> List[dict]:
+def extract_garbage_context(response: str, patterns: list[str], context_chars: int = 100) -> list[dict]:
     """
     Extract context around garbage patterns for logging/debugging.
 
@@ -104,7 +103,7 @@ def extract_garbage_context(response: str, patterns: List[str], context_chars: i
     return results
 
 
-def clean_response_sentences(response: str, patterns: List[str]) -> str:
+def clean_response_sentences(response: str, patterns: list[str]) -> str:
     """
     Remove sentences containing garbage patterns.
 
@@ -146,7 +145,7 @@ def clean_response_sentences(response: str, patterns: List[str]) -> str:
     return cleaned
 
 
-def validate_and_clean(response: str, strict: bool = False) -> Tuple[bool, str, dict]:
+def validate_and_clean(response: str, strict: bool = False) -> tuple[bool, str, dict]:
     """
     Validate response and optionally clean it.
 

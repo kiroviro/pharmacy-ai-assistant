@@ -8,7 +8,7 @@ and filtering products that are contraindicated for those conditions.
 import re
 
 from src.logging_config import get_logger
-from src.pipeline.constants import USER_CONDITION_PATTERNS, CONTRAINDICATION_KEYWORDS
+from src.pipeline.constants import CONTRAINDICATION_KEYWORDS, USER_CONDITION_PATTERNS
 
 logger = get_logger("viapharma.pipeline.conditions")
 

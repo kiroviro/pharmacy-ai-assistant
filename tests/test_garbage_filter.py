@@ -3,9 +3,11 @@ Quick unit test to verify garbage pattern filtering works.
 """
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.pipeline import get_pipeline
+
 
 def test_garbage_detection():
     """Test that garbage patterns are detected."""

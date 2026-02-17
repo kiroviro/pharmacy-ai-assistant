@@ -7,7 +7,7 @@ Detects and corrects common medical term translation issues:
 - Nonsensical medical phrases
 """
 import re
-from typing import Optional
+
 from src.logging_config import get_logger
 
 logger = get_logger("viapharma.medical_validator")
@@ -246,7 +246,7 @@ class MedicalTermsValidator:
 
 
 # Global validator instance
-_validator: Optional[MedicalTermsValidator] = None
+_validator: MedicalTermsValidator | None = None
 
 
 def get_medical_validator() -> MedicalTermsValidator:

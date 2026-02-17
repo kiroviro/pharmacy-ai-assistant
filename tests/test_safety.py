@@ -5,8 +5,7 @@ These tests are CRITICAL - the safety layer must never miss emergency symptoms.
 Target: 100% detection rate for emergency symptoms.
 """
 
-import pytest
-from src.safety import SafetyLayer, SafetyCheckResult
+from src.safety import SafetyCheckResult
 
 
 class TestEmergencyDetection:

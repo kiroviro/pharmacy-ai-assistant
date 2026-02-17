@@ -10,7 +10,6 @@ Uses a hybrid approach:
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Optional
 
 from src.logging_config import get_logger
 from src.safety_embeddings import get_embedding_safety_classifier
@@ -446,7 +445,7 @@ class SafetyLayer:
 
 
 # Global instance
-_safety_layer: Optional[SafetyLayer] = None
+_safety_layer: SafetyLayer | None = None
 
 
 def get_safety_layer() -> SafetyLayer:

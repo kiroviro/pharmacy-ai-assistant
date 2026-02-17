@@ -7,8 +7,6 @@ The intent classifier should:
 - Reject profanity/inappropriate language
 """
 
-import pytest
-from src.intent_classifier import IntentClassifier
 
 
 class TestMedicalQueryDetection:

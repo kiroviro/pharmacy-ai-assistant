@@ -4,12 +4,12 @@ Tests for MedGemma medical model caching functionality.
 Tests the LRU cache for medical reasoning results without loading the actual model.
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from dataclasses import dataclass
-
 import sys
 from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
@@ -108,8 +108,9 @@ class TestCacheLRUBehavior:
 
     def test_cache_stores_and_retrieves(self):
         """Should store and retrieve cached items."""
-        from src.medical_model import MedicalModel, MedicalReasoning
         from collections import OrderedDict
+
+        from src.medical_model import MedicalModel, MedicalReasoning
 
         model = MedicalModel.__new__(MedicalModel)
         model._cache = OrderedDict()
@@ -136,8 +137,9 @@ class TestCacheLRUBehavior:
 
     def test_cache_miss_returns_none(self):
         """Should return None for cache miss."""
-        from src.medical_model import MedicalModel
         from collections import OrderedDict
+
+        from src.medical_model import MedicalModel
 
         model = MedicalModel.__new__(MedicalModel)
         model._cache = OrderedDict()
@@ -152,8 +154,9 @@ class TestCacheLRUBehavior:
 
     def test_cache_evicts_oldest_when_full(self):
         """Should evict oldest item when cache is full."""
-        from src.medical_model import MedicalModel, MedicalReasoning
         from collections import OrderedDict
+
+        from src.medical_model import MedicalModel, MedicalReasoning
 
         model = MedicalModel.__new__(MedicalModel)
         model._cache = OrderedDict()
@@ -185,8 +188,9 @@ class TestCacheLRUBehavior:
 
     def test_cache_access_updates_lru_order(self):
         """Accessing a cached item should move it to most recently used."""
-        from src.medical_model import MedicalModel, MedicalReasoning
         from collections import OrderedDict
+
+        from src.medical_model import MedicalModel, MedicalReasoning
 
         model = MedicalModel.__new__(MedicalModel)
         model._cache = OrderedDict()
@@ -223,8 +227,9 @@ class TestCacheStatistics:
 
     def test_hit_rate_calculation(self):
         """Should correctly calculate cache hit rate."""
-        from src.medical_model import MedicalModel, MedicalReasoning
         from collections import OrderedDict
+
+        from src.medical_model import MedicalModel, MedicalReasoning
 
         model = MedicalModel.__new__(MedicalModel)
         model._cache = OrderedDict()
@@ -258,8 +263,9 @@ class TestCacheStatistics:
 
     def test_cache_stats_structure(self):
         """Cache stats should have expected structure."""
-        from src.medical_model import MedicalModel
         from collections import OrderedDict
+
+        from src.medical_model import MedicalModel
 
         model = MedicalModel.__new__(MedicalModel)
         model._cache = OrderedDict()
@@ -282,8 +288,9 @@ class TestCacheStatistics:
 
     def test_clear_cache(self):
         """Should clear all cached items."""
-        from src.medical_model import MedicalModel, MedicalReasoning
         from collections import OrderedDict
+
+        from src.medical_model import MedicalModel, MedicalReasoning
 
         model = MedicalModel.__new__(MedicalModel)
         model._cache = OrderedDict()
@@ -358,11 +365,11 @@ class TestCacheIntegration:
         model, mock_generate = mock_medical_model
 
         # First call
-        result1 = model.get_medical_reasoning("headache")
+        model.get_medical_reasoning("headache")
         call_count_after_first = mock_generate.call_count
 
         # Second call with different formatting
-        result2 = model.get_medical_reasoning("HEADACHE?")
+        model.get_medical_reasoning("HEADACHE?")
 
         assert mock_generate.call_count == call_count_after_first  # No additional calls
         assert model._cache_hits == 1

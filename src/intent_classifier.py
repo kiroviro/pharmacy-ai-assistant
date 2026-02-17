@@ -30,8 +30,6 @@ DEPRECATION NOTICE:
 """
 
 import re
-import warnings
-from typing import Optional
 
 
 class IntentClassifier:
@@ -164,8 +162,7 @@ class IntentClassifier:
 
             # Bulgarian - navigation / site
             'сайт', 'уебсайт', 'страница', 'приложение', 'мобилно',
-            'не зарежда', 'свържа', 'контакт', 'работно време',
-            'физически аптеки', 'ревю', 'рецензия', 'блог',
+            'не зарежда', 'свържа', 'контакт', 'физически аптеки', 'ревю', 'рецензия', 'блог',
             'намеря продукт', 'търсачка', 'категории',
 
             # Bulgarian - legal / regulatory
@@ -287,7 +284,7 @@ class IntentClassifier:
             return True, 0.95, f"Multiple medical keywords: {medical_matches}"
 
         if medical_matches == 1:
-            return True, 0.7, f"Single medical keyword found"
+            return True, 0.7, "Single medical keyword found"
 
         # Short queries without medical keywords - reject
         if len(text.split()) < 4 and medical_matches == 0:
@@ -335,7 +332,7 @@ class IntentClassifier:
 
 
 # Global instance
-_intent_classifier: Optional[IntentClassifier] = None
+_intent_classifier: IntentClassifier | None = None
 
 
 def get_intent_classifier() -> IntentClassifier:
