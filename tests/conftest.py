@@ -4,12 +4,26 @@ Pytest configuration and fixtures for ViaPharma tests.
 
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+
+# Mock MLX for CI environments (MLX only works on Apple Silicon)
+# This allows tests to import modules that use MLX without having the package installed
+try:
+    import mlx.core  # noqa: F401
+except (ImportError, ModuleNotFoundError):
+    # Create mock modules for MLX
+    sys.modules["mlx"] = MagicMock()
+    sys.modules["mlx.core"] = MagicMock()
+    sys.modules["mlx.nn"] = MagicMock()
+    sys.modules["mlx_lm"] = MagicMock()
+    sys.modules["mlx_lm.sample_utils"] = MagicMock()
+    sys.modules["mlx_lm.utils"] = MagicMock()
 
 from src.intent_classifier import IntentClassifier  # noqa: E402
 from src.safety import SafetyLayer  # noqa: E402
