@@ -2,7 +2,7 @@
 
 ## Dependency Vulnerability Scan
 
-Last updated: 2025-02-13
+Last updated: 2026-02-17
 
 ### Scanning Tool
 - **Tool**: pip-audit >= 2.6.0
@@ -25,6 +25,32 @@ Last updated: 2025-02-13
 - **Package**: setuptools 77.0.3 → 82.0.0
 - **Vulnerability**: Path traversal in PackageIndex
 - **Fix**: Upgraded to setuptools >= 78.1.1
+
+## Static Analysis (Bandit)
+
+### Scanning Tool
+- **Tool**: bandit >= 1.9.3
+- **Command**: `bandit -r src/ -ll -ii`
+
+### Accepted Risks
+
+#### 1. B104: Hardcoded bind to all interfaces (src/config.py:33)
+- **Severity**: Medium
+- **Confidence**: Medium
+- **Description**: API server binds to 0.0.0.0 for Docker/network accessibility
+- **Risk Assessment**: **ACCEPTED** - Required for containerized deployment. Production deployments should use proper firewall rules and reverse proxy configuration
+- **Mitigation**: Deploy behind reverse proxy (nginx/traefik), configure firewall rules, use TLS
+
+#### 2. B615: Hugging Face downloads without revision pinning (src/translator.py)
+- **Severity**: Medium
+- **Confidence**: High
+- **Locations**: Lines 119, 120, 127, 128
+- **Description**: Translation models downloaded without pinning specific revision commits
+- **Risk Assessment**: **ACCEPTED** - Using well-known Helsinki-NLP Marian models. Benefits of auto-updates outweigh risks
+- **Mitigation**: Models cached locally after first download, regular security audits
+- **Models Used**:
+  - `Helsinki-NLP/opus-mt-bg-en` (Bulgarian → English)
+  - `Helsinki-NLP/opus-mt-en-bg` (English → Bulgarian)
 
 ## Continuous Monitoring
 
