@@ -138,6 +138,7 @@ def test_help_clarification_query():
 if __name__ == "__main__":
     # Run as standalone script
     import unittest
+
     loader = unittest.TestLoader()
     suite = loader.loadTestsFromModule(sys.modules[__name__])
     runner = unittest.TextTestRunner(verbosity=2)

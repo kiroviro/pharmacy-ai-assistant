@@ -1,6 +1,7 @@
 """
 Quick unit test to verify garbage pattern filtering works.
 """
+
 import sys
 from pathlib import Path
 
@@ -18,23 +19,23 @@ def test_garbage_detection():
         {
             "text": "Това е лекарство за температура. Те могат да бъдат използвани като средство за защита на личните данни.",
             "should_contain_garbage": True,
-            "pattern": "защита на личните"
+            "pattern": "защита на личните",
         },
         {
             "text": "Препоръчвам парацетамол. Също има зъбні протези в аптеката.",
             "should_contain_garbage": True,
-            "pattern": "зъбні протези"
+            "pattern": "зъбні протези",
         },
         {
             "text": "За температура е добре да вземете ибупрофен. Репелент за комари.",
             "should_contain_garbage": True,
-            "pattern": "репелент"
+            "pattern": "репелент",
         },
         {
             "text": "За температура е добре да вземете ибупрофен. Пийте много течности.",
             "should_contain_garbage": False,
-            "pattern": None
-        }
+            "pattern": None,
+        },
     ]
 
     print("Testing garbage pattern detection:\n")
@@ -55,6 +56,7 @@ def test_garbage_detection():
     print("=" * 80)
     print("All tests passed! Garbage detection working correctly.")
     return True
+
 
 if __name__ == "__main__":
     success = test_garbage_detection()

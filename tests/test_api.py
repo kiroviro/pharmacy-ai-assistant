@@ -18,12 +18,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 class MockPipelineResult:
     """Mock result from pipeline.process()"""
-    def __init__(
-        self,
-        response: str = "Тестов отговор",
-        is_medical: bool = True,
-        is_red_flag: bool = False
-    ):
+
+    def __init__(self, response: str = "Тестов отговор", is_medical: bool = True, is_red_flag: bool = False):
         self.response = response
         self.is_medical = is_medical
         self.is_red_flag = is_red_flag
@@ -36,6 +32,7 @@ class MockPipelineResult:
 
 class MockPipeline:
     """Mock pipeline for testing."""
+
     def __init__(self):
         self._medical_model = Mock()
         self._medical_model._loaded = True
@@ -61,15 +58,9 @@ class MockPipeline:
     def process(self, user_input: str) -> MockPipelineResult:
         # Simulate different responses based on input
         if "emergency" in user_input.lower() or "спешно" in user_input.lower():
-            return MockPipelineResult(
-                response="🚨 СПЕШНО: Обадете се на 112!",
-                is_red_flag=True
-            )
+            return MockPipelineResult(response="🚨 СПЕШНО: Обадете се на 112!", is_red_flag=True)
         elif not user_input.strip():
-            return MockPipelineResult(
-                response="Моля, опишете симптомите си.",
-                is_medical=False
-            )
+            return MockPipelineResult(response="Моля, опишете симптомите си.", is_medical=False)
         else:
             return MockPipelineResult(
                 response="Въз основа на вашите симптоми, ето какво препоръчвам:\n\n### 1. Тестов продукт"
@@ -83,8 +74,8 @@ mock_pipeline = MockPipeline()
 @pytest.fixture
 def client():
     """Create test client with mocked pipeline."""
-    with patch('api_server.get_pipeline', return_value=mock_pipeline):
-        with patch('src.config.get_settings') as mock_settings:
+    with patch("api_server.get_pipeline", return_value=mock_pipeline):
+        with patch("src.config.get_settings") as mock_settings:
             # Configure mock settings
             settings = Mock()
             settings.log_level = "WARNING"
@@ -101,6 +92,7 @@ def client():
             mock_settings.return_value = settings
 
             from api_server import app
+
             yield TestClient(app)
 
 
@@ -192,10 +184,10 @@ class TestChatCompletions:
 
     def test_basic_chat_request(self, client):
         """Basic chat request should return valid response."""
-        response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-assistant",
-            "messages": [{"role": "user", "content": "Имам главоболие"}]
-        })
+        response = client.post(
+            "/v1/chat/completions",
+            json={"model": "viapharma-assistant", "messages": [{"role": "user", "content": "Имам главоболие"}]},
+        )
         assert response.status_code == 200
         data = response.json()
         assert "choices" in data
@@ -205,10 +197,10 @@ class TestChatCompletions:
 
     def test_chat_response_format(self, client):
         """Chat response should match OpenAI format."""
-        response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-assistant",
-            "messages": [{"role": "user", "content": "тест"}]
-        })
+        response = client.post(
+            "/v1/chat/completions",
+            json={"model": "viapharma-assistant", "messages": [{"role": "user", "content": "тест"}]},
+        )
         data = response.json()
         # Check required fields
         assert "id" in data
@@ -228,34 +220,33 @@ class TestChatCompletions:
 
     def test_empty_message_rejected(self, client):
         """Empty messages should be rejected."""
-        response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-assistant",
-            "messages": [{"role": "user", "content": ""}]
-        })
+        response = client.post(
+            "/v1/chat/completions", json={"model": "viapharma-assistant", "messages": [{"role": "user", "content": ""}]}
+        )
         assert response.status_code == 400
 
     def test_no_user_message_rejected(self, client):
         """Request without user message should be rejected."""
-        response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-assistant",
-            "messages": [{"role": "system", "content": "test"}]
-        })
+        response = client.post(
+            "/v1/chat/completions",
+            json={"model": "viapharma-assistant", "messages": [{"role": "system", "content": "test"}]},
+        )
         assert response.status_code == 400
 
     def test_short_message_rejected(self, client):
         """Very short messages should be rejected."""
-        response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-assistant",
-            "messages": [{"role": "user", "content": "a"}]
-        })
+        response = client.post(
+            "/v1/chat/completions",
+            json={"model": "viapharma-assistant", "messages": [{"role": "user", "content": "a"}]},
+        )
         assert response.status_code == 400
 
     def test_response_headers(self, client):
         """Response should include custom headers."""
-        response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-assistant",
-            "messages": [{"role": "user", "content": "тест заявка"}]
-        })
+        response = client.post(
+            "/v1/chat/completions",
+            json={"model": "viapharma-assistant", "messages": [{"role": "user", "content": "тест заявка"}]},
+        )
         assert "X-Request-ID" in response.headers
         assert "X-Response-Time" in response.headers
 
@@ -266,27 +257,27 @@ class TestInputValidation:
     def test_message_too_long(self, client):
         """Messages exceeding max length should be rejected."""
         long_message = "а" * 2001  # Over default 2000 limit
-        response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-assistant",
-            "messages": [{"role": "user", "content": long_message}]
-        })
+        response = client.post(
+            "/v1/chat/completions",
+            json={"model": "viapharma-assistant", "messages": [{"role": "user", "content": long_message}]},
+        )
         assert response.status_code == 400
         assert "дълго" in response.json()["detail"]
 
     def test_whitespace_only_rejected(self, client):
         """Whitespace-only messages should be rejected."""
-        response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-assistant",
-            "messages": [{"role": "user", "content": "   \n\t   "}]
-        })
+        response = client.post(
+            "/v1/chat/completions",
+            json={"model": "viapharma-assistant", "messages": [{"role": "user", "content": "   \n\t   "}]},
+        )
         assert response.status_code == 400
 
     def test_valid_message_accepted(self, client):
         """Valid messages should be accepted."""
-        response = client.post("/v1/chat/completions", json={
-            "model": "viapharma-assistant",
-            "messages": [{"role": "user", "content": "Имам температура"}]
-        })
+        response = client.post(
+            "/v1/chat/completions",
+            json={"model": "viapharma-assistant", "messages": [{"role": "user", "content": "Имам температура"}]},
+        )
         assert response.status_code == 200
 
 
@@ -300,10 +291,10 @@ class TestAlternativeEndpoints:
 
     def test_chat_without_v1(self, client):
         """Chat endpoint should work without /v1 prefix."""
-        response = client.post("/chat/completions", json={
-            "model": "viapharma-assistant",
-            "messages": [{"role": "user", "content": "тест"}]
-        })
+        response = client.post(
+            "/chat/completions",
+            json={"model": "viapharma-assistant", "messages": [{"role": "user", "content": "тест"}]},
+        )
         assert response.status_code == 200
 
 
@@ -312,9 +303,6 @@ class TestCORS:
 
     def test_cors_headers(self, client):
         """CORS headers should be present."""
-        response = client.options(
-            "/v1/chat/completions",
-            headers={"Origin": "http://localhost:3000"}
-        )
+        response = client.options("/v1/chat/completions", headers={"Origin": "http://localhost:3000"})
         # FastAPI TestClient doesn't fully simulate CORS, but we can check it doesn't error
         assert response.status_code in [200, 405]

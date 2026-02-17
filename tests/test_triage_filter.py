@@ -4,6 +4,7 @@ Unit test for triage garbage filtering (Issue #17).
 Tests that LLM-generated triage warnings containing garbage patterns
 are correctly filtered out before being shown to users.
 """
+
 import sys
 from pathlib import Path
 
@@ -31,7 +32,7 @@ def test_triage_garbage_filtering():
                 "ламарин",
                 "металокерамика",
             ],
-            "description": "Laryngitis query should not mention dental prosthetics"
+            "description": "Laryngitis query should not mention dental prosthetics",
         },
         {
             "query": "Имам сърбеж по кожата без обрив.",
@@ -40,7 +41,7 @@ def test_triage_garbage_filtering():
                 "защита на личните",
                 "средство за защита",
             ],
-            "description": "Itching query should not mention dental or data protection"
+            "description": "Itching query should not mention dental or data protection",
         },
         {
             "query": "Какво да използвам при стрии?",
@@ -49,7 +50,7 @@ def test_triage_garbage_filtering():
                 "репелент",
                 "комар",
             ],
-            "description": "Stretch marks query should not mention dental or mosquito repellent"
+            "description": "Stretch marks query should not mention dental or mosquito repellent",
         },
     ]
 
@@ -57,16 +58,16 @@ def test_triage_garbage_filtering():
     results = []
 
     for i, test_case in enumerate(test_cases, 1):
-        print(f"\n{'='*80}")
+        print(f"\n{'=' * 80}")
         print(f"Test Case {i}: {test_case['description']}")
-        print(f"Query: \"{test_case['query']}\"")
-        print('-' * 80)
+        print(f'Query: "{test_case["query"]}"')
+        print("-" * 80)
 
-        result = pipeline.process(test_case['query'])
+        result = pipeline.process(test_case["query"])
 
         # Extract triage section
         triage_bullets = []
-        lines = result.response.split('\n')
+        lines = result.response.split("\n")
         in_triage = False
         for line in lines:
             if "⚠️ Потърсете лекар ако:" in line:
@@ -84,7 +85,7 @@ def test_triage_garbage_filtering():
         # Check for forbidden patterns
         response_lower = result.response.lower()
         found_forbidden = []
-        for pattern in test_case['forbidden_patterns']:
+        for pattern in test_case["forbidden_patterns"]:
             if pattern in response_lower:
                 found_forbidden.append(pattern)
 
@@ -98,24 +99,26 @@ def test_triage_garbage_filtering():
             all_passed = False
             status = "FAIL"
 
-        results.append({
-            "query": test_case['query'],
-            "status": status,
-            "forbidden_found": found_forbidden,
-        })
+        results.append(
+            {
+                "query": test_case["query"],
+                "status": status,
+                "forbidden_found": found_forbidden,
+            }
+        )
 
     # Summary
     print("\n" + "=" * 80)
     print("SUMMARY")
     print("=" * 80)
-    passed_count = sum(1 for r in results if r['status'] == 'PASS')
+    passed_count = sum(1 for r in results if r["status"] == "PASS")
     total_count = len(results)
     print(f"\nResults: {passed_count}/{total_count} tests passed")
 
     for i, result in enumerate(results, 1):
-        status_icon = "✅" if result['status'] == 'PASS' else "❌"
+        status_icon = "✅" if result["status"] == "PASS" else "❌"
         print(f"{status_icon} Test {i}: {result['status']}")
-        if result['forbidden_found']:
+        if result["forbidden_found"]:
             print(f"   Found: {result['forbidden_found']}")
 
     print("\n" + "=" * 80)
@@ -128,6 +131,7 @@ def test_triage_garbage_filtering():
     print("=" * 80)
 
     return all_passed
+
 
 if __name__ == "__main__":
     success = test_triage_garbage_filtering()

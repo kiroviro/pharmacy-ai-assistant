@@ -28,6 +28,7 @@ from src.unified_processor import (
 # DATA CLASS TESTS
 # =============================================================================
 
+
 class TestIntentResult:
     """Tests for IntentResult dataclass."""
 
@@ -141,7 +142,12 @@ class TestUnifiedProcessorResult:
         data = {
             "intent": {"is_pharmacy_related": True, "confidence": 0.9, "rejection_reason": None},
             "safety": {"level": "warning", "detected_flags": ["infant fever"], "action": "warn_and_proceed"},
-            "extraction": {"symptoms": ["fever"], "user_conditions": ["child"], "age_group": "infant", "query_translated": "baby has fever"},
+            "extraction": {
+                "symptoms": ["fever"],
+                "user_conditions": ["child"],
+                "age_group": "infant",
+                "query_translated": "baby has fever",
+            },
             "reasoning": {"treatment_category": "pediatric antipyretics", "see_doctor": True},
         }
         result = UnifiedProcessorResult.from_dict(data)
@@ -171,6 +177,7 @@ class TestUnifiedProcessorResult:
 # =============================================================================
 # CACHE TESTS
 # =============================================================================
+
 
 class TestProcessorCache:
     """Tests for the processor cache."""
@@ -249,6 +256,7 @@ class TestProcessorCache:
 # RESPONSE PARSING TESTS
 # =============================================================================
 
+
 class TestResponseParsing:
     """Tests for LLM response parsing."""
 
@@ -262,12 +270,25 @@ class TestResponseParsing:
 
     def test_parse_valid_json(self, processor):
         """Parser should handle valid JSON responses."""
-        response = json.dumps({
-            "intent": {"is_pharmacy_related": True, "confidence": 0.95, "rejection_reason": None},
-            "safety": {"level": "safe", "detected_flags": [], "action": "proceed"},
-            "extracted": {"symptoms": ["headache"], "user_conditions": [], "age_group": "adult", "query_translated": "I have a headache"},
-            "recommendation": {"treatment_category": "analgesics", "explanation": "...", "self_care_tips": [], "warnings": [], "see_doctor": False},
-        })
+        response = json.dumps(
+            {
+                "intent": {"is_pharmacy_related": True, "confidence": 0.95, "rejection_reason": None},
+                "safety": {"level": "safe", "detected_flags": [], "action": "proceed"},
+                "extracted": {
+                    "symptoms": ["headache"],
+                    "user_conditions": [],
+                    "age_group": "adult",
+                    "query_translated": "I have a headache",
+                },
+                "recommendation": {
+                    "treatment_category": "analgesics",
+                    "explanation": "...",
+                    "self_care_tips": [],
+                    "warnings": [],
+                    "see_doctor": False,
+                },
+            }
+        )
         result = processor._parse_response(response, "test query")
 
         assert result.intent.is_pharmacy_related is True
@@ -308,15 +329,14 @@ class TestResponseParsing:
 # INTEGRATION TESTS (WITH MOCKS)
 # =============================================================================
 
+
 class TestUnifiedProcessorIntegration:
     """Integration tests with mocked LLM."""
 
     @pytest.fixture
     def mock_processor(self):
         """Create processor with mocked LLM."""
-        with patch('src.unified_processor.load') as mock_load, \
-             patch('src.unified_processor.generate') as mock_generate:
-
+        with patch("src.unified_processor.load") as mock_load, patch("src.unified_processor.generate") as mock_generate:
             mock_load.return_value = (MagicMock(), MagicMock())
 
             processor = UnifiedProcessor(
@@ -328,12 +348,25 @@ class TestUnifiedProcessorIntegration:
 
     def test_process_medical_query(self, mock_processor):
         """Test processing a medical query."""
-        mock_processor._mock_generate.return_value = json.dumps({
-            "intent": {"is_pharmacy_related": True, "confidence": 0.95, "rejection_reason": None},
-            "safety": {"level": "safe", "detected_flags": [], "action": "proceed"},
-            "extracted": {"symptoms": ["headache"], "user_conditions": [], "age_group": "adult", "query_translated": "I have a headache"},
-            "recommendation": {"treatment_category": "analgesics", "explanation": "Tension headache", "self_care_tips": ["rest"], "warnings": [], "see_doctor": False},
-        })
+        mock_processor._mock_generate.return_value = json.dumps(
+            {
+                "intent": {"is_pharmacy_related": True, "confidence": 0.95, "rejection_reason": None},
+                "safety": {"level": "safe", "detected_flags": [], "action": "proceed"},
+                "extracted": {
+                    "symptoms": ["headache"],
+                    "user_conditions": [],
+                    "age_group": "adult",
+                    "query_translated": "I have a headache",
+                },
+                "recommendation": {
+                    "treatment_category": "analgesics",
+                    "explanation": "Tension headache",
+                    "self_care_tips": ["rest"],
+                    "warnings": [],
+                    "see_doctor": False,
+                },
+            }
+        )
 
         result = mock_processor.process("имам главоболие")
 
@@ -343,12 +376,19 @@ class TestUnifiedProcessorIntegration:
 
     def test_process_non_medical_query(self, mock_processor):
         """Test rejecting a non-medical query."""
-        mock_processor._mock_generate.return_value = json.dumps({
-            "intent": {"is_pharmacy_related": False, "confidence": 0.92, "rejection_reason": "weather_query"},
-            "safety": {"level": "safe", "detected_flags": [], "action": "proceed"},
-            "extracted": {"symptoms": [], "user_conditions": [], "age_group": None, "query_translated": "what is the weather"},
-            "recommendation": None,
-        })
+        mock_processor._mock_generate.return_value = json.dumps(
+            {
+                "intent": {"is_pharmacy_related": False, "confidence": 0.92, "rejection_reason": "weather_query"},
+                "safety": {"level": "safe", "detected_flags": [], "action": "proceed"},
+                "extracted": {
+                    "symptoms": [],
+                    "user_conditions": [],
+                    "age_group": None,
+                    "query_translated": "what is the weather",
+                },
+                "recommendation": None,
+            }
+        )
 
         result = mock_processor.process("какво е времето")
 
@@ -357,12 +397,23 @@ class TestUnifiedProcessorIntegration:
 
     def test_process_emergency_query(self, mock_processor):
         """Test detecting an emergency."""
-        mock_processor._mock_generate.return_value = json.dumps({
-            "intent": {"is_pharmacy_related": True, "confidence": 0.99, "rejection_reason": None},
-            "safety": {"level": "emergency", "detected_flags": ["chest pain", "difficulty breathing"], "action": "call_emergency"},
-            "extracted": {"symptoms": ["chest pain", "difficulty breathing"], "user_conditions": [], "age_group": None, "query_translated": "chest pain and can't breathe"},
-            "recommendation": None,
-        })
+        mock_processor._mock_generate.return_value = json.dumps(
+            {
+                "intent": {"is_pharmacy_related": True, "confidence": 0.99, "rejection_reason": None},
+                "safety": {
+                    "level": "emergency",
+                    "detected_flags": ["chest pain", "difficulty breathing"],
+                    "action": "call_emergency",
+                },
+                "extracted": {
+                    "symptoms": ["chest pain", "difficulty breathing"],
+                    "user_conditions": [],
+                    "age_group": None,
+                    "query_translated": "chest pain and can't breathe",
+                },
+                "recommendation": None,
+            }
+        )
 
         result = mock_processor.process("болка в гърдите не мога да дишам")
 
@@ -372,12 +423,19 @@ class TestUnifiedProcessorIntegration:
 
     def test_caching_prevents_duplicate_inference(self, mock_processor):
         """Test that caching prevents duplicate LLM calls."""
-        mock_processor._mock_generate.return_value = json.dumps({
-            "intent": {"is_pharmacy_related": True, "confidence": 0.95, "rejection_reason": None},
-            "safety": {"level": "safe", "detected_flags": [], "action": "proceed"},
-            "extracted": {"symptoms": ["headache"], "user_conditions": [], "age_group": "adult", "query_translated": "headache"},
-            "recommendation": {"treatment_category": "analgesics"},
-        })
+        mock_processor._mock_generate.return_value = json.dumps(
+            {
+                "intent": {"is_pharmacy_related": True, "confidence": 0.95, "rejection_reason": None},
+                "safety": {"level": "safe", "detected_flags": [], "action": "proceed"},
+                "extracted": {
+                    "symptoms": ["headache"],
+                    "user_conditions": [],
+                    "age_group": "adult",
+                    "query_translated": "headache",
+                },
+                "recommendation": {"treatment_category": "analgesics"},
+            }
+        )
 
         # First call
         result1 = mock_processor.process("главоболие")
@@ -394,6 +452,7 @@ class TestUnifiedProcessorIntegration:
 # =============================================================================
 # SAFETY INTEGRATION TESTS
 # =============================================================================
+
 
 class TestSafetyIntegration:
     """Tests for safety layer integration."""

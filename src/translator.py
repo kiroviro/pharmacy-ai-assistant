@@ -83,7 +83,7 @@ class LRUCache:
             "max_size": self._max_size,
             "hits": self._hits,
             "misses": self._misses,
-            "hit_rate_percent": round(hit_rate, 1)
+            "hit_rate_percent": round(hit_rate, 1),
         }
 
 
@@ -494,13 +494,10 @@ class Translator:
         Sorts by length (longest first) to ensure proper phrase matching.
         """
         import re
+
         result = text
         # Sort by length (longest first) to match longer phrases before shorter ones
-        sorted_items = sorted(
-            self._MEDICAL_TERM_TRANSLATIONS.items(),
-            key=lambda x: len(x[0]),
-            reverse=True
-        )
+        sorted_items = sorted(self._MEDICAL_TERM_TRANSLATIONS.items(), key=lambda x: len(x[0]), reverse=True)
         for eng, bg in sorted_items:
             # Case-insensitive replacement
             result = re.sub(re.escape(eng), bg, result, flags=re.IGNORECASE)
@@ -553,9 +550,9 @@ class Translator:
 
         # Check Bulgarian ratio and try additional fallbacks if still low
         bg_ratio = self._calculate_bulgarian_ratio(result)
-        if bg_ratio < 0.6 and '.' in text:
+        if bg_ratio < 0.6 and "." in text:
             # Try sentence-by-sentence translation
-            sentences = [s.strip() for s in text.split('.') if s.strip()]
+            sentences = [s.strip() for s in text.split(".") if s.strip()]
             if len(sentences) > 1:
                 translated_sentences = []
                 for sentence in sentences:
@@ -567,7 +564,7 @@ class Translator:
                     # Apply dictionary to each sentence
                     trans_text = self._apply_medical_dictionary(trans_text)
                     translated_sentences.append(trans_text)
-                sentence_result = '. '.join(translated_sentences)
+                sentence_result = ". ".join(translated_sentences)
                 if self._calculate_bulgarian_ratio(sentence_result) > bg_ratio:
                     result = sentence_result
 
@@ -646,12 +643,12 @@ class Translator:
         for en_word, bg_word in self._ENGLISH_REMNANTS.items():
             # Only replace if word is isolated (not part of a Bulgarian word)
             # Use word boundaries to avoid partial matches
-            pattern = rf'\b{re.escape(en_word)}\b'
+            pattern = rf"\b{re.escape(en_word)}\b"
             result = re.sub(pattern, bg_word, result, flags=re.IGNORECASE)
 
         # Clean up any double spaces or orphaned punctuation from removed words
-        result = re.sub(r'\s+', ' ', result)
-        result = re.sub(r'\s+([.,!?])', r'\1', result)
+        result = re.sub(r"\s+", " ", result)
+        result = re.sub(r"\s+([.,!?])", r"\1", result)
 
         return result.strip()
 
@@ -698,11 +695,7 @@ class Translator:
         # Second pass: model translation for remaining texts
         indices, valid_texts = zip(*needs_model_translation, strict=False)
         inputs = self._en_to_bg_tokenizer(
-            list(valid_texts),
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=512
+            list(valid_texts), return_tensors="pt", padding=True, truncation=True, max_length=512
         )
         translated = self._en_to_bg_model.generate(**inputs)
         results = [self._en_to_bg_tokenizer.decode(t, skip_special_tokens=True) for t in translated]
@@ -776,10 +769,7 @@ class Translator:
 
     def get_cache_stats(self) -> dict:
         """Get cache statistics for monitoring."""
-        return {
-            "bg_to_en": self._cache_bg_to_en.stats,
-            "en_to_bg": self._cache_en_to_bg.stats
-        }
+        return {"bg_to_en": self._cache_bg_to_en.stats, "en_to_bg": self._cache_en_to_bg.stats}
 
 
 # Global translator instance (lazy loaded)

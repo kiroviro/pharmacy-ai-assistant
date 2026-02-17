@@ -126,6 +126,7 @@ class TestOTCFilter:
 
     def test_filter_otc_only(self, safety_layer):
         """Should filter to only OTC products."""
+
         class MockProduct:
             def __init__(self, name, is_otc):
                 self.name = name
@@ -209,7 +210,7 @@ class TestDisclaimers:
             severity="warning",
             matched_symptoms=["persistent cough"],
             message="Monitor symptoms",
-            should_refer_to_doctor=True
+            should_refer_to_doctor=True,
         )
         response = "Here are some products"
         result = safety_layer.add_safety_disclaimer(response, warning_result)
@@ -219,11 +220,7 @@ class TestDisclaimers:
     def test_no_disclaimer_for_none_severity(self, safety_layer):
         """Should not add disclaimer for none severity."""
         none_result = SafetyCheckResult(
-            is_red_flag=False,
-            severity="none",
-            matched_symptoms=[],
-            message="",
-            should_refer_to_doctor=False
+            is_red_flag=False, severity="none", matched_symptoms=[], message="", should_refer_to_doctor=False
         )
         response = "Here are some products"
         result = safety_layer.add_safety_disclaimer(response, none_result)

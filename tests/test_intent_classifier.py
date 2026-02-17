@@ -8,7 +8,6 @@ The intent classifier should:
 """
 
 
-
 class TestMedicalQueryDetection:
     """Tests for medical query detection - should have HIGH recall."""
 
@@ -125,8 +124,8 @@ class TestNonMedicalRejection:
         # Focus on queries with explicit non-medical keywords
         entertainment = [
             "какви са новините",  # news
-            "кога е мачът",       # match/game
-            "tell me a joke",     # joke
+            "кога е мачът",  # match/game
+            "tell me a joke",  # joke
         ]
         for query in entertainment:
             is_medical, _, _ = intent_classifier.is_medical_query(query)

@@ -18,6 +18,7 @@ logger = get_logger("viapharma.safety_embeddings")
 @dataclass
 class EmbeddingSafetyResult:
     """Result from embedding-based safety classification."""
+
     severity: str  # emergency, urgent, warning, safe
     confidence: float
     matched_phrase: str | None
@@ -52,60 +53,118 @@ class EmbeddingSafetyClassifier:
 
         self.emergency_phrases = [
             # Breathing/cardiac
-            "не мога да дишам", "задушавам се", "затруднено дишане",
-            "болка в гърдите", "стягане в гърдите",
-            "can't breathe", "difficulty breathing", "choking",
-            "chest pain", "chest tightness", "heart attack",
+            "не мога да дишам",
+            "задушавам се",
+            "затруднено дишане",
+            "болка в гърдите",
+            "стягане в гърдите",
+            "can't breathe",
+            "difficulty breathing",
+            "choking",
+            "chest pain",
+            "chest tightness",
+            "heart attack",
             # Poisoning/overdose
-            "детето ми изпи лекарство", "бебето глътна хапче",
-            "изпих твърде много хапчета", "предозирах", "отрових се",
-            "child swallowed pills", "baby ate medication", "overdose", "poisoning",
+            "детето ми изпи лекарство",
+            "бебето глътна хапче",
+            "изпих твърде много хапчета",
+            "предозирах",
+            "отрових се",
+            "child swallowed pills",
+            "baby ate medication",
+            "overdose",
+            "poisoning",
             # Mental health crisis
-            "искам да се убия", "искам да умра", "не искам да живея",
-            "суицидни мисли", "самонараняване", "режа се",
-            "want to kill myself", "want to die", "suicidal thoughts",
-            "self-harm", "cutting myself", "want to end it all",
+            "искам да се убия",
+            "искам да умра",
+            "не искам да живея",
+            "суицидни мисли",
+            "самонараняване",
+            "режа се",
+            "want to kill myself",
+            "want to die",
+            "suicidal thoughts",
+            "self-harm",
+            "cutting myself",
+            "want to end it all",
             # Severe allergic
-            "не мога да преглъщам", "подуване на гърлото", "анафилаксия",
-            "can't swallow", "throat swelling", "anaphylaxis",
+            "не мога да преглъщам",
+            "подуване на гърлото",
+            "анафилаксия",
+            "can't swallow",
+            "throat swelling",
+            "anaphylaxis",
             # Stroke/neurological
-            "не мога да говоря", "парализа", "изтръпване на лицето",
-            "can't speak", "paralysis", "face drooping",
+            "не мога да говоря",
+            "парализа",
+            "изтръпване на лицето",
+            "can't speak",
+            "paralysis",
+            "face drooping",
             # Other emergencies
-            "силно кървене", "гърчове", "загубих съзнание",
-            "severe bleeding", "seizure", "unconscious",
+            "силно кървене",
+            "гърчове",
+            "загубих съзнание",
+            "severe bleeding",
+            "seizure",
+            "unconscious",
         ]
 
         self.urgent_phrases = [
             # Blood symptoms
-            "кръв в урината", "кръв в изпражненията", "повръщам кръв",
-            "blood in urine", "blood in stool", "vomiting blood",
+            "кръв в урината",
+            "кръв в изпражненията",
+            "повръщам кръв",
+            "blood in urine",
+            "blood in stool",
+            "vomiting blood",
             # Fever
-            "висока температура повече от 3 дни", "температура над 39",
-            "high fever for 3 days", "fever over 39",
+            "висока температура повече от 3 дни",
+            "температура над 39",
+            "high fever for 3 days",
+            "fever over 39",
             # Severe pain
-            "силна коремна болка", "болка в бъбреците",
+            "силна коремна болка",
+            "болка в бъбреците",
             "най-силното главоболие в живота ми",
-            "severe abdominal pain", "kidney pain", "worst headache ever",
+            "severe abdominal pain",
+            "kidney pain",
+            "worst headache ever",
             # Other urgent
-            "не мога да уринирам", "жълти очи", "жълтеница",
-            "объркан съм", "схванат врат с температура",
-            "can't urinate", "yellow eyes", "jaundice",
-            "confused", "stiff neck with fever",
+            "не мога да уринирам",
+            "жълти очи",
+            "жълтеница",
+            "объркан съм",
+            "схванат врат с температура",
+            "can't urinate",
+            "yellow eyes",
+            "jaundice",
+            "confused",
+            "stiff neck with fever",
         ]
 
         self.warning_phrases = [
             # Persistent symptoms
-            "кашлица повече от 2 седмици", "постоянна умора",
-            "отслабвам без причина", "нощно изпотяване",
-            "cough for weeks", "constant fatigue",
-            "unexplained weight loss", "night sweats",
+            "кашлица повече от 2 седмици",
+            "постоянна умора",
+            "отслабвам без причина",
+            "нощно изпотяване",
+            "cough for weeks",
+            "constant fatigue",
+            "unexplained weight loss",
+            "night sweats",
             # Lumps/skin changes
-            "бучка", "бенка се промени", "рана която не зараства",
-            "lump", "mole changed", "wound not healing",
+            "бучка",
+            "бенка се промени",
+            "рана която не зараства",
+            "lump",
+            "mole changed",
+            "wound not healing",
             # Other warnings
-            "чести главоболия", "замъглено зрение",
-            "frequent headaches", "blurred vision",
+            "чести главоболия",
+            "замъглено зрение",
+            "frequent headaches",
+            "blurred vision",
         ]
 
         # Pre-compute normalized embeddings
@@ -119,15 +178,17 @@ class EmbeddingSafetyClassifier:
         self.warning_embeddings = self.model.encode(
             self.warning_phrases, convert_to_numpy=True, normalize_embeddings=True
         )
-        logger.info(f"Embeddings ready: {len(self.emergency_phrases)} emergency, "
-                   f"{len(self.urgent_phrases)} urgent, {len(self.warning_phrases)} warning")
+        logger.info(
+            f"Embeddings ready: {len(self.emergency_phrases)} emergency, "
+            f"{len(self.urgent_phrases)} urgent, {len(self.warning_phrases)} warning"
+        )
 
     def classify(
         self,
         text: str,
         emergency_threshold: float = 0.82,
         urgent_threshold: float = 0.85,
-        warning_threshold: float = 0.85
+        warning_threshold: float = 0.85,
     ) -> EmbeddingSafetyResult:
         """
         Classify user input by similarity to dangerous phrases.
@@ -145,9 +206,7 @@ class EmbeddingSafetyClassifier:
             return EmbeddingSafetyResult("safe", 1.0, None, 0.0)
 
         # Encode user input (normalized for cosine similarity)
-        user_embedding = self.model.encode(
-            [text], convert_to_numpy=True, normalize_embeddings=True
-        )[0]
+        user_embedding = self.model.encode([text], convert_to_numpy=True, normalize_embeddings=True)[0]
 
         # Check emergency first
         emergency_sims = np.dot(self.emergency_embeddings, user_embedding)
@@ -156,10 +215,7 @@ class EmbeddingSafetyClassifier:
 
         if max_em_sim >= emergency_threshold:
             logger.warning(f"EMERGENCY via embedding: {max_em_sim:.2f}")
-            return EmbeddingSafetyResult(
-                "emergency", max_em_sim,
-                self.emergency_phrases[max_em_idx], max_em_sim
-            )
+            return EmbeddingSafetyResult("emergency", max_em_sim, self.emergency_phrases[max_em_idx], max_em_sim)
 
         # Check urgent
         urgent_sims = np.dot(self.urgent_embeddings, user_embedding)
@@ -168,10 +224,7 @@ class EmbeddingSafetyClassifier:
 
         if max_ur_sim >= urgent_threshold:
             logger.warning(f"URGENT via embedding: {max_ur_sim:.2f}")
-            return EmbeddingSafetyResult(
-                "urgent", max_ur_sim,
-                self.urgent_phrases[max_ur_idx], max_ur_sim
-            )
+            return EmbeddingSafetyResult("urgent", max_ur_sim, self.urgent_phrases[max_ur_idx], max_ur_sim)
 
         # Check warning
         warning_sims = np.dot(self.warning_embeddings, user_embedding)
@@ -180,10 +233,7 @@ class EmbeddingSafetyClassifier:
 
         if max_wa_sim >= warning_threshold:
             logger.info(f"WARNING via embedding: {max_wa_sim:.2f}")
-            return EmbeddingSafetyResult(
-                "warning", max_wa_sim,
-                self.warning_phrases[max_wa_idx], max_wa_sim
-            )
+            return EmbeddingSafetyResult("warning", max_wa_sim, self.warning_phrases[max_wa_idx], max_wa_sim)
 
         # Safe
         max_sim = max(max_em_sim, max_ur_sim, max_wa_sim)

@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 @dataclass
 class MockMedicalReasoning:
     """Mock result from medical model."""
+
     symptoms: list
     likely_cause: str
     treatment_type: str
@@ -43,6 +44,7 @@ class MockMedicalReasoning:
 
 class MockTranslator:
     """Mock translator for testing."""
+
     def translate_to_english(self, text: str) -> str:
         return f"[EN] {text}"
 
@@ -55,6 +57,7 @@ class MockTranslator:
 
 class MockMedicalModel:
     """Mock medical model for testing."""
+
     def __init__(self):
         self._loaded = True
 
@@ -71,7 +74,7 @@ class MockMedicalModel:
             explanation="Common viral symptoms",
             how_treatment_helps="Reduces pain and fever",
             self_care_tips=["Rest", "Stay hydrated"],
-            duration_guidance="Usually resolves in 3-5 days"
+            duration_guidance="Usually resolves in 3-5 days",
         )
 
     def refine_product_selection(self, user_query, medical_reasoning, candidate_products, max_products=3):
@@ -81,6 +84,7 @@ class MockMedicalModel:
 
 class MockProductStore:
     """Mock product store for testing."""
+
     def __init__(self):
         self.collection = Mock()
         self.collection.count.return_value = 100
@@ -127,6 +131,7 @@ class MockProductStore:
 
 class MockIntentClassifier:
     """Mock intent classifier for testing."""
+
     def is_medical_query(self, query: str):
         # Check for known non-medical patterns
         non_medical = ["време", "weather", "виц", "joke", "новини"]
@@ -143,6 +148,7 @@ class MockIntentClassifier:
 
 class MockSafetyLayer:
     """Mock safety layer for testing."""
+
     def check_safety(self, text: str):
         """Check for safety issues."""
         result = Mock()
@@ -182,16 +188,18 @@ def mock_pipeline():
     mock_intent = MockIntentClassifier()
     mock_safety = MockSafetyLayer()
 
-    with patch('src.translator.get_translator', return_value=mock_translator):
-        with patch('src.medical_model.get_medical_model', return_value=mock_model):
-            with patch('src.product_store.get_product_store', return_value=mock_store):
-                with patch('src.intent_classifier.get_intent_classifier', return_value=mock_intent):
-                    with patch('src.safety.get_safety_layer', return_value=mock_safety):
+    with patch("src.translator.get_translator", return_value=mock_translator):
+        with patch("src.medical_model.get_medical_model", return_value=mock_model):
+            with patch("src.product_store.get_product_store", return_value=mock_store):
+                with patch("src.intent_classifier.get_intent_classifier", return_value=mock_intent):
+                    with patch("src.safety.get_safety_layer", return_value=mock_safety):
                         # Clear the global pipeline instance
                         import src.pipeline as pipeline_module
+
                         pipeline_module._pipeline = None
 
                         from src.pipeline import Pipeline
+
                         pipeline = Pipeline()
                         yield pipeline
 
@@ -220,7 +228,7 @@ class TestPipelineFlow:
 
         # Should return a result with response
         assert result is not None
-        assert hasattr(result, 'response')
+        assert hasattr(result, "response")
         assert len(result.response) > 0
         assert result.is_medical is True
 
@@ -231,7 +239,7 @@ class TestPipelineFlow:
         assert result is not None
         assert result.is_medical is False
         # Rejection message varies, check for common health-related keywords
-        assert ("здрав" in result.response.lower() or "medical" in result.response.lower())
+        assert "здрав" in result.response.lower() or "medical" in result.response.lower()
 
     def test_empty_query_handled(self, mock_pipeline):
         """Empty query should be handled gracefully."""
@@ -239,7 +247,7 @@ class TestPipelineFlow:
 
         assert result is not None
         # Empty query might be rejected or handled
-        assert hasattr(result, 'response')
+        assert hasattr(result, "response")
 
 
 class TestPipelineResults:
@@ -249,11 +257,11 @@ class TestPipelineResults:
         """Result should have all required fields."""
         result = mock_pipeline.process("болка в стомаха")
 
-        assert hasattr(result, 'response')
-        assert hasattr(result, 'is_medical')
-        assert hasattr(result, 'is_red_flag')
-        assert hasattr(result, 'original_text')
-        assert hasattr(result, 'translated_text')
+        assert hasattr(result, "response")
+        assert hasattr(result, "is_medical")
+        assert hasattr(result, "is_red_flag")
+        assert hasattr(result, "original_text")
+        assert hasattr(result, "translated_text")
 
     def test_result_response_is_string(self, mock_pipeline):
         """Response should be a string."""
@@ -274,8 +282,8 @@ class TestPipelineResults:
 
         assert result.is_medical is True
         # Should have candidate and selected products
-        assert hasattr(result, 'candidate_products')
-        assert hasattr(result, 'selected_products')
+        assert hasattr(result, "candidate_products")
+        assert hasattr(result, "selected_products")
 
 
 class TestPipelineEdgeCases:
@@ -286,7 +294,7 @@ class TestPipelineEdgeCases:
         result = mock_pipeline.process("Имам силно главоболие и температура")
 
         assert result is not None
-        assert hasattr(result, 'response')
+        assert hasattr(result, "response")
 
     def test_mixed_language_input(self, mock_pipeline):
         """Mixed language input should be handled."""
@@ -318,6 +326,7 @@ class TestPipelineWithRealComponents:
     def test_real_intent_classifier(self):
         """Test with real intent classifier."""
         from src.intent_classifier import IntentClassifier
+
         classifier = IntentClassifier()
 
         # Medical query
@@ -332,6 +341,7 @@ class TestPipelineWithRealComponents:
     def test_real_safety_layer(self):
         """Test with real safety layer."""
         from src.safety import SafetyLayer
+
         safety = SafetyLayer()
 
         # Normal symptom
@@ -346,6 +356,7 @@ class TestPipelineWithRealComponents:
 # =============================================================================
 # CONTRAINDICATION FILTERING TESTS
 # =============================================================================
+
 
 class TestUserConditionExtraction:
     """Tests for extracting user conditions from query text."""
@@ -492,9 +503,7 @@ class TestContraindicationCheck:
         from src.pipeline import check_contraindication
 
         contra_text = "Не се препоръчва при бременност, диабет или сърдечни заболявания"
-        has_contra, matching = check_contraindication(
-            contra_text, ["pregnancy", "diabetes", "heart"]
-        )
+        has_contra, matching = check_contraindication(contra_text, ["pregnancy", "diabetes", "heart"])
 
         assert has_contra is True
         assert len(matching) >= 2
@@ -516,6 +525,7 @@ class TestContraindicationFiltering:
     @dataclass
     class MockProduct:
         """Mock product for testing."""
+
         id: str
         title: str
         contraindications: str
@@ -568,9 +578,7 @@ class TestContraindicationFiltering:
             self.MockProduct("1", "Product A", "Противопоказан при диабет и бременност"),
         ]
 
-        safe, contraindicated = filter_by_contraindications(
-            products, ["pregnancy", "diabetes"]
-        )
+        safe, contraindicated = filter_by_contraindications(products, ["pregnancy", "diabetes"])
 
         assert len(contraindicated) == 1
         product, matching_conditions = contraindicated[0]
@@ -587,11 +595,11 @@ class TestPipelineResultWithContraindications:
         result = PipelineResult(
             response="Test response",
             user_conditions=["pregnancy"],
-            contraindicated_products=[("product", ["pregnancy"])]
+            contraindicated_products=[("product", ["pregnancy"])],
         )
 
-        assert hasattr(result, 'user_conditions')
-        assert hasattr(result, 'contraindicated_products')
+        assert hasattr(result, "user_conditions")
+        assert hasattr(result, "contraindicated_products")
         assert result.user_conditions == ["pregnancy"]
         assert len(result.contraindicated_products) == 1
 
@@ -617,9 +625,7 @@ class TestContraindicationWarningMessage:
         """Contraindication warnings are now in product cards, not appended."""
         original = "Original response"
         response = mock_pipeline._add_contraindication_warning(
-            original,
-            [("MockProduct", ["pregnancy"])],
-            ["pregnancy"]
+            original, [("MockProduct", ["pregnancy"])], ["pregnancy"]
         )
 
         # Method should return response unchanged (warnings are in product cards)
@@ -634,11 +640,7 @@ class TestContraindicationWarningMessage:
             (Mock(title="Product B"), ["pregnancy"]),
         ]
 
-        response = mock_pipeline._add_contraindication_warning(
-            original,
-            filtered,
-            ["pregnancy"]
-        )
+        response = mock_pipeline._add_contraindication_warning(original, filtered, ["pregnancy"])
 
         # Method should return response unchanged (warnings are in product cards)
         assert response == original
@@ -646,9 +648,7 @@ class TestContraindicationWarningMessage:
     def test_no_warning_when_no_contraindicated(self, mock_pipeline):
         """Should not add warning when no products filtered."""
         original = "Original response"
-        response = mock_pipeline._add_contraindication_warning(
-            original, [], ["pregnancy"]
-        )
+        response = mock_pipeline._add_contraindication_warning(original, [], ["pregnancy"])
 
         assert response == original
 
@@ -657,8 +657,6 @@ class TestContraindicationWarningMessage:
         original = "Original response"
         filtered = [(Mock(title="Product A"), ["pregnancy"])]
 
-        response = mock_pipeline._add_contraindication_warning(
-            original, filtered, []
-        )
+        response = mock_pipeline._add_contraindication_warning(original, filtered, [])
 
         assert response == original

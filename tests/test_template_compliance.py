@@ -1,6 +1,7 @@
 """
 Quick test to verify active ingredients section is always shown when products exist.
 """
+
 import sys
 from pathlib import Path
 
@@ -30,7 +31,7 @@ def test_ingredients_section_always_shown():
             category="Болкоуспокояващи",
             description="За температура и болка",
             composition="Парацетамол",
-            image_url=""
+            image_url="",
         ),
         Product(
             id="nurofen-001",
@@ -38,7 +39,7 @@ def test_ingredients_section_always_shown():
             category="Болкоуспокояващи",
             description="За възпаление и болка",
             composition="Ибупрофен",
-            image_url=""
+            image_url="",
         ),
     ]
 
@@ -48,14 +49,8 @@ def test_ingredients_section_always_shown():
     print("=" * 80)
 
     mock_llm_result = UnifiedProcessorResult(
-        intent=IntentResult(
-            is_pharmacy_related=True,
-            confidence=0.95
-        ),
-        safety=SafetyResult(
-            level="safe",
-            action="proceed"
-        ),
+        intent=IntentResult(is_pharmacy_related=True, confidence=0.95),
+        safety=SafetyResult(level="safe", action="proceed"),
         reasoning=ReasoningResult(
             treatment_category="",  # Empty - should trigger fallback
             explanation="Температурата е симптом на инфекция.",
@@ -66,17 +61,12 @@ def test_ingredients_section_always_shown():
             warnings_bg=["Потърсете лекар ако..."],
         ),
         extraction=ExtractionResult(
-            symptoms=["fever"],
-            user_conditions=[],
-            age_group="adult",
-            query_translated="I have a fever"
-        )
+            symptoms=["fever"], user_conditions=[], age_group="adult", query_translated="I have a fever"
+        ),
     )
 
     response = pipeline._format_response_from_unified(
-        llm_result=mock_llm_result,
-        products=mock_products,
-        original_query="Имам температура"
+        llm_result=mock_llm_result, products=mock_products, original_query="Имам температура"
     )
 
     has_ingredients_header = "## 💊 Подходящи активни съставки" in response
@@ -87,7 +77,7 @@ def test_ingredients_section_always_shown():
     print("\nResponse excerpt (ingredients section):")
     if "## 💊" in response:
         start = response.index("## 💊")
-        end = response.index("---", start + 10) if "---" in response[start+10:] else start + 300
+        end = response.index("---", start + 10) if "---" in response[start + 10 :] else start + 300
         print(response[start:end])
     print()
 
@@ -104,30 +94,32 @@ def test_ingredients_section_always_shown():
         how_treatment_helps="",
         self_care_tips=["Rest", "Hydrate"],
         duration_guidance="2-3 days",
-        warnings=["See doctor if..."]
+        warnings=["See doctor if..."],
     )
 
     response2 = pipeline._format_response(
         medical_reasoning=mock_medical_reasoning,
         products=mock_products,
         translate_reasoning=False,
-        original_query="Имам температура"
+        original_query="Имам температура",
     )
 
     has_ingredients_header2 = "## 💊 Подходящи активни съставки" in response2
     has_fallback_message2 = "Проверете активните съставки и дозировката в листовката" in response2
 
     print(f"✅ Has ingredients header: {has_ingredients_header2}")
-    print(f"✅ Has fallback message or ingredient list: {has_fallback_message2 or 'Парацетамол' in response2 or 'Ибупрофен' in response2}")
+    print(
+        f"✅ Has fallback message or ingredient list: {has_fallback_message2 or 'Парацетамол' in response2 or 'Ибупрофен' in response2}"
+    )
     print("\nResponse excerpt (ingredients section):")
     if "## 💊" in response2:
         start = response2.index("## 💊")
-        end = response2.index("---", start + 10) if "---" in response2[start+10:] else start + 300
+        end = response2.index("---", start + 10) if "---" in response2[start + 10 :] else start + 300
         print(response2[start:end])
     print()
 
     # Verify both tests pass
-    success = (has_ingredients_header and has_ingredients_header2)
+    success = has_ingredients_header and has_ingredients_header2
 
     if success:
         print("=" * 80)
@@ -140,6 +132,7 @@ def test_ingredients_section_always_shown():
         print("=" * 80)
 
     return success
+
 
 if __name__ == "__main__":
     success = test_ingredients_section_always_shown()

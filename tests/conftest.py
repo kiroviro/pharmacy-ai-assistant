@@ -79,6 +79,7 @@ def intent_classifier():
 # Test Data: Emergency Symptoms (Must detect 100%)
 # =============================================================================
 
+
 @pytest.fixture
 def emergency_symptoms_bg():
     """Bulgarian emergency symptoms that MUST be detected."""
@@ -125,6 +126,7 @@ def emergency_symptoms_en():
 # Test Data: Urgent Symptoms
 # =============================================================================
 
+
 @pytest.fixture
 def urgent_symptoms_bg():
     """Bulgarian urgent symptoms."""
@@ -162,6 +164,7 @@ def urgent_symptoms_en():
 # =============================================================================
 # Test Data: Normal Medical Queries (Should NOT trigger red flags)
 # =============================================================================
+
 
 @pytest.fixture
 def normal_medical_queries_bg():
@@ -205,6 +208,7 @@ def normal_medical_queries_en():
 # Test Data: Non-Medical Queries (Should be rejected)
 # =============================================================================
 
+
 @pytest.fixture
 def non_medical_queries_bg():
     """Non-medical Bulgarian queries that should be rejected."""
@@ -236,6 +240,7 @@ def non_medical_queries_en():
 # =============================================================================
 # Test Data: Profanity (Should be rejected)
 # =============================================================================
+
 
 @pytest.fixture
 def profanity_queries():

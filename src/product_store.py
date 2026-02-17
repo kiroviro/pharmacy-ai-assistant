@@ -65,14 +65,33 @@ TREATMENT_CATEGORY_MAP = {
 
 # Homeopathy detection patterns
 _HOMEOPATHY_MARKERS = [
-    "хомеопатич", "homeopathic", "homeopathy", "хомеопатия",
+    "хомеопатич",
+    "homeopathic",
+    "homeopathy",
+    "хомеопатия",
     # Potency notations (CH, DH, D, C followed by numbers)
-    " ch ", " сн ", " dh ", " дн ",
-    "5 ch", "9 ch", "15 ch", "30 ch", "200 ch",
-    "5 сн", "9 сн", "15 сн", "30 сн",
-    "3 dh", "6 dh", "12 dh", "30 dh",
-    "3 дн", "6 дн", "12 дн",
-    "boiron", "буарон",
+    " ch ",
+    " сн ",
+    " dh ",
+    " дн ",
+    "5 ch",
+    "9 ch",
+    "15 ch",
+    "30 ch",
+    "200 ch",
+    "5 сн",
+    "9 сн",
+    "15 сн",
+    "30 сн",
+    "3 dh",
+    "6 dh",
+    "12 dh",
+    "30 dh",
+    "3 дн",
+    "6 дн",
+    "12 дн",
+    "boiron",
+    "буарон",
 ]
 
 
@@ -86,59 +105,101 @@ def _is_homeopathic_product(combined_text: str) -> bool:
 # These are the actual ingredient names that should appear in product.composition
 TREATMENT_INGREDIENT_KEYWORDS = {
     "antipyretics": [
-        "парацетамол", "paracetamol", "acetaminophen",
-        "ибупрофен", "ibuprofen",
-        "аспирин", "aspirin", "ацетилсалицилова",
-        "метамизол", "аналгин", "metamizole",
+        "парацетамол",
+        "paracetamol",
+        "acetaminophen",
+        "ибупрофен",
+        "ibuprofen",
+        "аспирин",
+        "aspirin",
+        "ацетилсалицилова",
+        "метамизол",
+        "аналгин",
+        "metamizole",
     ],
     "analgesics": [
-        "парацетамол", "paracetamol", "acetaminophen",
-        "ибупрофен", "ibuprofen",
-        "диклофенак", "diclofenac",
-        "напроксен", "naproxen",
-        "метамизол", "аналгин", "metamizole",
-        "аспирин", "aspirin",
+        "парацетамол",
+        "paracetamol",
+        "acetaminophen",
+        "ибупрофен",
+        "ibuprofen",
+        "диклофенак",
+        "diclofenac",
+        "напроксен",
+        "naproxen",
+        "метамизол",
+        "аналгин",
+        "metamizole",
+        "аспирин",
+        "aspirin",
     ],
     "antihistamines": [
-        "лоратадин", "loratadine",
-        "цетиризин", "cetirizine",
-        "фексофенадин", "fexofenadine",
+        "лоратадин",
+        "loratadine",
+        "цетиризин",
+        "cetirizine",
+        "фексофенадин",
+        "fexofenadine",
     ],
     "antacids": [
-        "омепразол", "omeprazole",
-        "пантопразол", "pantoprazole",
-        "ранитидин", "ranitidine",
+        "омепразол",
+        "omeprazole",
+        "пантопразол",
+        "pantoprazole",
+        "ранитидин",
+        "ranitidine",
     ],
     "antidiarrheal": [
-        "лоперамид", "loperamide",
-        "смектит", "smectite", "смекта",
+        "лоперамид",
+        "loperamide",
+        "смектит",
+        "smectite",
+        "смекта",
     ],
     "cough": [
-        "декстрометорфан", "dextromethorphan",
-        "гвайфенезин", "guaifenesin",
+        "декстрометорфан",
+        "dextromethorphan",
+        "гвайфенезин",
+        "guaifenesin",
     ],
     "decongestants": [
-        "псевдоефедрин", "pseudoephedrine",
-        "фенилефрин", "phenylephrine",
-        "ксилометазолин", "xylometazoline",
-        "оксиметазолин", "oxymetazoline",
+        "псевдоефедрин",
+        "pseudoephedrine",
+        "фенилефрин",
+        "phenylephrine",
+        "ксилометазолин",
+        "xylometazoline",
+        "оксиметазолин",
+        "oxymetazoline",
     ],
     "fever": [  # Alias for antipyretics
-        "парацетамол", "paracetamol", "acetaminophen",
-        "ибупрофен", "ibuprofen",
-        "аспирин", "aspirin",
-        "метамизол", "аналгин",
+        "парацетамол",
+        "paracetamol",
+        "acetaminophen",
+        "ибупрофен",
+        "ibuprofen",
+        "аспирин",
+        "aspirin",
+        "метамизол",
+        "аналгин",
     ],
     "pain relief": [  # Alias for analgesics
-        "парацетамол", "paracetamol",
-        "ибупрофен", "ibuprofen",
-        "диклофенак", "diclofenac",
-        "напроксен", "naproxen",
+        "парацетамол",
+        "paracetamol",
+        "ибупрофен",
+        "ibuprofen",
+        "диклофенак",
+        "diclofenac",
+        "напроксен",
+        "naproxen",
     ],
     "pain": [
-        "парацетамол", "paracetamol",
-        "ибупрофен", "ibuprofen",
-        "диклофенак", "diclofenac",
+        "парацетамол",
+        "paracetamol",
+        "ибупрофен",
+        "ibuprofen",
+        "диклофенак",
+        "diclofenac",
     ],
 }
 
@@ -212,7 +273,9 @@ class ProductStore:
         """
         # Check if already loaded
         if not force_reload and self.collection.count() > 0:
-            logger.info(f"Collection already contains {self.collection.count()} products. Use force_reload=True to reload.")
+            logger.info(
+                f"Collection already contains {self.collection.count()} products. Use force_reload=True to reload."
+            )
             return self.collection.count()
 
         # Delete existing collection if force reload
@@ -406,9 +469,7 @@ class ProductStore:
             # products rank above homeopathy for a fever query.
             if preferred_ingredients:
                 combined_text = f"{composition_lower} {title_lower}"
-                ingredient_hits = sum(
-                    1 for ing in preferred_ingredients if ing.lower() in combined_text
-                )
+                ingredient_hits = sum(1 for ing in preferred_ingredients if ing.lower() in combined_text)
                 if ingredient_hits > 0:
                     # Strong boost: 0.15 per matching ingredient
                     boost += ingredient_hits * 0.15
@@ -417,18 +478,20 @@ class ProductStore:
                     # (not combo cold/flu) — these are more appropriate for
                     # single-symptom queries like "fever" or "headache"
                     combo_markers = [
-                        "простуда и грип", "грип и настинка", "настинка и грип",
-                        "cold and flu", "cold & flu",
-                        "простуда и кашлица", "грипни симптоми",
+                        "простуда и грип",
+                        "грип и настинка",
+                        "настинка и грип",
+                        "cold and flu",
+                        "cold & flu",
+                        "простуда и кашлица",
+                        "грипни симптоми",
                     ]
                     desc_lower = product.get("description", "").lower()
                     full_text = f"{title_lower} {desc_lower}"
                     is_combo = any(m in full_text for m in combo_markers)
                     if not is_combo:
                         boost += 0.15  # Extra boost for simple products
-                        logger.debug(
-                            f"Simplicity bonus for '{product.get('title', '')[:30]}': +0.15"
-                        )
+                        logger.debug(f"Simplicity bonus for '{product.get('title', '')[:30]}': +0.15")
 
             # ---- Homeopathy penalty ----
             # Homeopathic products get a score penalty when the search is for
@@ -437,9 +500,7 @@ class ProductStore:
                 combined_text = f"{composition_lower} {title_lower} {product.get('description', '').lower()}"
                 if _is_homeopathic_product(combined_text):
                     boost -= 0.20  # Significant penalty
-                    logger.debug(
-                        f"Homeopathy penalty for '{product.get('title', '')[:30]}': -0.20"
-                    )
+                    logger.debug(f"Homeopathy penalty for '{product.get('title', '')[:30]}': -0.20")
 
             # Apply boost (cap at 1.0, floor at 0.0)
             original_score = product["score"]
@@ -499,13 +560,15 @@ class ProductStore:
             enhanced_query = f"{query} {category_context}"
             logger.debug(f"Category-enhanced query: '{enhanced_query}'")
             return self.hybrid_search(
-                enhanced_query, n_results=n_results,
+                enhanced_query,
+                n_results=n_results,
                 preferred_ingredients=preferred_ingredients,
             )
 
         # Fallback to regular hybrid search (still with ingredient boost if available)
         return self.hybrid_search(
-            query, n_results=n_results,
+            query,
+            n_results=n_results,
             preferred_ingredients=preferred_ingredients,
         )
 
@@ -550,9 +613,7 @@ class ProductStore:
         Returns:
             List of product dictionaries
         """
-        return await asyncio.to_thread(
-            self.search, query, n_results, where, min_score
-        )
+        return await asyncio.to_thread(self.search, query, n_results, where, min_score)
 
     async def hybrid_search_async(
         self,
@@ -573,9 +634,7 @@ class ProductStore:
         Returns:
             List of products with combined scores
         """
-        return await asyncio.to_thread(
-            self.hybrid_search, query, n_results, where, keyword_boost
-        )
+        return await asyncio.to_thread(self.hybrid_search, query, n_results, where, keyword_boost)
 
     async def search_by_category_async(
         self,
@@ -594,9 +653,7 @@ class ProductStore:
         Returns:
             List of matching products
         """
-        return await asyncio.to_thread(
-            self.search_by_category, query, treatment_type, n_results
-        )
+        return await asyncio.to_thread(self.search_by_category, query, treatment_type, n_results)
 
 
 # Global store instance
@@ -639,5 +696,5 @@ if __name__ == "__main__":
         print(f"   Brand: {product['brand']}")
         print(f"   Price: {product['price_bgn']} лв / {product['price_eur']} €")
         print(f"   Score: {product['score']:.3f}")
-        if product.get('description'):
+        if product.get("description"):
             print(f"   {product['description'][:100]}...")

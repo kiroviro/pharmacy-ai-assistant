@@ -13,6 +13,7 @@ from src.medical_model import MedicalReasoning
 @dataclass
 class Product:
     """Represents a product from the catalogue."""
+
     id: str
     title: str  # Product name
     brand: str = ""  # Марка
@@ -98,21 +99,16 @@ class Product:
         if self.description:
             desc = self.description[:150].strip()
             if len(self.description) > 150:
-                last_period = desc.rfind('.')
+                last_period = desc.rfind(".")
                 if last_period > 80:
-                    desc = desc[:last_period + 1]
+                    desc = desc[: last_period + 1]
                 else:
-                    desc = desc.rsplit(' ', 1)[0] + "..."
+                    desc = desc.rsplit(" ", 1)[0] + "..."
             lines.append(f"\n{desc}")
 
         # Prominent buy link — separator before, after, and extra below before ✔ Съдържа
         if self.product_url:
-            lines.append(
-                f"\n\n---\n"
-                f"🛒 **[Виж продукта / Купи]({self.product_url})**\n"
-                f"---\n"
-                f"---"
-            )
+            lines.append(f"\n\n---\n🛒 **[Виж продукта / Купи]({self.product_url})**\n---\n---")
 
         return "\n".join(lines)
 
@@ -120,6 +116,7 @@ class Product:
 @dataclass
 class PipelineResult:
     """Result from the pipeline processing."""
+
     response: str
     is_medical: bool = True
     is_red_flag: bool = False
@@ -127,7 +124,7 @@ class PipelineResult:
     translated_text: str = ""
     medical_reasoning: MedicalReasoning | None = None
     candidate_products: list = field(default_factory=list)  # Stage 1: top-K from vector DB
-    selected_products: list = field(default_factory=list)   # Stage 2: LLM-refined selection
+    selected_products: list = field(default_factory=list)  # Stage 2: LLM-refined selection
     # Contraindication filtering results
     user_conditions: list = field(default_factory=list)  # Detected user conditions (pregnancy, diabetes, etc.)
     contraindicated_products: list = field(default_factory=list)  # Products filtered due to contraindications

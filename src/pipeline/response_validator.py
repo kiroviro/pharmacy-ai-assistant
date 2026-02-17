@@ -8,6 +8,7 @@ where the model inserts irrelevant Bulgarian text (e.g., "защита на ли
 Root Cause: LLM hallucination (see docs/TECHNICAL_DEBT.md Issue #17)
 Fix: Pattern-based detection + fallback handling
 """
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,23 +16,23 @@ logger = logging.getLogger(__name__)
 # Known garbage patterns from E2E test analysis (Feb 14, 2026)
 # These are Bulgarian phrases that should NEVER appear in medical advice
 GARBAGE_PATTERNS = [
-    "защита на личните",           # "protection of personal"
-    "лични данни",                 # "personal data"
-    "средство за защита",          # "means of protection"
-    "зъбні протези",               # "dental prosthetics"
-    "грижа за зъбні протези",      # "denture care"
-    "протези",                     # "prosthetics" (standalone)
-    "репелент",                    # "repellent"
-    "комар",                       # "mosquito"
-    "средство за комари",          # "mosquito repellent"
-    "защита срещу комари",         # "mosquito protection"
+    "защита на личните",  # "protection of personal"
+    "лични данни",  # "personal data"
+    "средство за защита",  # "means of protection"
+    "зъбні протези",  # "dental prosthetics"
+    "грижа за зъбні протези",  # "denture care"
+    "протези",  # "prosthetics" (standalone)
+    "репелент",  # "repellent"
+    "комар",  # "mosquito"
+    "средство за комари",  # "mosquito repellent"
+    "защита срещу комари",  # "mosquito protection"
 ]
 
 # Patterns that indicate severe hallucination (sentence fragments, repetition)
 SEVERE_HALLUCINATION_PATTERNS = [
     "може да се използва като средство за",  # "can be used as a means for"
-    "за да може да се използва",             # "so that it can be used"
-    "които могат да бъдат използвани",       # "which can be used"
+    "за да може да се използва",  # "so that it can be used"
+    "които могат да бъдат използвани",  # "which can be used"
 ]
 
 
@@ -94,11 +95,13 @@ def extract_garbage_context(response: str, patterns: list[str], context_chars: i
             end = min(len(response), idx + len(pattern) + context_chars)
             context = response[start:end]
 
-            results.append({
-                "pattern": pattern,
-                "position": idx,
-                "context": f"...{context}...",
-            })
+            results.append(
+                {
+                    "pattern": pattern,
+                    "position": idx,
+                    "context": f"...{context}...",
+                }
+            )
 
     return results
 
@@ -118,7 +121,7 @@ def clean_response_sentences(response: str, patterns: list[str]) -> str:
         Cleaned response with garbage sentences removed
     """
     # Split into sentences (simple approach - could be improved)
-    sentences = response.split('.')
+    sentences = response.split(".")
 
     cleaned_sentences = []
     removed_count = 0
@@ -137,10 +140,10 @@ def clean_response_sentences(response: str, patterns: list[str]) -> str:
         logger.info(f"Removed {removed_count} sentences containing garbage patterns")
 
     # Rejoin sentences
-    cleaned = '.'.join(cleaned_sentences)
+    cleaned = ".".join(cleaned_sentences)
 
     # Clean up any double periods or spacing issues
-    cleaned = cleaned.replace('..', '.').replace('  ', ' ').strip()
+    cleaned = cleaned.replace("..", ".").replace("  ", " ").strip()
 
     return cleaned
 

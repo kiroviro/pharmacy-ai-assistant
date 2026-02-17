@@ -285,4 +285,4 @@ def build_prompt(user_query: str) -> str:
     Returns:
         Formatted user prompt
     """
-    return f"Query: \"{user_query}\"\nResponse:"
+    return f'Query: "{user_query}"\nResponse:'

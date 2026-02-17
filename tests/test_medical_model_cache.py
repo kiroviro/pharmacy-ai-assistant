@@ -119,10 +119,7 @@ class TestCacheLRUBehavior:
         model._cache_misses = 0
 
         reasoning = MedicalReasoning(
-            symptoms=["headache"],
-            likely_cause="tension",
-            treatment_type="analgesics",
-            warnings=[]
+            symptoms=["headache"], likely_cause="tension", treatment_type="analgesics", warnings=[]
         )
 
         # Store in cache
@@ -164,12 +161,7 @@ class TestCacheLRUBehavior:
         model._cache_hits = 0
         model._cache_misses = 0
 
-        reasoning = MedicalReasoning(
-            symptoms=["test"],
-            likely_cause="test",
-            treatment_type="test",
-            warnings=[]
-        )
+        reasoning = MedicalReasoning(symptoms=["test"], likely_cause="test", treatment_type="test", warnings=[])
 
         # Fill cache
         model._put_in_cache("key1", reasoning)
@@ -198,12 +190,7 @@ class TestCacheLRUBehavior:
         model._cache_hits = 0
         model._cache_misses = 0
 
-        reasoning = MedicalReasoning(
-            symptoms=["test"],
-            likely_cause="test",
-            treatment_type="test",
-            warnings=[]
-        )
+        reasoning = MedicalReasoning(symptoms=["test"], likely_cause="test", treatment_type="test", warnings=[])
 
         # Fill cache
         model._put_in_cache("key1", reasoning)
@@ -237,12 +224,7 @@ class TestCacheStatistics:
         model._cache_hits = 0
         model._cache_misses = 0
 
-        reasoning = MedicalReasoning(
-            symptoms=["test"],
-            likely_cause="test",
-            treatment_type="test",
-            warnings=[]
-        )
+        reasoning = MedicalReasoning(symptoms=["test"], likely_cause="test", treatment_type="test", warnings=[])
 
         # Store item
         model._put_in_cache("key1", reasoning)
@@ -298,12 +280,7 @@ class TestCacheStatistics:
         model._cache_hits = 0
         model._cache_misses = 0
 
-        reasoning = MedicalReasoning(
-            symptoms=["test"],
-            likely_cause="test",
-            treatment_type="test",
-            warnings=[]
-        )
+        reasoning = MedicalReasoning(symptoms=["test"], likely_cause="test", treatment_type="test", warnings=[])
 
         model._put_in_cache("key1", reasoning)
         model._put_in_cache("key2", reasoning)
@@ -321,15 +298,16 @@ class TestCacheIntegration:
     @pytest.fixture
     def mock_medical_model(self):
         """Create a MedicalModel with mocked inference."""
-        with patch('src.medical_model.load') as mock_load:
-            with patch('src.medical_model.generate') as mock_generate:
-                with patch('src.medical_model.make_sampler') as mock_sampler:
+        with patch("src.medical_model.load") as mock_load:
+            with patch("src.medical_model.generate") as mock_generate:
+                with patch("src.medical_model.make_sampler") as mock_sampler:
                     # Setup mocks
                     mock_load.return_value = (Mock(), Mock())
                     mock_generate.return_value = '{"symptoms": ["headache"], "likely_cause": "tension", "treatment_type": "analgesics", "warnings": [], "see_doctor": false}'
                     mock_sampler.return_value = Mock()
 
                     from src.medical_model import MedicalModel
+
                     model = MedicalModel()
                     model.load()
 

@@ -34,11 +34,11 @@ class ViaPharmaFormatter(logging.Formatter):
     def format(self, record):
         # Add color based on level
         colors = {
-            "DEBUG": "\033[36m",    # Cyan
-            "INFO": "\033[32m",     # Green
+            "DEBUG": "\033[36m",  # Cyan
+            "INFO": "\033[32m",  # Green
             "WARNING": "\033[33m",  # Yellow
-            "ERROR": "\033[31m",    # Red
-            "CRITICAL": "\033[35m", # Magenta
+            "ERROR": "\033[31m",  # Red
+            "CRITICAL": "\033[35m",  # Magenta
         }
         reset = "\033[0m"
         color = colors.get(record.levelname, "")
@@ -76,11 +76,28 @@ class JsonFormatter(logging.Formatter):
         # Add extra fields
         for key, value in record.__dict__.items():
             if key not in (
-                "name", "msg", "args", "created", "filename", "funcName",
-                "levelname", "levelno", "lineno", "module", "msecs",
-                "pathname", "process", "processName", "relativeCreated",
-                "stack_info", "exc_info", "exc_text", "thread", "threadName",
-                "request_id", "message"
+                "name",
+                "msg",
+                "args",
+                "created",
+                "filename",
+                "funcName",
+                "levelname",
+                "levelno",
+                "lineno",
+                "module",
+                "msecs",
+                "pathname",
+                "process",
+                "processName",
+                "relativeCreated",
+                "stack_info",
+                "exc_info",
+                "exc_text",
+                "thread",
+                "threadName",
+                "request_id",
+                "message",
             ):
                 log_data[key] = value
 
@@ -154,6 +171,7 @@ def get_request_id() -> str:
 
 def log_timing(logger: logging.Logger | None = None):
     """Decorator to log function execution time."""
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -165,19 +183,15 @@ def log_timing(logger: logging.Logger | None = None):
             try:
                 result = func(*args, **kwargs)
                 duration_ms = (time.perf_counter() - start) * 1000
-                logger.debug(
-                    f"{func.__name__} completed",
-                    extra={"duration_ms": round(duration_ms, 2)}
-                )
+                logger.debug(f"{func.__name__} completed", extra={"duration_ms": round(duration_ms, 2)})
                 return result
             except Exception as e:
                 duration_ms = (time.perf_counter() - start) * 1000
-                logger.error(
-                    f"{func.__name__} failed: {e}",
-                    extra={"duration_ms": round(duration_ms, 2)}
-                )
+                logger.error(f"{func.__name__} failed: {e}", extra={"duration_ms": round(duration_ms, 2)})
                 raise
+
         return wrapper
+
     return decorator
 
 
@@ -227,10 +241,7 @@ def get_audit_logger() -> logging.Logger:
         audit_dir = Path("logs/audit")
         audit_dir.mkdir(parents=True, exist_ok=True)
 
-        file_handler = logging.FileHandler(
-            audit_dir / "medical_queries.jsonl",
-            encoding="utf-8"
-        )
+        file_handler = logging.FileHandler(audit_dir / "medical_queries.jsonl", encoding="utf-8")
         file_handler.setFormatter(formatter)
         file_handler.addFilter(RequestIdFilter())
         _audit_logger.addHandler(file_handler)
@@ -282,11 +293,12 @@ def log_medical_query(
             "products_skus": products_recommended[:5],  # Limit to first 5
             "response_length": response_length,
             "duration_ms": round(duration_ms, 2),
-        }
+        },
     )
 
 
 def hash_for_audit(text: str) -> str:
     """Create a privacy-preserving hash for audit logging."""
     import hashlib
+
     return hashlib.sha256(text.encode()).hexdigest()[:16]

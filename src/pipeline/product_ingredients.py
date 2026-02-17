@@ -130,26 +130,48 @@ def extract_contraindication_summary(product) -> str:
         return ""
 
     priority_phrases = [
-        "не приемайте", "не прилагайте", "не използвайте",
-        "избягвайте", "противопоказан", "не се препоръчва",
-        "алергични", "свръхчувствител",
-        "бременн", "кърм", "деца под", "не давайте",
-        "стомашн", "язва", "бъбреч", "сърдечн", "кръвно налягане",
-        "черен дроб", "диабет",
-        "не комбинирайте", "не превишавайте", "максималн",
+        "не приемайте",
+        "не прилагайте",
+        "не използвайте",
+        "избягвайте",
+        "противопоказан",
+        "не се препоръчва",
+        "алергични",
+        "свръхчувствител",
+        "бременн",
+        "кърм",
+        "деца под",
+        "не давайте",
+        "стомашн",
+        "язва",
+        "бъбреч",
+        "сърдечн",
+        "кръвно налягане",
+        "черен дроб",
+        "диабет",
+        "не комбинирайте",
+        "не превишавайте",
+        "максималн",
     ]
 
-    sentences = re.split(r'[.;!]', contra)
+    sentences = re.split(r"[.;!]", contra)
     relevant = []
     for sentence in sentences:
         s = sentence.strip()
         if not s or len(s) < 10:
             continue
         s_lower = s.lower()
-        if any(skip in s_lower for skip in [
-            "съхранявайте", "срока на годност", "недостъпно за деца",
-            "сухо и прохладно", "слънчева светлина", "прочетете внимателно",
-        ]):
+        if any(
+            skip in s_lower
+            for skip in [
+                "съхранявайте",
+                "срока на годност",
+                "недостъпно за деца",
+                "сухо и прохладно",
+                "слънчева светлина",
+                "прочетете внимателно",
+            ]
+        ):
             continue
         if any(phrase in s_lower for phrase in priority_phrases):
             relevant.append(s)
@@ -157,9 +179,14 @@ def extract_contraindication_summary(product) -> str:
     if not relevant:
         for sentence in sentences:
             s = sentence.strip()
-            if len(s) > 15 and not any(skip in s.lower() for skip in [
-                "съхранявайте", "срока на годност", "недостъпно",
-            ]):
+            if len(s) > 15 and not any(
+                skip in s.lower()
+                for skip in [
+                    "съхранявайте",
+                    "срока на годност",
+                    "недостъпно",
+                ]
+            ):
                 relevant.append(s)
                 break
 
@@ -187,10 +214,7 @@ def build_ingredient_duplication_warning(product, ingredient: str) -> str:
                 break
 
     if bg_name:
-        return (
-            f"Този продукт съдържа **{bg_name}**. "
-            f"Не комбинирайте с други лекарства, съдържащи {bg_name}."
-        )
+        return f"Този продукт съдържа **{bg_name}**. Не комбинирайте с други лекарства, съдържащи {bg_name}."
     return ""
 
 
@@ -205,8 +229,4 @@ def get_recommended_ingredients(treatment_type: str) -> list[str]:
         return TREATMENT_TO_INGREDIENTS[tt]
 
     # Partial match (substring in either direction)
-    return next(
-        (ingredients for key, ingredients in TREATMENT_TO_INGREDIENTS.items()
-         if key in tt or tt in key),
-        []
-    )
+    return next((ingredients for key, ingredients in TREATMENT_TO_INGREDIENTS.items() if key in tt or tt in key), [])

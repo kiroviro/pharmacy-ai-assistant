@@ -34,6 +34,7 @@ RETRY_BASE_DELAY_SECONDS = 0.5  # Exponential backoff: 0.5s, 1.0s, 2.0s
 @dataclass
 class MedicalReasoning:
     """Structured medical reasoning output."""
+
     symptoms: list[str]  # List of identified symptoms
     likely_cause: str  # Probable condition/cause
     treatment_type: str  # Recommended OTC treatment category
@@ -304,7 +305,7 @@ class MedicalModel:
         self,
         model_path: str = "./models/medgemma-4b-it-bf16",
         cache_size: int = REASONING_CACHE_SIZE,
-        use_bulgarian: bool = False
+        use_bulgarian: bool = False,
     ):
         """
         Initialize the medical model.
@@ -401,10 +402,7 @@ class MedicalModel:
             logger.debug("Cache eviction", extra={"evicted_key": evicted_key})
 
         self._cache[cache_key] = reasoning.to_dict()
-        logger.debug("Cache STORE", extra={
-            "cache_key": cache_key,
-            "cache_size": len(self._cache)
-        })
+        logger.debug("Cache STORE", extra={"cache_key": cache_key, "cache_size": len(self._cache)})
 
     def get_cache_stats(self) -> dict:
         """
@@ -495,7 +493,7 @@ class MedicalModel:
                 error_type = type(e).__name__
 
                 if attempt < MAX_INFERENCE_RETRIES - 1:
-                    delay = RETRY_BASE_DELAY_SECONDS * (2 ** attempt)
+                    delay = RETRY_BASE_DELAY_SECONDS * (2**attempt)
                     logger.warning(
                         f"{operation_name} failed (attempt {attempt + 1}/{MAX_INFERENCE_RETRIES}), "
                         f"retrying in {delay:.1f}s: {error_type}: {str(e)[:100]}"
@@ -503,8 +501,7 @@ class MedicalModel:
                     time.sleep(delay)
                 else:
                     logger.error(
-                        f"{operation_name} failed after {MAX_INFERENCE_RETRIES} attempts: "
-                        f"{error_type}: {str(e)[:200]}"
+                        f"{operation_name} failed after {MAX_INFERENCE_RETRIES} attempts: {error_type}: {str(e)[:200]}"
                     )
 
         # All retries exhausted
@@ -516,7 +513,7 @@ class MedicalModel:
         max_tokens: int = 500,
         temperature: float = 0.3,
         system_prompt: str = None,
-        use_cache: bool = True
+        use_cache: bool = True,
     ) -> MedicalReasoning:
         """
         Get medical reasoning for the given symptoms.
@@ -539,10 +536,9 @@ class MedicalModel:
             cache_key = self._get_cache_key(symptoms, temperature)
             cached_result = self._get_from_cache(cache_key)
             if cached_result is not None:
-                logger.info("Returning cached medical reasoning", extra={
-                    "cache_key": cache_key,
-                    "query_preview": symptoms[:50]
-                })
+                logger.info(
+                    "Returning cached medical reasoning", extra={"cache_key": cache_key, "query_preview": symptoms[:50]}
+                )
                 return cached_result
 
         # Load model if needed
@@ -555,10 +551,7 @@ class MedicalModel:
 
         sampler = make_sampler(temp=temperature)
         response = self._generate_with_retry(
-            prompt=prompt,
-            max_tokens=max_tokens,
-            sampler=sampler,
-            operation_name="medical_reasoning"
+            prompt=prompt, max_tokens=max_tokens, sampler=sampler, operation_name="medical_reasoning"
         )
         inference_time_ms = (time.perf_counter() - start_time) * 1000
 
@@ -569,16 +562,19 @@ class MedicalModel:
         # Store in cache (only for default system prompt)
         if cache_key is not None:
             self._put_in_cache(cache_key, result)
-            logger.info("Medical reasoning completed and cached", extra={
-                "cache_key": cache_key,
-                "inference_time_ms": round(inference_time_ms, 2),
-                "query_preview": symptoms[:50]
-            })
+            logger.info(
+                "Medical reasoning completed and cached",
+                extra={
+                    "cache_key": cache_key,
+                    "inference_time_ms": round(inference_time_ms, 2),
+                    "query_preview": symptoms[:50],
+                },
+            )
         else:
-            logger.info("Medical reasoning completed (not cached)", extra={
-                "inference_time_ms": round(inference_time_ms, 2),
-                "query_preview": symptoms[:50]
-            })
+            logger.info(
+                "Medical reasoning completed (not cached)",
+                extra={"inference_time_ms": round(inference_time_ms, 2), "query_preview": symptoms[:50]},
+            )
 
         return result
 
@@ -602,19 +598,19 @@ class MedicalModel:
         # Handle cases like: 'viral infection",' or '"cough"'
         for _ in range(3):  # Multiple passes to handle nested artifacts
             result = result.strip()
-            result = re.sub(r'^["\',;:\s]+', '', result)  # Leading artifacts
-            result = re.sub(r'["\',;:\s]+$', '', result)  # Trailing artifacts
+            result = re.sub(r'^["\',;:\s]+', "", result)  # Leading artifacts
+            result = re.sub(r'["\',;:\s]+$', "", result)  # Trailing artifacts
 
         # Remove escaped quotes within text
-        result = result.replace('\\"', '').replace("\\'", '')
+        result = result.replace('\\"', "").replace("\\'", "")
 
         # Remove garbage phrases
         for phrase in self.GARBAGE_PHRASES:
             result = result.replace(phrase, "").strip()
 
         # Clean up double spaces and punctuation
-        result = re.sub(r'\s+', ' ', result)
-        result = re.sub(r'[,;:]+\s*[,;:]+', '', result)
+        result = re.sub(r"\s+", " ", result)
+        result = re.sub(r"[,;:]+\s*[,;:]+", "", result)
 
         return result.strip()
 
@@ -659,9 +655,21 @@ class MedicalModel:
             return False
         # Symptoms shouldn't contain these sentence indicators
         sentence_indicators = [
-            " is ", " are ", " the ", " that ", " which ", " when ",
-            " because ", " affecting ", " common ", " symptoms of ",
-            "typically", "usually", "often", " or ", "worsen"
+            " is ",
+            " are ",
+            " the ",
+            " that ",
+            " which ",
+            " when ",
+            " because ",
+            " affecting ",
+            " common ",
+            " symptoms of ",
+            "typically",
+            "usually",
+            "often",
+            " or ",
+            "worsen",
         ]
         text_lower = text.lower()
         if any(indicator in text_lower for indicator in sentence_indicators):
@@ -673,8 +681,16 @@ class MedicalModel:
         if not text:
             return False
         recovery_indicators = [
-            "days", "hours", "week", "resolve", "improvement",
-            "typically", "usually", "within", "дни", "часа"
+            "days",
+            "hours",
+            "week",
+            "resolve",
+            "improvement",
+            "typically",
+            "usually",
+            "within",
+            "дни",
+            "часа",
         ]
         text_lower = text.lower()
         return any(indicator in text_lower for indicator in recovery_indicators)
@@ -697,7 +713,7 @@ class MedicalModel:
     def _try_parse_json(self, response: str) -> MedicalReasoning | None:
         """Try to extract and parse JSON from response."""
         try:
-            json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
+            json_match = re.search(r"\{[^{}]*\}", response, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group())
                 return MedicalReasoning.from_dict(data)
@@ -734,27 +750,27 @@ class MedicalModel:
             )
 
         # Try to extract structured info from text
-        lines = response.split('\n')
+        lines = response.split("\n")
         for line in lines:
             line_lower = line.lower()
-            if 'symptom' in line_lower or 'симптом' in line_lower:
+            if "symptom" in line_lower or "симптом" in line_lower:
                 # Extract symptoms
-                parts = line.split(':', 1)
+                parts = line.split(":", 1)
                 if len(parts) > 1:
-                    symptoms = [s.strip() for s in parts[1].split(',') if s.strip()]
-            elif 'cause' in line_lower or 'причина' in line_lower:
-                parts = line.split(':', 1)
+                    symptoms = [s.strip() for s in parts[1].split(",") if s.strip()]
+            elif "cause" in line_lower or "причина" in line_lower:
+                parts = line.split(":", 1)
                 if len(parts) > 1:
                     likely_cause = parts[1].strip()
-            elif 'treatment' in line_lower or 'лечение' in line_lower:
-                parts = line.split(':', 1)
+            elif "treatment" in line_lower or "лечение" in line_lower:
+                parts = line.split(":", 1)
                 if len(parts) > 1:
                     treatment_type = parts[1].strip()
-            elif 'warning' in line_lower or 'предупрежден' in line_lower:
-                parts = line.split(':', 1)
+            elif "warning" in line_lower or "предупрежден" in line_lower:
+                parts = line.split(":", 1)
                 if len(parts) > 1:
                     warnings = [parts[1].strip()]
-            elif 'doctor' in line_lower or 'лекар' in line_lower:
+            elif "doctor" in line_lower or "лекар" in line_lower:
                 see_doctor = True
 
         # If nothing parsed, use a generic Bulgarian message
@@ -771,11 +787,7 @@ class MedicalModel:
         )
 
     def refine_product_selection(
-        self,
-        user_query: str,
-        medical_reasoning: str,
-        candidate_products: list,
-        max_products: int = 3
+        self, user_query: str, medical_reasoning: str, candidate_products: list, max_products: int = 3
     ) -> list:
         """
         Use LLM to refine product selection from candidates.
@@ -801,25 +813,25 @@ class MedicalModel:
         product_list = []
         for i, product in enumerate(candidate_products, 1):
             # Support both old (name) and new (title) field names
-            name = getattr(product, 'title', None) or getattr(product, 'name', 'Unknown')
+            name = getattr(product, "title", None) or getattr(product, "name", "Unknown")
 
             # Include similarity score to help LLM factor in search confidence
-            score = getattr(product, 'score', 0.0)
+            score = getattr(product, "score", 0.0)
             relevance = "high" if score >= 0.5 else "medium" if score >= 0.35 else "low"
             product_info = f"{i}. [{relevance} relevance] {name}"
 
             # Add description/indications (expanded)
-            desc = getattr(product, 'description', None) or getattr(product, 'indications', None)
+            desc = getattr(product, "description", None) or getattr(product, "indications", None)
             if desc:
                 product_info += f"\n   Description: {desc[:200]}"
 
             # Add composition (active ingredients)
-            composition = getattr(product, 'composition', None)
+            composition = getattr(product, "composition", None)
             if composition:
                 product_info += f"\n   Composition: {composition[:150]}"
 
             # Add contraindications (full for safety)
-            contra = getattr(product, 'contraindications', None)
+            contra = getattr(product, "contraindications", None)
             if contra:
                 product_info += f"\n   Contraindications: {contra[:200]}"
 
@@ -853,25 +865,15 @@ Replace the numbers with your chosen product numbers. Output nothing else.
 
         sampler = make_sampler(temp=0.0)  # Fully deterministic for product selection
         response = self._generate_with_retry(
-            prompt=prompt,
-            max_tokens=50,
-            sampler=sampler,
-            operation_name="product_selection"
+            prompt=prompt, max_tokens=50, sampler=sampler, operation_name="product_selection"
         )
 
         # Parse the response to get product indices
-        selected_indices = self._parse_product_selection(
-            response, len(candidate_products), max_products
-        )
+        selected_indices = self._parse_product_selection(response, len(candidate_products), max_products)
 
         return [candidate_products[i] for i in selected_indices]
 
-    def _parse_product_selection(
-        self,
-        response: str,
-        num_candidates: int,
-        max_products: int
-    ) -> list[int]:
+    def _parse_product_selection(self, response: str, num_candidates: int, max_products: int) -> list[int]:
         """
         Parse product selection from LLM response.
 
@@ -891,7 +893,7 @@ Replace the numbers with your chosen product numbers. Output nothing else.
 
         # Attempt 1: JSON parsing (preferred)
         try:
-            json_match = re.search(r'\{[^{}]*\}', response_stripped)
+            json_match = re.search(r"\{[^{}]*\}", response_stripped)
             if json_match:
                 data = json.loads(json_match.group())
                 if "selected" in data and isinstance(data["selected"], list):
@@ -904,7 +906,7 @@ Replace the numbers with your chosen product numbers. Output nothing else.
                     if selected_indices:
                         logger.debug(
                             "Product selection parsed via JSON",
-                            extra={"selected_indices": selected_indices, "response": response_stripped}
+                            extra={"selected_indices": selected_indices, "response": response_stripped},
                         )
                         return selected_indices
         except (json.JSONDecodeError, ValueError, TypeError) as e:
@@ -914,7 +916,7 @@ Replace the numbers with your chosen product numbers. Output nothing else.
         # Only look at first 20 chars to avoid extracting numbers from product descriptions
         first_part = response_stripped[:20]
         try:
-            numbers = re.findall(r'\d+', first_part)
+            numbers = re.findall(r"\d+", first_part)
             for num in numbers:
                 idx = int(num) - 1
                 if 0 <= idx < num_candidates and idx not in selected_indices:
@@ -924,7 +926,7 @@ Replace the numbers with your chosen product numbers. Output nothing else.
             if selected_indices:
                 logger.warning(
                     "Product selection used regex fallback (JSON parsing failed)",
-                    extra={"selected_indices": selected_indices, "response": response_stripped}
+                    extra={"selected_indices": selected_indices, "response": response_stripped},
                 )
                 return selected_indices
         except (ValueError, TypeError) as e:
@@ -933,7 +935,7 @@ Replace the numbers with your chosen product numbers. Output nothing else.
         # Fallback: return first N products
         logger.warning(
             "Product selection fallback to first N products - LLM response could not be parsed",
-            extra={"response": response_stripped, "fallback_count": max_products}
+            extra={"response": response_stripped, "fallback_count": max_products},
         )
         return list(range(min(max_products, num_candidates)))
 
@@ -947,16 +949,11 @@ def get_medical_model() -> MedicalModel:
     global _medical_model
     if _medical_model is None:
         from src.config import get_settings
+
         settings = get_settings()
 
-        model_path = os.environ.get(
-            "MEDGEMMA_MODEL_PATH",
-            settings.medgemma_model_path
-        )
+        model_path = os.environ.get("MEDGEMMA_MODEL_PATH", settings.medgemma_model_path)
         use_bulgarian = settings.generate_bulgarian_directly
 
-        _medical_model = MedicalModel(
-            model_path=model_path,
-            use_bulgarian=use_bulgarian
-        )
+        _medical_model = MedicalModel(model_path=model_path, use_bulgarian=use_bulgarian)
     return _medical_model

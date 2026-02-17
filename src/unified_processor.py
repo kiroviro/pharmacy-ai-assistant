@@ -30,9 +30,11 @@ logger = get_logger("viapharma.unified_processor")
 # DATA CLASSES
 # =============================================================================
 
+
 @dataclass
 class IntentResult:
     """Intent classification result."""
+
     is_pharmacy_related: bool
     confidence: float
     rejection_reason: str | None = None
@@ -41,6 +43,7 @@ class IntentResult:
 @dataclass
 class SafetyResult:
     """Safety detection result from LLM."""
+
     level: Literal["safe", "warning", "urgent", "emergency"]
     detected_flags: list[str] = field(default_factory=list)
     action: Literal["proceed", "warn_and_proceed", "refer_to_doctor", "call_emergency"] = "proceed"
@@ -49,6 +52,7 @@ class SafetyResult:
 @dataclass
 class ExtractionResult:
     """Extracted information from query."""
+
     symptoms: list[str] = field(default_factory=list)  # English
     user_conditions: list[str] = field(default_factory=list)  # pregnancy, child, diabetes, etc.
     age_group: Literal["infant", "child", "adult", "elderly"] | None = None
@@ -58,6 +62,7 @@ class ExtractionResult:
 @dataclass
 class ReasoningResult:
     """Medical reasoning result."""
+
     treatment_category: str = ""
     explanation: str = ""
     explanation_bg: str = ""  # Bulgarian translation
@@ -80,6 +85,7 @@ class UnifiedProcessorResult:
     - Translation (replaces translator.py for queries)
     - Medical reasoning (enhances medical_model.py)
     """
+
     intent: IntentResult
     safety: SafetyResult
     extraction: ExtractionResult
@@ -117,6 +123,7 @@ class UnifiedProcessorResult:
 # =============================================================================
 # LRU CACHE
 # =============================================================================
+
 
 class ProcessorCache:
     """LRU cache for unified processor results."""
@@ -181,6 +188,7 @@ class ProcessorCache:
 # =============================================================================
 # UNIFIED PROCESSOR
 # =============================================================================
+
 
 class UnifiedProcessor:
     """
@@ -289,12 +297,15 @@ class UnifiedProcessor:
         if use_cache:
             self._cache.set(query, result)
 
-        logger.info("Unified processing completed", extra={
-            "inference_time_ms": round(inference_time_ms, 2),
-            "is_pharmacy_related": result.intent.is_pharmacy_related,
-            "safety_level": result.safety.level,
-            "query_preview": query[:50],
-        })
+        logger.info(
+            "Unified processing completed",
+            extra={
+                "inference_time_ms": round(inference_time_ms, 2),
+                "is_pharmacy_related": result.intent.is_pharmacy_related,
+                "safety_level": result.safety.level,
+                "query_preview": query[:50],
+            },
+        )
 
         return result
 
@@ -331,7 +342,7 @@ class UnifiedProcessor:
             pass
 
         # Try to find JSON in response
-        json_match = re.search(r'\{[\s\S]*\}', response)
+        json_match = re.search(r"\{[\s\S]*\}", response)
         if json_match:
             try:
                 return json.loads(json_match.group())
@@ -402,15 +413,27 @@ class UnifiedProcessor:
 
         # Check for obvious non-medical queries
         non_medical_indicators = [
-            "времето", "прогноза", "новини", "спорт", "рецепта за готвене",
-            "weather", "news", "sports", "recipe", "joke",
+            "времето",
+            "прогноза",
+            "новини",
+            "спорт",
+            "рецепта за готвене",
+            "weather",
+            "news",
+            "sports",
+            "recipe",
+            "joke",
         ]
         is_pharmacy = not any(indicator in query_lower for indicator in non_medical_indicators)
 
         # Check for emergency keywords
         emergency_keywords = [
-            "не мога да дишам", "болка в гърдите", "загуба на съзнание",
-            "can't breathe", "chest pain", "unconscious",
+            "не мога да дишам",
+            "болка в гърдите",
+            "загуба на съзнание",
+            "can't breathe",
+            "chest pain",
+            "unconscious",
         ]
         is_emergency = any(kw in query_lower for kw in emergency_keywords)
 
@@ -457,8 +480,8 @@ def get_unified_processor() -> UnifiedProcessor:
         settings = get_settings()
         _unified_processor = UnifiedProcessor(
             model_path=settings.medgemma_model_path,
-            cache_size=getattr(settings, 'unified_processor_cache_size', 500),
-            temperature=getattr(settings, 'unified_processor_temperature', 0.1),
-            max_tokens=getattr(settings, 'unified_processor_max_tokens', 800),
+            cache_size=getattr(settings, "unified_processor_cache_size", 500),
+            temperature=getattr(settings, "unified_processor_temperature", 0.1),
+            max_tokens=getattr(settings, "unified_processor_max_tokens", 800),
         )
     return _unified_processor

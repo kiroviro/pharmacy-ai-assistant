@@ -79,8 +79,8 @@ def extract_catalog_search_term(text: str) -> str:
     """Extract the product category/search term from a catalog query."""
     result = text.lower()
     for pattern in CATALOG_REMOVE_PATTERNS:
-        result = re.sub(pattern, '', result, flags=re.IGNORECASE)
-    result = result.strip(' ?.,!').strip()
+        result = re.sub(pattern, "", result, flags=re.IGNORECASE)
+    result = result.strip(" ?.,!").strip()
     return result if len(result) > 2 else ""
 
 
@@ -139,7 +139,7 @@ def is_single_drug_name_query(text: str) -> bool:
     if len(words) > 2:
         return False
     for w in words:
-        clean = re.sub(r'[\dмгmgl\s]+', '', w)
+        clean = re.sub(r"[\dмгmgl\s]+", "", w)
         if clean and clean in COMMON_DRUG_NAMES:
             return True
         if w in COMMON_DRUG_NAMES:

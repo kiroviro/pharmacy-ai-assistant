@@ -71,11 +71,7 @@ def check_contraindication(product_contraindications: str, user_conditions: list
     return len(matching_conditions) > 0, matching_conditions
 
 
-def filter_by_contraindications(
-    products: list,
-    user_conditions: list[str],
-    strict: bool = True
-) -> tuple[list, list]:
+def filter_by_contraindications(products: list, user_conditions: list[str], strict: bool = True) -> tuple[list, list]:
     """
     Filter products that have contraindications matching user conditions.
 
@@ -95,14 +91,12 @@ def filter_by_contraindications(
     contraindicated = []
 
     for product in products:
-        has_contra, matching = check_contraindication(
-            product.contraindications, user_conditions
-        )
+        has_contra, matching = check_contraindication(product.contraindications, user_conditions)
 
         if has_contra:
             logger.warning(
                 f"Product '{product.title}' contraindicated for: {matching}",
-                extra={"product_id": product.id, "conditions": matching}
+                extra={"product_id": product.id, "conditions": matching},
             )
             contraindicated.append((product, matching))
         else:
@@ -110,7 +104,7 @@ def filter_by_contraindications(
 
     logger.info(
         f"Contraindication filter: {len(safe_products)} safe, {len(contraindicated)} filtered",
-        extra={"user_conditions": user_conditions}
+        extra={"user_conditions": user_conditions},
     )
 
     return safe_products, contraindicated

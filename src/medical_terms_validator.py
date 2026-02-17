@@ -6,6 +6,7 @@ Detects and corrects common medical term translation issues:
 - Bad transliterations (e.g., "Гидит" instead of "Гингивит")
 - Nonsensical medical phrases
 """
+
 import re
 
 from src.logging_config import get_logger
@@ -26,7 +27,6 @@ MEDICAL_TERMS_GLOSSARY = {
     "conjunctivitis": "конюнктивит",
     "dermatitis": "дерматит",
     "gastritis": "гастрит",
-
     # Symptoms
     "headache": "главоболие",
     "fever": "температура",
@@ -35,7 +35,6 @@ MEDICAL_TERMS_GLOSSARY = {
     "inflammation": "възпаление",
     "infection": "инфекция",
     "allergy": "алергия",
-
     # Common terms
     "viral infection": "вирусна инфекция",
     "bacterial infection": "бактериална инфекция",
@@ -59,7 +58,6 @@ GIBBERISH_PATTERNS = [
     r"сантиментални?\s+\w+",  # "sentimental X"
     r"емоционални?\s+нарушения",  # "emotional disorders" (in wrong context)
     r"психологически\s+проблеми",  # "psychological problems" (when discussing physical symptoms)
-
     # Garbled words (detect patterns of mixed Latin/Cyrillic)
     r"\b[а-яА-Я]*[a-zA-Z]+[а-яА-Я]+\b",  # Mixed scripts in one word
     r"\b[a-zA-Z]+[а-яА-Я]+[a-zA-Z]+\b",
@@ -120,18 +118,15 @@ class MedicalTermsValidator:
 
                 # Try to remove nonsensical phrases
                 # Remove the phrase and surrounding punctuation
-                pattern = re.compile(
-                    r'[,;]?\s*' + re.escape(phrase) + r'\s*[,;]?',
-                    re.IGNORECASE
-                )
+                pattern = re.compile(r"[,;]?\s*" + re.escape(phrase) + r"\s*[,;]?", re.IGNORECASE)
                 before = corrected
-                corrected = pattern.sub('', corrected)
+                corrected = pattern.sub("", corrected)
 
                 # Clean up double spaces and punctuation
-                corrected = re.sub(r'\s+', ' ', corrected)
-                corrected = re.sub(r'\s*,\s*,\s*', ', ', corrected)  # Double commas
-                corrected = re.sub(r'^\s*,\s*', '', corrected)  # Leading comma
-                corrected = re.sub(r'\s*,\s*$', '', corrected)  # Trailing comma
+                corrected = re.sub(r"\s+", " ", corrected)
+                corrected = re.sub(r"\s*,\s*,\s*", ", ", corrected)  # Double commas
+                corrected = re.sub(r"^\s*,\s*", "", corrected)  # Leading comma
+                corrected = re.sub(r"\s*,\s*$", "", corrected)  # Trailing comma
 
                 if before != corrected:
                     issues.append(f"Removed suspicious phrase: '{phrase}'")
@@ -148,7 +143,7 @@ class MedicalTermsValidator:
 
         # Step 4: Check for mixed script (Latin + Cyrillic in medical terms)
         # This often indicates translation failure
-        mixed_script = re.findall(r'\b[а-яА-Я]+[a-zA-Z]+\b|\b[a-zA-Z]+[а-яА-Я]+\b', corrected)
+        mixed_script = re.findall(r"\b[а-яА-Я]+[a-zA-Z]+\b|\b[a-zA-Z]+[а-яА-Я]+\b", corrected)
         if mixed_script:
             for word in mixed_script:
                 # Exclude intentional mixed words (brand names, etc.)
@@ -165,8 +160,8 @@ class MedicalTermsValidator:
         """Check if word is likely a brand name (intentional mixed script)."""
         # Common patterns for brand names
         brand_patterns = [
-            r'^[A-Z][a-z]+$',  # Capitalized Latin word (e.g., Aspirin)
-            r'^\d+',  # Starts with number
+            r"^[A-Z][a-z]+$",  # Capitalized Latin word (e.g., Aspirin)
+            r"^\d+",  # Starts with number
         ]
         for pattern in brand_patterns:
             if re.match(pattern, word):
@@ -191,38 +186,32 @@ class MedicalTermsValidator:
 
         # Fields to validate
         text_fields = [
-            'likely_cause',
-            'explanation',
-            'treatment_type',
-            'how_it_helps',
-            'duration_guidance',
+            "likely_cause",
+            "explanation",
+            "treatment_type",
+            "how_it_helps",
+            "duration_guidance",
         ]
 
         for field in text_fields:
             if field in corrected and corrected[field]:
-                corrected_text, issues = self.validate_and_correct(
-                    corrected[field],
-                    context=field
-                )
+                corrected_text, issues = self.validate_and_correct(corrected[field], context=field)
                 corrected[field] = corrected_text
                 if issues:
                     all_issues.extend([(field, issue) for issue in issues])
 
         # Validate lists
         list_fields = [
-            'symptoms',
-            'warnings',
-            'self_care_tips',
+            "symptoms",
+            "warnings",
+            "self_care_tips",
         ]
 
         for field in list_fields:
             if field in corrected and corrected[field]:
                 corrected_list = []
                 for i, item in enumerate(corrected[field]):
-                    corrected_text, issues = self.validate_and_correct(
-                        item,
-                        context=f"{field}[{i}]"
-                    )
+                    corrected_text, issues = self.validate_and_correct(item, context=f"{field}[{i}]")
                     corrected_list.append(corrected_text)
                     if issues:
                         all_issues.extend([(f"{field}[{i}]", issue) for issue in issues])
@@ -231,8 +220,7 @@ class MedicalTermsValidator:
         # Log summary if issues found
         if all_issues:
             logger.info(
-                f"Medical validation completed: {len(all_issues)} issues found/corrected",
-                extra={"issues": all_issues}
+                f"Medical validation completed: {len(all_issues)} issues found/corrected", extra={"issues": all_issues}
             )
 
         return corrected

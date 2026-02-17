@@ -17,6 +17,7 @@ Expected outcomes:
 - If speedup < 1.1x: Keep max_workers=1 (no benefit)
 - If crashes: Keep max_workers=1, document limitation
 """
+
 import concurrent.futures
 import time
 import traceback
@@ -100,17 +101,19 @@ def test_concurrent_inference():
     seq_time = time.time() - start
 
     print(f"\n   ✅ Completed in {seq_time:.2f}s")
-    print(f"   Success rate: {len(results_seq)}/{len(test_queries)} ({len(results_seq)/len(test_queries)*100:.1f}%)")
-    print(f"   Average: {seq_time/len(test_queries):.3f}s per query")
+    print(
+        f"   Success rate: {len(results_seq)}/{len(test_queries)} ({len(results_seq) / len(test_queries) * 100:.1f}%)"
+    )
+    print(f"   Average: {seq_time / len(test_queries):.3f}s per query")
     if errors_seq:
         print(f"   ⚠️  Errors: {len(errors_seq)}")
 
-    results['sequential'] = {
-        'time': seq_time,
-        'success': len(results_seq),
-        'total': len(test_queries),
-        'errors': len(errors_seq),
-        'avg_per_query': seq_time/len(test_queries)
+    results["sequential"] = {
+        "time": seq_time,
+        "success": len(results_seq),
+        "total": len(test_queries),
+        "errors": len(errors_seq),
+        "avg_per_query": seq_time / len(test_queries),
     }
 
     # Clear memory before parallel test
@@ -146,26 +149,28 @@ def test_concurrent_inference():
         parallel_2_time = time.time() - start
 
         print(f"\n   ✅ Completed in {parallel_2_time:.2f}s")
-        print(f"   Success rate: {len(results_2)}/{len(test_queries)} ({len(results_2)/len(test_queries)*100:.1f}%)")
-        print(f"   Average: {parallel_2_time/len(test_queries):.3f}s per query")
-        print(f"   Speedup: {seq_time/parallel_2_time:.2f}x")
+        print(
+            f"   Success rate: {len(results_2)}/{len(test_queries)} ({len(results_2) / len(test_queries) * 100:.1f}%)"
+        )
+        print(f"   Average: {parallel_2_time / len(test_queries):.3f}s per query")
+        print(f"   Speedup: {seq_time / parallel_2_time:.2f}x")
         if errors_2:
             print(f"   ⚠️  Errors: {len(errors_2)}")
 
-        results['parallel_2'] = {
-            'time': parallel_2_time,
-            'success': len(results_2),
-            'total': len(test_queries),
-            'errors': len(errors_2),
-            'avg_per_query': parallel_2_time/len(test_queries),
-            'speedup': seq_time/parallel_2_time
+        results["parallel_2"] = {
+            "time": parallel_2_time,
+            "success": len(results_2),
+            "total": len(test_queries),
+            "errors": len(errors_2),
+            "avg_per_query": parallel_2_time / len(test_queries),
+            "speedup": seq_time / parallel_2_time,
         }
 
     except Exception as e:
         print("\n   ❌ FAILED: Parallel execution with 2 workers crashed!")
         print(f"   Error: {e}")
         traceback.print_exc()
-        results['parallel_2'] = {'crashed': True, 'error': str(e)}
+        results["parallel_2"] = {"crashed": True, "error": str(e)}
 
         # If 2 workers crashes, don't try 4
         print("\n⚠️  Skipping 4-worker test due to 2-worker failure")
@@ -205,26 +210,28 @@ def test_concurrent_inference():
         parallel_4_time = time.time() - start
 
         print(f"\n   ✅ Completed in {parallel_4_time:.2f}s")
-        print(f"   Success rate: {len(results_4)}/{len(test_queries)} ({len(results_4)/len(test_queries)*100:.1f}%)")
-        print(f"   Average: {parallel_4_time/len(test_queries):.3f}s per query")
-        print(f"   Speedup: {seq_time/parallel_4_time:.2f}x")
+        print(
+            f"   Success rate: {len(results_4)}/{len(test_queries)} ({len(results_4) / len(test_queries) * 100:.1f}%)"
+        )
+        print(f"   Average: {parallel_4_time / len(test_queries):.3f}s per query")
+        print(f"   Speedup: {seq_time / parallel_4_time:.2f}x")
         if errors_4:
             print(f"   ⚠️  Errors: {len(errors_4)}")
 
-        results['parallel_4'] = {
-            'time': parallel_4_time,
-            'success': len(results_4),
-            'total': len(test_queries),
-            'errors': len(errors_4),
-            'avg_per_query': parallel_4_time/len(test_queries),
-            'speedup': seq_time/parallel_4_time
+        results["parallel_4"] = {
+            "time": parallel_4_time,
+            "success": len(results_4),
+            "total": len(test_queries),
+            "errors": len(errors_4),
+            "avg_per_query": parallel_4_time / len(test_queries),
+            "speedup": seq_time / parallel_4_time,
         }
 
     except Exception as e:
         print("\n   ❌ FAILED: Parallel execution with 4 workers crashed!")
         print(f"   Error: {e}")
         traceback.print_exc()
-        results['parallel_4'] = {'crashed': True, 'error': str(e)}
+        results["parallel_4"] = {"crashed": True, "error": str(e)}
 
     # ========================================================================
     # RESULTS SUMMARY
@@ -235,14 +242,18 @@ def test_concurrent_inference():
 
     print(f"\nSequential (baseline):  {results['sequential']['time']:.2f}s")
 
-    if 'crashed' not in results.get('parallel_2', {}):
-        print(f"Parallel (2 workers):   {results['parallel_2']['time']:.2f}s  ({results['parallel_2']['speedup']:.2f}x speedup)")
+    if "crashed" not in results.get("parallel_2", {}):
+        print(
+            f"Parallel (2 workers):   {results['parallel_2']['time']:.2f}s  ({results['parallel_2']['speedup']:.2f}x speedup)"
+        )
     else:
         print("Parallel (2 workers):   CRASHED ❌")
 
-    if 'parallel_4' in results:
-        if 'crashed' not in results['parallel_4']:
-            print(f"Parallel (4 workers):   {results['parallel_4']['time']:.2f}s  ({results['parallel_4']['speedup']:.2f}x speedup)")
+    if "parallel_4" in results:
+        if "crashed" not in results["parallel_4"]:
+            print(
+                f"Parallel (4 workers):   {results['parallel_4']['time']:.2f}s  ({results['parallel_4']['speedup']:.2f}x speedup)"
+            )
         else:
             print("Parallel (4 workers):   CRASHED ❌")
 
@@ -252,7 +263,7 @@ def test_concurrent_inference():
     print_recommendations(results)
 
     # Return success if at least 2 workers worked
-    return 'crashed' not in results.get('parallel_2', {})
+    return "crashed" not in results.get("parallel_2", {})
 
 
 def print_recommendations(results):
@@ -261,7 +272,7 @@ def print_recommendations(results):
     print("RECOMMENDATIONS")
     print("=" * 70)
 
-    if 'crashed' in results.get('parallel_2', {}):
+    if "crashed" in results.get("parallel_2", {}):
         print("\n❌ MLX DOES NOT SUPPORT CONCURRENT INFERENCE")
         print("\n   The claim in api_server.py:42 is CORRECT:")
         print("   'MLX doesn't handle concurrent inference well'")
@@ -274,8 +285,8 @@ def print_recommendations(results):
         return
 
     # Check 2-worker speedup
-    speedup_2 = results.get('parallel_2', {}).get('speedup', 0)
-    speedup_4 = results.get('parallel_4', {}).get('speedup', 0)
+    speedup_2 = results.get("parallel_2", {}).get("speedup", 0)
+    speedup_4 = results.get("parallel_4", {}).get("speedup", 0)
 
     if speedup_2 >= 1.5:
         print("\n✅ MLX HANDLES CONCURRENT INFERENCE WELL!")

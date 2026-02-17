@@ -21,38 +21,41 @@ class TestMedicalDictionary:
     # SYMPTOM TRANSLATIONS
     # =========================================================================
 
-    @pytest.mark.parametrize("english,expected_bulgarian", [
-        # Basic symptoms
-        ("headache", "главоболие"),
-        ("headaches", "главоболия"),
-        ("fever", "температура"),
-        ("fevers", "температури"),
-        ("cough", "кашлица"),
-        ("runny nose", "хрема"),
-        ("sniffles", "хрема"),
-        ("sneezing", "кихане"),
-        ("sore throat", "болки в гърлото"),
-        # Infections
-        ("viral infection", "вирусна инфекция"),
-        ("bacterial infection", "бактериална инфекция"),
-        ("bronchitis", "бронхит"),
-        # Pain types
-        ("muscle pain", "мускулна болка"),
-        ("back pain", "болки в гърба"),
-        ("stomach pain", "стомашна болка"),
-        ("chest pain", "болка в гърдите"),
-        ("joint pain", "болка в ставите"),
-        # Other symptoms
-        ("dizziness", "световъртеж"),
-        ("fatigue", "умора"),
-        ("nausea", "гадене"),
-        ("vomiting", "повръщане"),
-        ("diarrhea", "диария"),
-        ("constipation", "запек"),
-        ("rash", "обрив"),
-        ("swelling", "подуване"),
-        ("itching", "сърбеж"),
-    ])
+    @pytest.mark.parametrize(
+        "english,expected_bulgarian",
+        [
+            # Basic symptoms
+            ("headache", "главоболие"),
+            ("headaches", "главоболия"),
+            ("fever", "температура"),
+            ("fevers", "температури"),
+            ("cough", "кашлица"),
+            ("runny nose", "хрема"),
+            ("sniffles", "хрема"),
+            ("sneezing", "кихане"),
+            ("sore throat", "болки в гърлото"),
+            # Infections
+            ("viral infection", "вирусна инфекция"),
+            ("bacterial infection", "бактериална инфекция"),
+            ("bronchitis", "бронхит"),
+            # Pain types
+            ("muscle pain", "мускулна болка"),
+            ("back pain", "болки в гърба"),
+            ("stomach pain", "стомашна болка"),
+            ("chest pain", "болка в гърдите"),
+            ("joint pain", "болка в ставите"),
+            # Other symptoms
+            ("dizziness", "световъртеж"),
+            ("fatigue", "умора"),
+            ("nausea", "гадене"),
+            ("vomiting", "повръщане"),
+            ("diarrhea", "диария"),
+            ("constipation", "запек"),
+            ("rash", "обрив"),
+            ("swelling", "подуване"),
+            ("itching", "сърбеж"),
+        ],
+    )
     def test_symptom_translation(self, translator, english, expected_bulgarian):
         """Test that common symptoms translate correctly."""
         result = translator.translate_symptom(english)
@@ -62,22 +65,25 @@ class TestMedicalDictionary:
     # TREATMENT TRANSLATIONS
     # =========================================================================
 
-    @pytest.mark.parametrize("english,expected_bulgarian", [
-        ("analgesics", "болкоуспокояващи"),
-        ("pain relievers", "болкоуспокояващи"),
-        ("painkillers", "болкоуспокояващи"),
-        ("antipyretics", "антипиретици (за сваляне на температура)"),
-        ("anti-inflammatory", "противовъзпалително"),
-        ("decongestants", "деконгестанти (за запушен нос)"),
-        ("antihistamines", "антихистамини"),
-        ("expectorants", "отхрачващи средства"),
-        ("cough suppressant", "средство за потискане на кашлицата"),
-        ("throat lozenges", "таблетки за гърло"),
-        ("nasal spray", "спрей за нос"),
-        ("nasal drops", "капки за нос"),
-        ("antivirals", "антивирусни средства"),
-        ("antibiotics", "антибиотици"),
-    ])
+    @pytest.mark.parametrize(
+        "english,expected_bulgarian",
+        [
+            ("analgesics", "болкоуспокояващи"),
+            ("pain relievers", "болкоуспокояващи"),
+            ("painkillers", "болкоуспокояващи"),
+            ("antipyretics", "антипиретици (за сваляне на температура)"),
+            ("anti-inflammatory", "противовъзпалително"),
+            ("decongestants", "деконгестанти (за запушен нос)"),
+            ("antihistamines", "антихистамини"),
+            ("expectorants", "отхрачващи средства"),
+            ("cough suppressant", "средство за потискане на кашлицата"),
+            ("throat lozenges", "таблетки за гърло"),
+            ("nasal spray", "спрей за нос"),
+            ("nasal drops", "капки за нос"),
+            ("antivirals", "антивирусни средства"),
+            ("antibiotics", "антибиотици"),
+        ],
+    )
     def test_treatment_translation(self, translator, english, expected_bulgarian):
         """Test that treatment types translate correctly."""
         result = translator._apply_medical_dictionary(english)
@@ -87,11 +93,14 @@ class TestMedicalDictionary:
     # DRUG NAME TRANSLATIONS
     # =========================================================================
 
-    @pytest.mark.parametrize("english,expected_bulgarian", [
-        ("paracetamol", "парацетамол"),
-        ("acetaminophen", "парацетамол"),
-        ("ibuprofen", "ибупрофен"),
-    ])
+    @pytest.mark.parametrize(
+        "english,expected_bulgarian",
+        [
+            ("paracetamol", "парацетамол"),
+            ("acetaminophen", "парацетамол"),
+            ("ibuprofen", "ибупрофен"),
+        ],
+    )
     def test_drug_name_translation(self, translator, english, expected_bulgarian):
         """Test that common drug names translate correctly."""
         result = translator._apply_medical_dictionary(english)
@@ -101,16 +110,19 @@ class TestMedicalDictionary:
     # SELF-CARE PHRASE TRANSLATIONS
     # =========================================================================
 
-    @pytest.mark.parametrize("english,expected_bulgarian", [
-        ("drink plenty of fluids", "пийте много течности"),
-        ("stay hydrated", "пийте достатъчно течности"),
-        ("get plenty of rest", "почивайте достатъчно"),
-        ("rest in a quiet room", "почивайте в тиха стая"),
-        ("apply cold compress", "приложете студен компрес"),
-        ("apply warm compress", "приложете топъл компрес"),
-        ("avoid bright lights", "избягвайте ярка светлина"),
-        ("gargle with salt water", "гаргара със солена вода"),
-    ])
+    @pytest.mark.parametrize(
+        "english,expected_bulgarian",
+        [
+            ("drink plenty of fluids", "пийте много течности"),
+            ("stay hydrated", "пийте достатъчно течности"),
+            ("get plenty of rest", "почивайте достатъчно"),
+            ("rest in a quiet room", "почивайте в тиха стая"),
+            ("apply cold compress", "приложете студен компрес"),
+            ("apply warm compress", "приложете топъл компрес"),
+            ("avoid bright lights", "избягвайте ярка светлина"),
+            ("gargle with salt water", "гаргара със солена вода"),
+        ],
+    )
     def test_self_care_translation(self, translator, english, expected_bulgarian):
         """Test that self-care advice translates correctly."""
         result = translator._apply_medical_dictionary(english)
@@ -120,17 +132,20 @@ class TestMedicalDictionary:
     # DOCTOR RECOMMENDATION TRANSLATIONS
     # =========================================================================
 
-    @pytest.mark.parametrize("english,expected_bulgarian", [
-        ("see doctor", "посетете лекар"),
-        ("see a doctor", "посетете лекар"),
-        ("see a pediatrician", "посетете педиатър"),
-        ("consult a doctor", "консултирайте се с лекар"),
-        ("consult a pediatrician", "консултирайте се с педиатър"),
-        ("seek medical help", "потърсете медицинска помощ"),
-        ("seek medical attention", "потърсете медицинска помощ"),
-        ("if symptoms persist", "ако симптомите продължават"),
-        ("if symptoms worsen", "ако симптомите се влошат"),
-    ])
+    @pytest.mark.parametrize(
+        "english,expected_bulgarian",
+        [
+            ("see doctor", "посетете лекар"),
+            ("see a doctor", "посетете лекар"),
+            ("see a pediatrician", "посетете педиатър"),
+            ("consult a doctor", "консултирайте се с лекар"),
+            ("consult a pediatrician", "консултирайте се с педиатър"),
+            ("seek medical help", "потърсете медицинска помощ"),
+            ("seek medical attention", "потърсете медицинска помощ"),
+            ("if symptoms persist", "ако симптомите продължават"),
+            ("if symptoms worsen", "ако симптомите се влошат"),
+        ],
+    )
     def test_doctor_recommendation_translation(self, translator, english, expected_bulgarian):
         """Test that doctor recommendations translate correctly."""
         result = translator._apply_medical_dictionary(english)
@@ -140,18 +155,21 @@ class TestMedicalDictionary:
     # PEDIATRIC TRANSLATIONS
     # =========================================================================
 
-    @pytest.mark.parametrize("english,expected_bulgarian", [
-        ("infant", "бебе"),
-        ("infants", "бебета"),
-        ("baby", "бебе"),
-        ("babies", "бебета"),
-        ("child", "дете"),
-        ("children", "деца"),
-        ("newborn", "новородено"),
-        ("pediatric", "детски"),
-        ("infant fever", "температура при бебе"),
-        ("baby fever", "температура при бебе"),
-    ])
+    @pytest.mark.parametrize(
+        "english,expected_bulgarian",
+        [
+            ("infant", "бебе"),
+            ("infants", "бебета"),
+            ("baby", "бебе"),
+            ("babies", "бебета"),
+            ("child", "дете"),
+            ("children", "деца"),
+            ("newborn", "новородено"),
+            ("pediatric", "детски"),
+            ("infant fever", "температура при бебе"),
+            ("baby fever", "температура при бебе"),
+        ],
+    )
     def test_pediatric_translation(self, translator, english, expected_bulgarian):
         """Test that pediatric terms translate correctly."""
         result = translator._apply_medical_dictionary(english)
@@ -221,13 +239,16 @@ class TestBulgarianRatioCalculation:
     def translator(self):
         return Translator()
 
-    @pytest.mark.parametrize("text,min_ratio,max_ratio", [
-        ("главоболие", 0.99, 1.0),  # Pure Bulgarian
-        ("headache", 0.0, 0.01),  # Pure English
-        ("главоболие headache", 0.4, 0.6),  # Mixed
-        ("", 0.0, 0.01),  # Empty
-        ("123 456", 0.0, 0.01),  # Numbers only
-    ])
+    @pytest.mark.parametrize(
+        "text,min_ratio,max_ratio",
+        [
+            ("главоболие", 0.99, 1.0),  # Pure Bulgarian
+            ("headache", 0.0, 0.01),  # Pure English
+            ("главоболие headache", 0.4, 0.6),  # Mixed
+            ("", 0.0, 0.01),  # Empty
+            ("123 456", 0.0, 0.01),  # Numbers only
+        ],
+    )
     def test_bulgarian_ratio(self, translator, text, min_ratio, max_ratio):
         """Test Bulgarian character ratio calculation."""
         ratio = translator._calculate_bulgarian_ratio(text)

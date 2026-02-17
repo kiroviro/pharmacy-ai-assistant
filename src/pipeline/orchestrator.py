@@ -85,8 +85,8 @@ class Pipeline:
 
         # Feature flags
         settings = get_settings()
-        self._use_unified_processor = getattr(settings, 'unified_processor_enabled', False)
-        self._generate_bulgarian_directly = getattr(settings, 'generate_bulgarian_directly', False)
+        self._use_unified_processor = getattr(settings, "unified_processor_enabled", False)
+        self._generate_bulgarian_directly = getattr(settings, "generate_bulgarian_directly", False)
 
         if not lazy_load:
             self._load_medical_model()
@@ -174,8 +174,8 @@ class Pipeline:
             filtered = []
             drug_lower = drug.lower()
             for p in products:
-                title_lower = p.title.lower() if hasattr(p, 'title') else ""
-                desc_lower = p.description.lower() if hasattr(p, 'description') else ""
+                title_lower = p.title.lower() if hasattr(p, "title") else ""
+                desc_lower = p.description.lower() if hasattr(p, "description") else ""
                 if drug_lower in title_lower or drug_lower in desc_lower:
                     filtered.append(p)
 
@@ -186,11 +186,10 @@ class Pipeline:
         response = self._format_comparison_response(drug_names, products_by_drug)
 
         duration_ms = (time.perf_counter() - start_time) * 1000
-        logger.info("Comparison query completed", extra={
-            "duration_ms": round(duration_ms, 2),
-            "drugs": drug_names,
-            "products_found": len(all_products)
-        })
+        logger.info(
+            "Comparison query completed",
+            extra={"duration_ms": round(duration_ms, 2), "drugs": drug_names, "products_found": len(all_products)},
+        )
 
         return PipelineResult(
             response=response,
@@ -204,38 +203,44 @@ class Pipeline:
         """Format the response for a medication comparison query."""
         # Drug info for common comparisons
         drug_info = {
-            'ибупрофен': {
-                'class': 'НСПВС (нестероидно противовъзпалително)',
-                'strength': 'Средна сила',
-                'uses': 'болка, възпаление, температура',
-                'caution': 'Да се избягва при стомашни проблеми',
+            "ибупрофен": {
+                "class": "НСПВС (нестероидно противовъзпалително)",
+                "strength": "Средна сила",
+                "uses": "болка, възпаление, температура",
+                "caution": "Да се избягва при стомашни проблеми",
             },
-            'диклофенак': {
-                'class': 'НСПВС (нестероидно противовъзпалително)',
-                'strength': 'По-силен от ибупрофен',
-                'uses': 'силна болка, възпаление, артрит',
-                'caution': 'По-висок риск от стомашни проблеми',
+            "диклофенак": {
+                "class": "НСПВС (нестероидно противовъзпалително)",
+                "strength": "По-силен от ибупрофен",
+                "uses": "силна болка, възпаление, артрит",
+                "caution": "По-висок риск от стомашни проблеми",
             },
-            'парацетамол': {
-                'class': 'Аналгетик/антипиретик',
-                'strength': 'По-слаб от НСПВС',
-                'uses': 'болка, температура (без противовъзпалително)',
-                'caution': 'По-безопасен за стомаха',
+            "парацетамол": {
+                "class": "Аналгетик/антипиретик",
+                "strength": "По-слаб от НСПВС",
+                "uses": "болка, температура (без противовъзпалително)",
+                "caution": "По-безопасен за стомаха",
             },
-            'аспирин': {
-                'class': 'НСПВС',
-                'strength': 'Средна сила',
-                'uses': 'болка, температура, разреждане на кръвта',
-                'caution': 'Не за деца; риск от кървене',
+            "аспирин": {
+                "class": "НСПВС",
+                "strength": "Средна сила",
+                "uses": "болка, температура, разреждане на кръвта",
+                "caution": "Не за деца; риск от кървене",
             },
         }
 
         # Map input drug names to canonical names
         canonical_map = {
-            'ibuprofen': 'ибупрофен', 'нурофен': 'ибупрофен', 'nurofen': 'ибупрофен',
-            'diclofenac': 'диклофенак', 'волтарен': 'диклофенак', 'voltaren': 'диклофенак',
-            'paracetamol': 'парацетамол', 'acetaminophen': 'парацетамол', 'панадол': 'парацетамол',
-            'aspirin': 'аспирин',
+            "ibuprofen": "ибупрофен",
+            "нурофен": "ибупрофен",
+            "nurofen": "ибупрофен",
+            "diclofenac": "диклофенак",
+            "волтарен": "диклофенак",
+            "voltaren": "диклофенак",
+            "paracetamol": "парацетамол",
+            "acetaminophen": "парацетамол",
+            "панадол": "парацетамол",
+            "aspirin": "аспирин",
         }
 
         lines = ["## 💊 Сравнение на лекарства\n"]
@@ -302,8 +307,23 @@ class Pipeline:
 
     # Generic terms that shouldn't be used for strict filtering
     _GENERIC_TERMS = {
-        'мг', 'mg', 'мл', 'ml', 'капсули', 'таблетки', 'сироп', 'капки',
-        'крем', 'гел', 'разтвор', 'суспензия', 'за', 'при', 'х', 'g', 'гр',
+        "мг",
+        "mg",
+        "мл",
+        "ml",
+        "капсули",
+        "таблетки",
+        "сироп",
+        "капки",
+        "крем",
+        "гел",
+        "разтвор",
+        "суспензия",
+        "за",
+        "при",
+        "х",
+        "g",
+        "гр",
     }
 
     def _filter_by_product_name_match(self, products: list, search_term: str) -> list:
@@ -322,10 +342,7 @@ class Pipeline:
         """
         # Extract key terms (excluding generic terms and short words)
         search_lower = search_term.lower()
-        key_terms = [
-            term for term in search_lower.split()
-            if term not in self._GENERIC_TERMS and len(term) > 2
-        ]
+        key_terms = [term for term in search_lower.split() if term not in self._GENERIC_TERMS and len(term) > 2]
 
         if not key_terms:
             # No key terms to filter on, return all
@@ -335,8 +352,8 @@ class Pipeline:
 
         filtered = []
         for product in products:
-            title_lower = product.title.lower() if hasattr(product, 'title') else ""
-            brand_lower = product.brand.lower() if hasattr(product, 'brand') else ""
+            title_lower = product.title.lower() if hasattr(product, "title") else ""
+            brand_lower = product.brand.lower() if hasattr(product, "brand") else ""
 
             # Check if any key term is in title or brand
             if any(term in title_lower or term in brand_lower for term in key_terms):
@@ -365,9 +382,7 @@ class Pipeline:
         if self.product_store.collection.count() == 0:
             logger.warning("Product store is empty")
             return PipelineResult(
-                response="Съжалявам, каталогът с продукти не е зареден.",
-                is_medical=True,
-                original_text=user_input
+                response="Съжалявам, каталогът с продукти не е зареден.", is_medical=True, original_text=user_input
             )
 
         # Use hybrid search for better brand/product name matching
@@ -385,10 +400,9 @@ class Pipeline:
         response = self._format_catalog_response(search_term, products, user_input)
 
         duration_ms = (time.perf_counter() - start_time) * 1000
-        logger.info("Catalog query completed", extra={
-            "duration_ms": round(duration_ms, 2),
-            "products_found": len(products)
-        })
+        logger.info(
+            "Catalog query completed", extra={"duration_ms": round(duration_ms, 2), "products_found": len(products)}
+        )
 
         return PipelineResult(
             response=response,
@@ -396,14 +410,12 @@ class Pipeline:
             is_red_flag=False,
             original_text=user_input,
             candidate_products=products,
-            selected_products=products[:3]
+            selected_products=products[:3],
         )
 
     # Standard OTC disclaimer for all responses
     _OTC_DISCLAIMER = (
-        "\n---\n"
-        "⚠️ *Тази информация е само за справка. "
-        "Консултирайте се с фармацевт или лекар за персонална препоръка.*"
+        "\n---\n⚠️ *Тази информация е само за справка. Консултирайте се с фармацевт или лекар за персонална препоръка.*"
     )
 
     # Issue 8: Response length standardization - consistent UX
@@ -434,7 +446,7 @@ class Pipeline:
                 "Mustela Stelatopia",
                 "Bioderma Atoderm Intensive",
             ],
-            "fallback_advice": "Показаните продукти са за суха и чувствителна кожа, но за атопичен дерматит се препоръчват специализирани дерматологични продукти."
+            "fallback_advice": "Показаните продукти са за суха и чувствителна кожа, но за атопичен дерматит се препоръчват специализирани дерматологични продукти.",
         },
         "атопичен дерматит": {
             "condition": "атопичен дерматит",
@@ -444,7 +456,7 @@ class Pipeline:
                 "Eucerin AtopiControl",
                 "Mustela Stelatopia",
             ],
-            "fallback_advice": "За атопичен дерматит консултирайте дерматолог за най-подходящия продукт."
+            "fallback_advice": "За атопичен дерматит консултирайте дерматолог за най-подходящия продукт.",
         },
         "екзема": {
             "condition": "екзема",
@@ -454,7 +466,7 @@ class Pipeline:
                 "Eucerin AtopiControl",
                 "Avène Cicalfate",
             ],
-            "fallback_advice": "Показаните продукти могат да помогнат, но за екзема се препоръчват специализирани лечебни продукти."
+            "fallback_advice": "Показаните продукти могат да помогнат, но за екзема се препоръчват специализирани лечебни продукти.",
         },
         "псориазис": {
             "condition": "псориазис",
@@ -464,7 +476,7 @@ class Pipeline:
                 "Eucerin UreaRepair",
                 "Препарати с каменовъглен катран",
             ],
-            "fallback_advice": "За псориазис е необходима консултация с дерматолог. Показаните продукти не са специализирани за това състояние."
+            "fallback_advice": "За псориазис е необходима консултация с дерматолог. Показаните продукти не са специализирани за това състояние.",
         },
         "розацея": {
             "condition": "розацея",
@@ -474,7 +486,7 @@ class Pipeline:
                 "Avène Antirougeurs",
                 "Bioderma Sensibio AR",
             ],
-            "fallback_advice": "За розацея се препоръчват специализирани продукти с азелаинова киселина или ниацинамид."
+            "fallback_advice": "За розацея се препоръчват специализирани продукти с азелаинова киселина или ниацинамид.",
         },
     }
 
@@ -515,7 +527,7 @@ class Pipeline:
             # Always show recommendations for specialized conditions (catalog gap)
             parts.append(f"\n💡 **Важно**: {specialized_info['fallback_advice']}\n")
             parts.append("\n**Препоръчани специализирани продукти:**")
-            for rec in specialized_info['recommendations']:
+            for rec in specialized_info["recommendations"]:
                 parts.append(f"• {rec}")
 
             if products:
@@ -607,11 +619,14 @@ class Pipeline:
         If unified_processor_enabled=True, uses LLM-driven processing instead.
         """
         start_time = time.perf_counter()
-        logger.info("Processing query", extra={
-            "query_length": len(user_input),
-            "query_preview": user_input[:50] + "..." if len(user_input) > 50 else user_input,
-            "unified_processor": self._use_unified_processor,
-        })
+        logger.info(
+            "Processing query",
+            extra={
+                "query_length": len(user_input),
+                "query_preview": user_input[:50] + "..." if len(user_input) > 50 else user_input,
+                "unified_processor": self._use_unified_processor,
+            },
+        )
 
         # Step 0: Hard-coded safety fast-path (ALWAYS runs - non-negotiable)
         fast_safety = self.safety_layer.check_safety(user_input)
@@ -641,21 +656,16 @@ class Pipeline:
                 products = self._convert_to_products(products)
                 products = self.safety_layer.filter_otc_only(products)
                 if products:
-                    logger.info("Single drug name matched catalog", extra={
-                        "query": user_input,
-                        "products_found": len(products)
-                    })
+                    logger.info(
+                        "Single drug name matched catalog", extra={"query": user_input, "products_found": len(products)}
+                    )
                     return self._process_catalog_query(user_input, user_input)
             except Exception as e:
                 logger.debug(f"Catalog search for drug name failed: {e}")
 
         # Step 0e: Ambiguous help/clarification queries - "помощ", "здравей"
         if is_help_clarification_query(user_input):
-            return PipelineResult(
-                response=get_help_clarification_message(),
-                is_medical=False,
-                original_text=user_input
-            )
+            return PipelineResult(response=get_help_clarification_message(), is_medical=False, original_text=user_input)
 
         # Route to unified processor if enabled
         if self._use_unified_processor:
@@ -668,11 +678,9 @@ class Pipeline:
         # Legacy processing path (or fallback if unified processor fails)
         # Step 1: Intent Classification
         is_medical, confidence, reason = self.intent_classifier.is_medical_query(user_input)
-        logger.debug("Intent classification", extra={
-            "is_medical": is_medical,
-            "confidence": confidence,
-            "reason": reason
-        })
+        logger.debug(
+            "Intent classification", extra={"is_medical": is_medical, "confidence": confidence, "reason": reason}
+        )
         if not is_medical:
             # Edge case: Short queries (1-2 words) might be product names - try catalog search first
             words = user_input.strip().split()
@@ -680,10 +688,10 @@ class Pipeline:
                 try:
                     products = self.product_store.search(user_input, top_k=5)
                     if products and len(products) > 0:
-                        logger.info("Short query matched products in catalog", extra={
-                            "query": user_input,
-                            "products_found": len(products)
-                        })
+                        logger.info(
+                            "Short query matched products in catalog",
+                            extra={"query": user_input, "products_found": len(products)},
+                        )
                         return self._process_catalog_query(user_input, user_input)
                 except Exception as e:
                     logger.debug(f"Catalog search for short query failed: {e}")
@@ -691,7 +699,7 @@ class Pipeline:
             return PipelineResult(
                 response=self.intent_classifier.get_rejection_message("bg", reason),
                 is_medical=False,
-                original_text=user_input
+                original_text=user_input,
             )
 
         # Step 2: Translate BG → EN
@@ -715,7 +723,7 @@ class Pipeline:
                 is_medical=False,
                 original_text=user_input,
                 translated_text=translated,
-                medical_reasoning=medical_reasoning
+                medical_reasoning=medical_reasoning,
             )
 
         # Step 4: Safety Check (check BOTH original Bulgarian and translated English)
@@ -730,7 +738,7 @@ class Pipeline:
                 is_red_flag=True,
                 original_text=user_input,
                 translated_text=translated,
-                medical_reasoning=medical_reasoning
+                medical_reasoning=medical_reasoning,
             )
 
         # Step 5a: Product Retrieval - Vector DB returns top-K candidates (FAST)
@@ -749,18 +757,15 @@ class Pipeline:
             candidate_products, contraindicated_products = filter_by_contraindications(
                 products=candidate_products,
                 user_conditions=medical_reasoning.user_conditions,
-                strict=True  # Completely exclude contraindicated products
+                strict=True,  # Completely exclude contraindicated products
             )
             logger.info(
-                f"Contraindication filter: {len(candidate_products)} safe, "
-                f"{len(contraindicated_products)} removed"
+                f"Contraindication filter: {len(candidate_products)} safe, {len(contraindicated_products)} removed"
             )
 
         # Step 5b: Product Refinement - LLM picks best matches (ACCURATE)
         selected_products = self._refine_product_selection(
-            user_query=translated,
-            medical_reasoning=medical_reasoning,
-            candidates=candidate_products
+            user_query=translated, medical_reasoning=medical_reasoning, candidates=candidate_products
         )
 
         # Check for warning-level symptoms (not blocking, but add message)
@@ -768,9 +773,7 @@ class Pipeline:
 
         # Step 6 & 7: Translate back and format response
         final_response = self._format_response(
-            medical_reasoning=medical_reasoning,
-            products=selected_products,
-            original_query=user_input
+            medical_reasoning=medical_reasoning, products=selected_products, original_query=user_input
         )
 
         # Add warning message if applicable
@@ -791,20 +794,21 @@ class Pipeline:
         # Add contraindication warning if products were filtered
         if contraindicated_products:
             final_response = self._add_contraindication_warning(
-                final_response,
-                contraindicated_products,
-                all_conditions
+                final_response, contraindicated_products, all_conditions
             )
 
         duration_ms = (time.perf_counter() - start_time) * 1000
-        logger.info("Pipeline completed", extra={
-            "duration_ms": round(duration_ms, 2),
-            "candidates": len(candidate_products),
-            "selected": len(selected_products),
-            "contraindicated": len(contraindicated_products),
-            "user_conditions": all_conditions,
-            "is_red_flag": False
-        })
+        logger.info(
+            "Pipeline completed",
+            extra={
+                "duration_ms": round(duration_ms, 2),
+                "candidates": len(candidate_products),
+                "selected": len(selected_products),
+                "contraindicated": len(contraindicated_products),
+                "user_conditions": all_conditions,
+                "is_red_flag": False,
+            },
+        )
 
         return PipelineResult(
             response=final_response,
@@ -816,7 +820,7 @@ class Pipeline:
             candidate_products=candidate_products,
             selected_products=selected_products,
             user_conditions=all_conditions,
-            contraindicated_products=contraindicated_products
+            contraindicated_products=contraindicated_products,
         )
 
     # =========================================================================
@@ -848,14 +852,15 @@ class Pipeline:
 
         # Check intent (replaces intent_classifier)
         if not llm_result.intent.is_pharmacy_related:
-            logger.debug("Query rejected by unified processor", extra={
-                "confidence": llm_result.intent.confidence,
-                "reason": llm_result.intent.rejection_reason,
-            })
+            logger.debug(
+                "Query rejected by unified processor",
+                extra={
+                    "confidence": llm_result.intent.confidence,
+                    "reason": llm_result.intent.rejection_reason,
+                },
+            )
             return PipelineResult(
-                response=self.intent_classifier.get_rejection_message(
-                    "bg", llm_result.intent.rejection_reason or ""
-                ),
+                response=self.intent_classifier.get_rejection_message("bg", llm_result.intent.rejection_reason or ""),
                 is_medical=False,
                 original_text=user_input,
             )
@@ -868,10 +873,13 @@ class Pipeline:
         )
 
         if safety_result.is_red_flag:
-            logger.warning("Red flag detected by hybrid safety check", extra={
-                "severity": safety_result.severity,
-                "matched": safety_result.matched_symptoms,
-            })
+            logger.warning(
+                "Red flag detected by hybrid safety check",
+                extra={
+                    "severity": safety_result.severity,
+                    "matched": safety_result.matched_symptoms,
+                },
+            )
             return PipelineResult(
                 response=safety_result.message,
                 is_medical=True,
@@ -924,13 +932,16 @@ class Pipeline:
             )
 
         duration_ms = (time.perf_counter() - start_time) * 1000
-        logger.info("Unified processor pipeline completed", extra={
-            "duration_ms": round(duration_ms, 2),
-            "llm_time_ms": round(llm_result.processing_time_ms, 2),
-            "candidates": len(candidate_products),
-            "selected": len(selected_products),
-            "conditions": llm_result.extraction.user_conditions,
-        })
+        logger.info(
+            "Unified processor pipeline completed",
+            extra={
+                "duration_ms": round(duration_ms, 2),
+                "llm_time_ms": round(llm_result.processing_time_ms, 2),
+                "candidates": len(candidate_products),
+                "selected": len(selected_products),
+                "conditions": llm_result.extraction.user_conditions,
+            },
+        )
 
         return PipelineResult(
             response=final_response,
@@ -994,9 +1005,7 @@ class Pipeline:
         medical_reasoning = self._build_medical_reasoning_from_unified(llm_result)
 
         # ── SECTION 1: Symptom info header ──────────────────────────────
-        symptom_label = self._build_symptom_header(
-            llm_result.extraction.symptoms, original_query
-        )
+        symptom_label = self._build_symptom_header(llm_result.extraction.symptoms, original_query)
         parts.append(f"## 🔍 Информация при симптом: {symptom_label}\n")
 
         # Explanation (prefer _bg, filter garbage sentences, clean English leaks)
@@ -1036,9 +1045,7 @@ class Pipeline:
         if products:
             parts.append("## 💊 Подходящи активни съставки\n")
             if recommended_ingredients:
-                ingredient_names_bg = [
-                    INGREDIENT_BG_NAMES.get(ing, ing) for ing in recommended_ingredients
-                ]
+                ingredient_names_bg = [INGREDIENT_BG_NAMES.get(ing, ing) for ing in recommended_ingredients]
                 for name_bg in ingredient_names_bg:
                     parts.append(f"• **{name_bg}**")
                 action_text = self._get_treatment_action_text(treatment_type)
@@ -1051,7 +1058,8 @@ class Pipeline:
         # Self-care tip (inline, one line with 💧) — filter garbage from LLM
         tips_bg = reasoning.self_care_tips_bg or []
         tips_bg = [
-            t for t in tips_bg[:3]
+            t
+            for t in tips_bg[:3]
             if t and self._calculate_bulgarian_ratio(t) >= 0.65 and self._is_valid_self_care_tip(t)
         ]
         if not tips_bg and reasoning.self_care_tips:
@@ -1074,9 +1082,7 @@ class Pipeline:
 
         # ── SECTION 3: Safety block (compact, small text) ──────────────
         parts.append("---")
-        safety_block = self._build_safety_block(
-            medical_reasoning, products, original_query
-        )
+        safety_block = self._build_safety_block(medical_reasoning, products, original_query)
         if safety_block:
             parts.append(safety_block)
             parts.append("")
@@ -1095,13 +1101,13 @@ class Pipeline:
                     for p in displayed_products
                 )
                 if any_combo:
-                    parts.append("*Комбиниран продукт за грип/настинка. При единствен симптом (напр. само температура) по-подходящ е продукт само с една активна съставка.*\n")
+                    parts.append(
+                        "*Комбиниран продукт за грип/настинка. При единствен симптом (напр. само температура) по-подходящ е продукт само с една активна съставка.*\n"
+                    )
             for i, product in enumerate(displayed_products, 1):
                 if i > 1:
                     parts.append("---")
-                product_block = self._format_product_card(
-                    product, i, treatment_type, medical_reasoning
-                )
+                product_block = self._format_product_card(product, i, treatment_type, medical_reasoning)
                 parts.append(product_block)
         else:
             parts.append("*Съжалявам, не намерих подходящи продукти в каталога.*")
@@ -1111,9 +1117,7 @@ class Pipeline:
         # ── SECTION 5: Triage (always shown) ───────────────────────────
         parts.append("---")
         parts.append("## ⚠️ Потърсете лекар ако:\n")
-        triage_items = self._collect_triage_items_unified(
-            reasoning, medical_reasoning, products, original_query
-        )
+        triage_items = self._collect_triage_items_unified(reasoning, medical_reasoning, products, original_query)
         for item in triage_items:
             parts.append(f"• {item}")
         parts.append("")
@@ -1128,9 +1132,7 @@ class Pipeline:
         # Final garbage cleanup pass (Issue #17)
         return self._final_garbage_cleanup(response)
 
-    def _collect_triage_items_unified(
-        self, reasoning, medical_reasoning, products, original_query
-    ) -> list[str]:
+    def _collect_triage_items_unified(self, reasoning, medical_reasoning, products, original_query) -> list[str]:
         """Collect triage bullet points for the unified path."""
         items = []
         seen = set()
@@ -1152,12 +1154,21 @@ class Pipeline:
         for w in warnings_bg:
             w_lower = w.lower()
             # Skip warnings containing garbage patterns
-            has_garbage = any(pattern in w_lower for pattern in [
-                "зъбні протези", "грижа за зъбні протези",
-                "защита на личните", "средство за защита",
-                "репелент", "комар", "комари",
-                "пластмасов", "ламарин", "металокерамика",
-            ])
+            has_garbage = any(
+                pattern in w_lower
+                for pattern in [
+                    "зъбні протези",
+                    "грижа за зъбні протези",
+                    "защита на личните",
+                    "средство за защита",
+                    "репелент",
+                    "комар",
+                    "комари",
+                    "пластмасов",
+                    "ламарин",
+                    "металокерамика",
+                ]
+            )
             if not has_garbage:
                 items.append(w)
                 seen.add(w[:20])
@@ -1186,16 +1197,34 @@ class Pipeline:
     # Phrases indicating the model refused to help (English and Bulgarian)
     _REFUSAL_PHRASES = {
         # English
-        "i cannot", "i can't", "i'm not able to", "i am not able to",
-        "i will not", "i won't", "cannot fulfill", "can't fulfill",
-        "cannot help with", "can't help with", "not appropriate",
-        "inappropriate request", "decline to", "refuse to",
-        "against my guidelines", "violates my guidelines",
-        "not a medical", "isn't a medical", "is not a medical",
+        "i cannot",
+        "i can't",
+        "i'm not able to",
+        "i am not able to",
+        "i will not",
+        "i won't",
+        "cannot fulfill",
+        "can't fulfill",
+        "cannot help with",
+        "can't help with",
+        "not appropriate",
+        "inappropriate request",
+        "decline to",
+        "refuse to",
+        "against my guidelines",
+        "violates my guidelines",
+        "not a medical",
+        "isn't a medical",
+        "is not a medical",
         # Bulgarian
-        "не мога", "не съм в състояние", "не е възможно",
-        "не е подходящо", "неподходящ", "отказвам",
-        "не е медицински", "това не е",
+        "не мога",
+        "не съм в състояние",
+        "не е възможно",
+        "не е подходящо",
+        "неподходящ",
+        "отказвам",
+        "не е медицински",
+        "това не е",
     }
 
     def _is_refusal_response(self, reasoning: MedicalReasoning) -> bool:
@@ -1262,18 +1291,20 @@ class Pipeline:
             treatment_type="general wellness products",
             warnings=[
                 "Automated analysis unavailable - please consult a pharmacist",
-                "If symptoms persist or worsen, see a doctor"
+                "If symptoms persist or worsen, see a doctor",
             ],
             see_doctor=False,
             explanation="Our medical analysis system is temporarily limited. "
-                       "We can show you general wellness products that may help.",
+            "We can show you general wellness products that may help.",
             how_treatment_helps="",
             self_care_tips=["Rest and stay hydrated", "Monitor your symptoms"],
             duration_guidance="Consult a pharmacist for personalized advice",
-            user_conditions=[]
+            user_conditions=[],
         )
 
-    def _check_safety(self, original_query: str, translated_query: str, medical_reasoning: MedicalReasoning) -> tuple[bool, str]:
+    def _check_safety(
+        self, original_query: str, translated_query: str, medical_reasoning: MedicalReasoning
+    ) -> tuple[bool, str]:
         """
         Check for red-flag symptoms requiring professional medical attention.
 
@@ -1334,7 +1365,7 @@ class Pipeline:
         pregnancy_patterns = USER_CONDITION_PATTERNS.get("pregnancy", [])
         breastfeeding_patterns = USER_CONDITION_PATTERNS.get("breastfeeding", [])
         all_patterns = pregnancy_patterns + breastfeeding_patterns
-        return any(kw in text_lower for kw in all_patterns if not kw.startswith(r'\b'))
+        return any(kw in text_lower for kw in all_patterns if not kw.startswith(r"\b"))
 
     def _is_drug_combination_query(self, text: str) -> bool:
         """Check if query is about combining/taking multiple medications together.
@@ -1346,15 +1377,33 @@ class Pipeline:
         # Keywords indicating drug combination questions
         combination_keywords = {
             # Bulgarian
-            'заедно с', 'едновременно', 'комбинирам', 'комбиниране',
-            'смесвам', 'да взема с', 'взема с', 'приемам с',
-            'може ли да взема', 'мога ли да взема',
-            'може ли да приема', 'мога ли да приема',
-            'да пия с', 'пия с', 'съчетавам', 'съчетание',
+            "заедно с",
+            "едновременно",
+            "комбинирам",
+            "комбиниране",
+            "смесвам",
+            "да взема с",
+            "взема с",
+            "приемам с",
+            "може ли да взема",
+            "мога ли да взема",
+            "може ли да приема",
+            "мога ли да приема",
+            "да пия с",
+            "пия с",
+            "съчетавам",
+            "съчетание",
             # English
-            'together with', 'at the same time', 'combine', 'combining',
-            'mix', 'take with', 'can i take', 'can i use',
-            'along with', 'in combination',
+            "together with",
+            "at the same time",
+            "combine",
+            "combining",
+            "mix",
+            "take with",
+            "can i take",
+            "can i use",
+            "along with",
+            "in combination",
         }
 
         # Check for combination keywords
@@ -1362,10 +1411,27 @@ class Pipeline:
 
         # Also check for pattern: two drug names mentioned
         common_otc_drugs = {
-            'ибупрофен', 'ibuprofen', 'парацетамол', 'paracetamol', 'acetaminophen',
-            'аспирин', 'aspirin', 'нурофен', 'nurofen', 'панадол', 'panadol',
-            'адвил', 'advil', 'тайленол', 'tylenol', 'аналгин', 'analgin',
-            'темпалгин', 'темпра', 'ефералган', 'efferalgan',
+            "ибупрофен",
+            "ibuprofen",
+            "парацетамол",
+            "paracetamol",
+            "acetaminophen",
+            "аспирин",
+            "aspirin",
+            "нурофен",
+            "nurofen",
+            "панадол",
+            "panadol",
+            "адвил",
+            "advil",
+            "тайленол",
+            "tylenol",
+            "аналгин",
+            "analgin",
+            "темпалгин",
+            "темпра",
+            "ефералган",
+            "efferalgan",
         }
         drugs_mentioned = sum(1 for drug in common_otc_drugs if drug in text_lower)
 
@@ -1381,25 +1447,42 @@ class Pipeline:
 
         substitute_keywords = {
             # Bulgarian
-            'заместител', 'заместител на', 'замести', 'заместя',
-            'алтернатива', 'алтернатива на', 'алтернативен',
-            'генеричен', 'генерик', 'вместо',
-            'подобен на', 'подобно на', 'като',
-            'еквивалент', 'аналог', 'аналогичен',
+            "заместител",
+            "заместител на",
+            "замести",
+            "заместя",
+            "алтернатива",
+            "алтернатива на",
+            "алтернативен",
+            "генеричен",
+            "генерик",
+            "вместо",
+            "подобен на",
+            "подобно на",
+            "като",
+            "еквивалент",
+            "аналог",
+            "аналогичен",
             # English
-            'substitute', 'substitute for', 'substitution',
-            'alternative', 'alternative to', 'instead of',
-            'generic', 'generic for', 'equivalent',
-            'similar to', 'like', 'analog', 'replacement',
+            "substitute",
+            "substitute for",
+            "substitution",
+            "alternative",
+            "alternative to",
+            "instead of",
+            "generic",
+            "generic for",
+            "equivalent",
+            "similar to",
+            "like",
+            "analog",
+            "replacement",
         }
 
         return any(kw in text_lower for kw in substitute_keywords)
 
     def _retrieve_product_candidates(
-        self,
-        medical_reasoning: MedicalReasoning,
-        original_query: str = "",
-        top_k: int = 10
+        self, medical_reasoning: MedicalReasoning, original_query: str = "", top_k: int = 10
     ) -> list:
         """
         Stage 1: Fast vector similarity search to get top-K product candidates.
@@ -1425,12 +1508,14 @@ class Pipeline:
                 # This catches cases like GI symptoms being classified as cold/flu
                 if treatment_type:
                     # Check if there's a category mismatch
-                    gi_types = {'antidiarrheal', 'digestive', 'antacids', 'laxatives'}
-                    cold_types = {'cough', 'decongestants', 'antipyretics'}
+                    gi_types = {"antidiarrheal", "digestive", "antacids", "laxatives"}
+                    cold_types = {"cough", "decongestants", "antipyretics"}
 
                     # If query has GI symptoms but MedGemma returned cold/flu, override
                     if query_treatment in gi_types and treatment_type.lower() in cold_types:
-                        logger.info(f"Overriding treatment_type from '{treatment_type}' to '{query_treatment}' based on query keywords")
+                        logger.info(
+                            f"Overriding treatment_type from '{treatment_type}' to '{query_treatment}' based on query keywords"
+                        )
                         treatment_type = query_treatment
                     # Also override if no treatment type from MedGemma
                 else:
@@ -1450,11 +1535,7 @@ class Pipeline:
 
         return self._convert_to_products(results)
 
-    def _build_search_query(
-        self,
-        medical_reasoning: MedicalReasoning,
-        original_query: str = ""
-    ) -> str:
+    def _build_search_query(self, medical_reasoning: MedicalReasoning, original_query: str = "") -> str:
         """Build search query from medical reasoning components.
 
         For drug combination queries, extracts drug names from original query
@@ -1468,14 +1549,15 @@ class Pipeline:
 
         # Filter out non-useful symptoms for product search
         non_useful_symptoms = {
-            "drug interaction query", "drug interaction", "safety concern",
-            "medication question", "dosage question", "combination query",
+            "drug interaction query",
+            "drug interaction",
+            "safety concern",
+            "medication question",
+            "dosage question",
+            "combination query",
         }
         if medical_reasoning.symptoms:
-            useful_symptoms = [
-                s for s in medical_reasoning.symptoms
-                if s.lower() not in non_useful_symptoms
-            ]
+            useful_symptoms = [s for s in medical_reasoning.symptoms if s.lower() not in non_useful_symptoms]
             parts.extend(useful_symptoms)
 
         # For drug combo queries, extract actual drug names from original query
@@ -1503,47 +1585,64 @@ class Pipeline:
     # Common OTC drug names for extraction
     _DRUG_NAME_PATTERNS = {
         # Bulgarian names
-        'ибупрофен', 'парацетамол', 'аспирин', 'аналгин',
-        'нурофен', 'панадол', 'темпалгин', 'темпра', 'ефералган',
-        'адвил', 'цитрамон', 'пенталгин', 'солпадеин',
+        "ибупрофен",
+        "парацетамол",
+        "аспирин",
+        "аналгин",
+        "нурофен",
+        "панадол",
+        "темпалгин",
+        "темпра",
+        "ефералган",
+        "адвил",
+        "цитрамон",
+        "пенталгин",
+        "солпадеин",
         # English names
-        'ibuprofen', 'paracetamol', 'acetaminophen', 'aspirin',
-        'nurofen', 'panadol', 'advil', 'tylenol', 'analgin',
+        "ibuprofen",
+        "paracetamol",
+        "acetaminophen",
+        "aspirin",
+        "nurofen",
+        "panadol",
+        "advil",
+        "tylenol",
+        "analgin",
     }
 
     # Bulgarian symptom keywords → treatment type mapping
     # Used to validate/correct MedGemma's treatment_type
     _BG_SYMPTOM_TO_TREATMENT = {
         # Digestive/GI symptoms - HIGH PRIORITY (often misclassified as cold/flu)
-        'диария': 'antidiarrheal',
-        'разстройство': 'antidiarrheal',
-        'гадене': 'digestive',
-        'повръщане': 'digestive',
-        'стомах': 'digestive',
-        'стомашни': 'digestive',
-        'киселини': 'antacids',
-        'запек': 'laxatives',
-        'чревни': 'digestive',
+        "диария": "antidiarrheal",
+        "разстройство": "antidiarrheal",
+        "гадене": "digestive",
+        "повръщане": "digestive",
+        "стомах": "digestive",
+        "стомашни": "digestive",
+        "киселини": "antacids",
+        "запек": "laxatives",
+        "чревни": "digestive",
         # Pain
-        'болка': 'analgesics',
-        'главоболие': 'analgesics',
-        'мигрена': 'analgesics',
-        'болки': 'analgesics',
+        "болка": "analgesics",
+        "главоболие": "analgesics",
+        "мигрена": "analgesics",
+        "болки": "analgesics",
         # Fever
-        'температура': 'antipyretics',
-        'треска': 'antipyretics',
+        "температура": "antipyretics",
+        "треска": "antipyretics",
         # Respiratory/Cold
-        'кашлица': 'cough',
-        'хрема': 'decongestants',
-        'настинка': 'cough',
-        'простуда': 'cough',
-        'грип': 'antipyretics',
+        "кашлица": "cough",
+        "хрема": "decongestants",
+        "настинка": "cough",
+        "простуда": "cough",
+        "грип": "antipyretics",
         # Throat
-        'гърло': 'throat',
+        "гърло": "throat",
         # Allergy
-        'алергия': 'antihistamines',
-        'кихане': 'antihistamines',
-        'сърбеж': 'antihistamines',
+        "алергия": "antihistamines",
+        "кихане": "antihistamines",
+        "сърбеж": "antihistamines",
     }
 
     def _extract_treatment_from_query(self, query: str) -> str | None:
@@ -1632,11 +1731,7 @@ class Pipeline:
         return products
 
     def _refine_product_selection(
-        self,
-        user_query: str,
-        medical_reasoning: MedicalReasoning,
-        candidates: list,
-        max_products: int = 3
+        self, user_query: str, medical_reasoning: MedicalReasoning, candidates: list, max_products: int = 3
     ) -> list:
         """Stage 2: Use LLM to pick the best products from candidates.
 
@@ -1679,9 +1774,7 @@ class Pipeline:
 
         return deduplicated
 
-    def _pharmacological_rerank(
-        self, candidates: list, medical_reasoning: MedicalReasoning
-    ) -> list:
+    def _pharmacological_rerank(self, candidates: list, medical_reasoning: MedicalReasoning) -> list:
         """Rerank candidates so clinically relevant products appear first.
 
         Priority (5 tiers):
@@ -1699,14 +1792,14 @@ class Pipeline:
         recommended = self._get_recommended_ingredients(treatment_type) if treatment_type else []
 
         tier1_simple = []  # Recommended ingredient, single-ingredient product
-        tier1_combo = []   # Recommended ingredient, combination product
-        tier2 = []         # Non-homeopathic, no matching ingredient
-        tier3 = []         # Homeopathic
+        tier1_combo = []  # Recommended ingredient, combination product
+        tier2 = []  # Non-homeopathic, no matching ingredient
+        tier3 = []  # Homeopathic
 
         for product in candidates:
-            comp = (getattr(product, 'composition', '') or '').lower()
-            title = (getattr(product, 'title', '') or '').lower()
-            desc = (getattr(product, 'description', '') or '').lower()
+            comp = (getattr(product, "composition", "") or "").lower()
+            title = (getattr(product, "title", "") or "").lower()
+            desc = (getattr(product, "description", "") or "").lower()
             combined = f"{comp} {title} {desc}"
 
             if _is_homeopathic_product(combined):
@@ -1730,12 +1823,7 @@ class Pipeline:
             )
         return reranked
 
-    def _deduplicate_by_ingredient(
-        self,
-        products: list,
-        max_products: int,
-        max_per_ingredient: int = 1
-    ) -> list:
+    def _deduplicate_by_ingredient(self, products: list, max_products: int, max_per_ingredient: int = 1) -> list:
         """
         Deduplicate products by active ingredient to ensure recommendation variety.
 
@@ -1870,10 +1958,7 @@ class Pipeline:
     }
 
     def _add_contraindication_warning(
-        self,
-        response: str,
-        contraindicated_products: list[tuple],
-        user_conditions: list[str]
+        self, response: str, contraindicated_products: list[tuple], user_conditions: list[str]
     ) -> str:
         """Contraindication info is now part of the product card warnings
         and the safety block in the main template. No extra block appended."""
@@ -1894,152 +1979,257 @@ class Pipeline:
         # DRUG LEAFLET / PACKAGE INSERT TEXT
         # -----------------------------------------------------------------
         # Side effects sections
-        "нежелани реакции", "странични ефекти", "неизвестна честота",
-        "с неизвестна честота", "нежелана реакция", "възможни нежелани",
-        "side effects", "unknown frequency", "adverse reactions",
-        "много чести", "чести нежелани", "нечести нежелани", "редки нежелани",
+        "нежелани реакции",
+        "странични ефекти",
+        "неизвестна честота",
+        "с неизвестна честота",
+        "нежелана реакция",
+        "възможни нежелани",
+        "side effects",
+        "unknown frequency",
+        "adverse reactions",
+        "много чести",
+        "чести нежелани",
+        "нечести нежелани",
+        "редки нежелани",
         # Anatomical system categories
-        "мускулно- скелетната", "съединителната тъкан",
-        "нарушения на кожата", "подкожната тъкан",
-        "инфекции и ефекти", "мястото на приложение",
-        "стомашно-чревни нарушения", "чернодробни нарушения",
-        "сърдечни нарушения", "дихателни нарушения",
-        "нарушения на нервната", "психични нарушения",
-        "репродуктивни нарушения", "ендокринни нарушения",
+        "мускулно- скелетната",
+        "съединителната тъкан",
+        "нарушения на кожата",
+        "подкожната тъкан",
+        "инфекции и ефекти",
+        "мястото на приложение",
+        "стомашно-чревни нарушения",
+        "чернодробни нарушения",
+        "сърдечни нарушения",
+        "дихателни нарушения",
+        "нарушения на нервната",
+        "психични нарушения",
+        "репродуктивни нарушения",
+        "ендокринни нарушения",
         # Contraindications boilerplate
         "свръхчувствителност към активното",
         "свръхчувствителност към някоя от помощните",
         "противопоказания: свръхчувствителност",
         "да не се прилага при пациенти с",
         # Dosage/storage instructions
-        "препоръчителна доза е", "максимална дневна доза",
-        "да се съхранява на място", "срок на годност",
-        "след изтичане на срока", "да се пази от деца",
+        "препоръчителна доза е",
+        "максимална дневна доза",
+        "да се съхранява на място",
+        "срок на годност",
+        "след изтичане на срока",
+        "да се пази от деца",
         # Pharmaceutical body parts (leaflet language)
-        "семенна течност", "сперматогенеза", "ерекция",
-
+        "семенна течност",
+        "сперматогенеза",
+        "ерекция",
         # -----------------------------------------------------------------
         # EU REGULATIONS / LEGAL TEXT
         # -----------------------------------------------------------------
-        "емисиите на парникови", "парникови газове", "регламент",
-        "европейския парламент", "европейски парламент", "съвета",
-        "в съответствие с изискванията", "директива на ес",
-        "в съответствие с регламент", "официален вестник",
-        "европейска комисия", "държави членки",
-        "специални условия на труд", "стоманодобивната промишленост",
+        "емисиите на парникови",
+        "парникови газове",
+        "регламент",
+        "европейския парламент",
+        "европейски парламент",
+        "съвета",
+        "в съответствие с изискванията",
+        "директива на ес",
+        "в съответствие с регламент",
+        "официален вестник",
+        "европейска комисия",
+        "държави членки",
+        "специални условия на труд",
+        "стоманодобивната промишленост",
         "техниките средства за подпомагане",
         # EU Official Journal citations (ОВ = Официален вестник)
-        "ов l", "ов c", "(ов l", "(ов c", "ов l 268", "ов l 269",
-        "18.10.2003", "стр.", "стр)", "(стр.",
-        "официален вестник на ес", "официален вестник на европейския съюз",
-        "директива 2001/83/", "регламент (ео)", "регламент (ес)",
-
+        "ов l",
+        "ов c",
+        "(ов l",
+        "(ов c",
+        "ов l 268",
+        "ов l 269",
+        "18.10.2003",
+        "стр.",
+        "стр)",
+        "(стр.",
+        "официален вестник на ес",
+        "официален вестник на европейския съюз",
+        "директива 2001/83/",
+        "регламент (ео)",
+        "регламент (ес)",
         # -----------------------------------------------------------------
         # REPEATED / INCOHERENT PHRASES
         # -----------------------------------------------------------------
-        "болка в гърба, болка в гърба", "болка в корема, болка в корема",
-        "главоболие, главоболие", "температура, температура",
-        "не се препоръчва употребата", "да се каже, че",
+        "болка в гърба, болка в гърба",
+        "болка в корема, болка в корема",
+        "главоболие, главоболие",
+        "температура, температура",
+        "не се препоръчва употребата",
+        "да се каже, че",
         "консултирайте с вашия лекар или фармацевт",
-        "този препарат", "лекарствен продукт",
+        "този препарат",
+        "лекарствен продукт",
         "човешки рекомбинантен човешки рекомбинантен",
         "рекомбинантен еритропоетин",
         "препоръчителни че",
-
         # -----------------------------------------------------------------
         # TRUNCATED / GARBLED TEXT
         # -----------------------------------------------------------------
-        "(сърх)", "(Сърх)", "( сърх", "сърх)",
-        "тол- сол", "сол- сол", "- сол-", "тол-сол",
-        "( -", "- )", "( )", "(-)",
-        "- -", "-- --", "---",
-        "мои_____", "ст ст ст", "(д възможно най-",
-        "таблетка на", "нетно вещество",
-        "от с", "обучение",
-
+        "(сърх)",
+        "(Сърх)",
+        "( сърх",
+        "сърх)",
+        "тол- сол",
+        "сол- сол",
+        "- сол-",
+        "тол-сол",
+        "( -",
+        "- )",
+        "( )",
+        "(-)",
+        "- -",
+        "-- --",
+        "---",
+        "мои_____",
+        "ст ст ст",
+        "(д възможно най-",
+        "таблетка на",
+        "нетно вещество",
+        "от с",
+        "обучение",
         # -----------------------------------------------------------------
         # FRAGMENTS / NONSENSE / FILLER
         # -----------------------------------------------------------------
-        "допринася за по-малко", "усили въздуха",
+        "допринася за по-малко",
+        "усили въздуха",
         "трябва да се вземат мерки",
-        "както и да е, трябва", "както и да е",
+        "както и да е, трябва",
+        "както и да е",
         "в зависимост от състоянието",
         "да се избягва свързването",
-        "по- малко от 6 месеца", "(по- малко от",
-        "през последните три години", "cuts обикновено",
-
+        "по- малко от 6 месеца",
+        "(по- малко от",
+        "през последните три години",
+        "cuts обикновено",
         # -----------------------------------------------------------------
         # IRRELEVANT CATEGORIES
         # -----------------------------------------------------------------
-        "сметки и апарати", "зъбні протези", "грижа за зъбні протези", "трикотажни",
-        "тарифен номер", "тарифна позиция",
-        "митническа позиция", "стокова позиция",
-        "лични данни", "защита на личните", "средство за защита",
-        "репелент", "комар", "комари", "средство за комари", "защита срещу комари",
-        "ще се справим ли", "уха си ти",
+        "сметки и апарати",
+        "зъбні протези",
+        "грижа за зъбні протези",
+        "трикотажни",
+        "тарифен номер",
+        "тарифна позиция",
+        "митническа позиция",
+        "стокова позиция",
+        "лични данни",
+        "защита на личните",
+        "средство за защита",
+        "репелент",
+        "комар",
+        "комари",
+        "средство за комари",
+        "защита срещу комари",
+        "ще се справим ли",
+        "уха си ти",
         # LLM hallucination patterns (Feb 2026 - Issue #17)
         "може да се използва като средство за",
         "за да може да се използва",
         "които могат да бъдат използвани като",
-
         # -----------------------------------------------------------------
         # MEDICAL JARGON (too technical for consumers)
         # -----------------------------------------------------------------
         "забрана за употреба при пациенти",
         "лекувани с човешки",
-        "клинични изпитвания", "рандомизирано проучване",
-        "двойно-сляпо", "плацебо-контролирано",
-        "фармакокинетика", "фармакодинамика",
-        "бионаличност", "полуживот на елиминиране",
-        "плазмена концентрация", "пиково ниво",
+        "клинични изпитвания",
+        "рандомизирано проучване",
+        "двойно-сляпо",
+        "плацебо-контролирано",
+        "фармакокинетика",
+        "фармакодинамика",
+        "бионаличност",
+        "полуживот на елиминиране",
+        "плазмена концентрация",
+        "пиково ниво",
         "лекарствени взаимодействия с",
-        "индуктор на cyp", "инхибитор на cyp",
+        "индуктор на cyp",
+        "инхибитор на cyp",
         "p-гликопротеин",
-
         # -----------------------------------------------------------------
         # PHARMACEUTICAL CODES / TECHNICAL
         # -----------------------------------------------------------------
-        "mg/ml", "мг/мл", "таблетки x",
-        "atc код", "atc-код", "анатомо-терапевтична",
-        "inn:", "международно непатентно",
-        "партиден номер", "сериен номер",
-
+        "mg/ml",
+        "мг/мл",
+        "таблетки x",
+        "atc код",
+        "atc-код",
+        "анатомо-терапевтична",
+        "inn:",
+        "международно непатентно",
+        "партиден номер",
+        "сериен номер",
         # -----------------------------------------------------------------
         # TRANSLATION ARTIFACTS
         # -----------------------------------------------------------------
-        "в в ", "на на ", "за за ", "от от ", "с с ",  # Doubled prepositions
-        "the the", "a a ", "an an ", "is is ",  # English doubles
-        " ,", " .", " ;", " :",  # Space before punctuation
-
+        "в в ",
+        "на на ",
+        "за за ",
+        "от от ",
+        "с с ",  # Doubled prepositions
+        "the the",
+        "a a ",
+        "an an ",
+        "is is ",  # English doubles
+        " ,",
+        " .",
+        " ;",
+        " :",  # Space before punctuation
         # -----------------------------------------------------------------
         # PRODUCT CATALOG / E-COMMERCE NOISE
         # -----------------------------------------------------------------
-        "добави в количка", "добави в любими",
-        "виж повече", "виж всички", "покажи повече",
-        "изчерпано количество", "очаквайте скоро",
-        "безплатна доставка", "бърза доставка",
-        "цена с ддс", "цена без ддс",
-        "% отстъпка", "артикулен номер", "баркод:",
-
+        "добави в количка",
+        "добави в любими",
+        "виж повече",
+        "виж всички",
+        "покажи повече",
+        "изчерпано количество",
+        "очаквайте скоро",
+        "безплатна доставка",
+        "бърза доставка",
+        "цена с ддс",
+        "цена без ддс",
+        "% отстъпка",
+        "артикулен номер",
+        "баркод:",
         # -----------------------------------------------------------------
         # INSURANCE / ADMINISTRATIVE (Bulgarian healthcare system)
         # -----------------------------------------------------------------
-        "нзок", "здравна каса", "реимбурсиране",
-        "протокол за лечение", "позитивен списък",
-
+        "нзок",
+        "здравна каса",
+        "реимбурсиране",
+        "протокол за лечение",
+        "позитивен списък",
         # -----------------------------------------------------------------
         # TRANSLATION HALLUCINATIONS / WRONG CONTEXT
         # -----------------------------------------------------------------
         # Completely wrong medical terms for context
-        "introna", "интрон", "интерферон",
-        "хепатит", "hepatitis",  # Unless actually asking about hepatitis
-        "отстраняване на газовете", "отстраняване на газове",
-        "цацове и слитове", "слитове за маса",
+        "introna",
+        "интрон",
+        "интерферон",
+        "хепатит",
+        "hepatitis",  # Unless actually asking about hepatitis
+        "отстраняване на газовете",
+        "отстраняване на газове",
+        "цацове и слитове",
+        "слитове за маса",
         "най-често се налага лечение с",
-        "с intron", "с интрон",
+        "с intron",
+        "с интрон",
         # Industrial/technical garbage
-        "индустриален", "промишлен",
-        "производство на", "преработка на",
+        "индустриален",
+        "промишлен",
+        "производство на",
+        "преработка на",
         # Nonsense phrases from bad translation
         "възможно най- малко време",
         "да се използва доза",
@@ -2056,28 +2246,58 @@ class Pipeline:
         "4. 7",  # EU regulation numbering
         "4.7 специални",
         # More truncated/garbled patterns
-        "_____", "____", "___",
-        " ст ", " ст,", ",ст,", "ст ст",
-        "мои___", "мои____", # English fragments that shouldn't appear in BG output
-        "keep baby", "offer fluids", "lightly dressed",
-        "keep бебе", "keep дете",  # Mixed English/BG
-        "immediate care if fever", "immediate care if",
-        "if fever exceeds", "if temperature exceeds",
-        " if ", " exceeds ",  # English conjunctions in BG text
-        "lukewarm", "sponge bath",
-        "seek medical", "medical attention",
+        "_____",
+        "____",
+        "___",
+        " ст ",
+        " ст,",
+        ",ст,",
+        "ст ст",
+        "мои___",
+        "мои____",  # English fragments that shouldn't appear in BG output
+        "keep baby",
+        "offer fluids",
+        "lightly dressed",
+        "keep бебе",
+        "keep дете",  # Mixed English/BG
+        "immediate care if fever",
+        "immediate care if",
+        "if fever exceeds",
+        "if temperature exceeds",
+        " if ",
+        " exceeds ",  # English conjunctions in BG text
+        "lukewarm",
+        "sponge bath",
+        "seek medical",
+        "medical attention",
         # Common English words that indicate bad translation
-        "keep ", "should ", "usually ", "avoid ",
-        "monitor ", "ensure ", "apply ",
-        " and ", "worsen after", "symptoms worsen",
-        "see doctor", "consult doctor",
+        "keep ",
+        "should ",
+        "usually ",
+        "avoid ",
+        "monitor ",
+        "ensure ",
+        "apply ",
+        " and ",
+        "worsen after",
+        "symptoms worsen",
+        "see doctor",
+        "consult doctor",
         # Malformed text patterns
-        "това е в.", "това е в,", "в. or", ", or ",
-        "крайни нарушения", "нарушения на вкуса",
-        "ставите инфекции", "инфекции, които",
-        "\" вижте", "[\"", "\"]",
+        "това е в.",
+        "това е в,",
+        "в. or",
+        ", or ",
+        "крайни нарушения",
+        "нарушения на вкуса",
+        "ставите инфекции",
+        "инфекции, които",
+        '" вижте',
+        '["',
+        '"]',
         # Numbers with spaces in wrong places
-        "38 . 5", "38. 5",
+        "38 . 5",
+        "38. 5",
     }
 
     def _format_response(
@@ -2085,7 +2305,7 @@ class Pipeline:
         medical_reasoning: MedicalReasoning,
         products: list,
         translate_reasoning: bool = True,
-        original_query: str = ""
+        original_query: str = "",
     ) -> str:
         """Format response using the updated template (Feb 2026).
 
@@ -2135,9 +2355,7 @@ class Pipeline:
             return self._clean_english_leaks(translated)
 
         # ── SECTION 1: Symptom info header ──────────────────────────────
-        symptom_label = self._build_symptom_header(
-            medical_reasoning.symptoms, original_query
-        )
+        symptom_label = self._build_symptom_header(medical_reasoning.symptoms, original_query)
         parts.append(f"## 🔍 Информация при симптом: {symptom_label}\n")
 
         # Explanation
@@ -2150,9 +2368,7 @@ class Pipeline:
         # Recovery timeline (inline)
         if medical_reasoning.duration_guidance:
             duration = get_translated("duration_guidance", medical_reasoning.duration_guidance)
-            if duration and not any(
-                bad in duration.lower() for bad in ['intron', 'интрон', 'лечение с', 'терапия с']
-            ):
+            if duration and not any(bad in duration.lower() for bad in ["intron", "интрон", "лечение с", "терапия с"]):
                 duration = self._truncate_for_display(duration, self._MAX_DURATION_LEN)
                 if len(duration) >= 5:
                     parts.append(duration)
@@ -2177,9 +2393,7 @@ class Pipeline:
         if products:
             parts.append("## 💊 Подходящи активни съставки\n")
             if recommended_ingredients:
-                ingredient_names_bg = [
-                    INGREDIENT_BG_NAMES.get(ing, ing) for ing in recommended_ingredients
-                ]
+                ingredient_names_bg = [INGREDIENT_BG_NAMES.get(ing, ing) for ing in recommended_ingredients]
                 for name_bg in ingredient_names_bg:
                     parts.append(f"• **{name_bg}**")
                 action_text = self._get_treatment_action_text(treatment_type)
@@ -2207,9 +2421,7 @@ class Pipeline:
 
         # ── SECTION 3: Safety block (compact, smaller text) ────────────
         parts.append("---")
-        safety_block = self._build_safety_block(
-            medical_reasoning, products, original_query
-        )
+        safety_block = self._build_safety_block(medical_reasoning, products, original_query)
         if safety_block:
             parts.append(safety_block)
             parts.append("")
@@ -2222,9 +2434,7 @@ class Pipeline:
             for i, product in enumerate(displayed_products, 1):
                 if i > 1:
                     parts.append("---")
-                product_block = self._format_product_card(
-                    product, i, treatment_type, medical_reasoning
-                )
+                product_block = self._format_product_card(product, i, treatment_type, medical_reasoning)
                 parts.append(product_block)
         else:
             parts.append("*Съжалявам, не намерих подходящи продукти в каталога.*")
@@ -2234,9 +2444,7 @@ class Pipeline:
         # ── SECTION 5: Triage (always shown) ───────────────────────────
         parts.append("---")
         parts.append("## ⚠️ Потърсете лекар ако:\n")
-        triage_items = self._collect_triage_items_legacy(
-            medical_reasoning, products, original_query, get_translated
-        )
+        triage_items = self._collect_triage_items_legacy(medical_reasoning, products, original_query, get_translated)
         for item in triage_items:
             parts.append(f"• {item}")
         parts.append("")
@@ -2251,9 +2459,7 @@ class Pipeline:
         # Final garbage cleanup pass (Issue #17)
         return self._final_garbage_cleanup(response)
 
-    def _collect_triage_items_legacy(
-        self, medical_reasoning, products, original_query, get_translated
-    ) -> list[str]:
+    def _collect_triage_items_legacy(self, medical_reasoning, products, original_query, get_translated) -> list[str]:
         """Collect triage bullet points for the legacy path."""
         items = []
         seen = set()
@@ -2267,12 +2473,21 @@ class Pipeline:
                     if len(translated) >= 10:
                         # Filter garbage from warnings (Issue #17)
                         translated_lower = translated.lower()
-                        has_garbage = any(pattern in translated_lower for pattern in [
-                            "зъбні протези", "грижа за зъбні протези",
-                            "защита на личните", "средство за защита",
-                            "репелент", "комар", "комари",
-                            "пластмасов", "ламарин", "металокерамика",
-                        ])
+                        has_garbage = any(
+                            pattern in translated_lower
+                            for pattern in [
+                                "зъбні протези",
+                                "грижа за зъбні протези",
+                                "защита на личните",
+                                "средство за защита",
+                                "репелент",
+                                "комар",
+                                "комари",
+                                "пластмасов",
+                                "ламарин",
+                                "металокерамика",
+                            ]
+                        )
                         if not has_garbage:
                             items.append(translated)
                             seen.add(translated[:20])
@@ -2311,7 +2526,7 @@ class Pipeline:
             q_lower = query.lower()
             for prefix in ["имам ", "имам силна ", "имам лека ", "чувствам "]:
                 if q_lower.startswith(prefix):
-                    label = query[len(prefix):].strip().rstrip(".!?")
+                    label = query[len(prefix) :].strip().rstrip(".!?")
                     if label and len(label) < 60:
                         return label.capitalize()
             # If query is short enough, use it directly
@@ -2356,9 +2571,7 @@ class Pipeline:
                 return text
         return ""
 
-    def _build_safety_block(
-        self, medical_reasoning: MedicalReasoning, products: list, original_query: str
-    ) -> str:
+    def _build_safety_block(self, medical_reasoning: MedicalReasoning, products: list, original_query: str) -> str:
         """Build compact safety block before products.
 
         Uses product contraindication data + context-aware logic.
@@ -2371,7 +2584,7 @@ class Pipeline:
         # 1. Ingredient duplication warning — derived from products
         seen_ingredients = set()
         has_duplication_risk = False
-        for p in (products or []):
+        for p in products or []:
             ings = extract_all_product_ingredients(p)
             for ing in ings:
                 if ing in seen_ingredients:
@@ -2396,7 +2609,8 @@ class Pipeline:
         # 3. Contraindication-derived warning — scan actual product data
         if products:
             all_contras = " ".join(
-                (p.contraindications or "").lower() for p in products
+                (p.contraindications or "").lower()
+                for p in products
                 if hasattr(p, "contraindications") and p.contraindications
             )
             if any(kw in all_contras for kw in ["язва", "стомашно кървене", "гастрит"]):
@@ -2428,7 +2642,8 @@ class Pipeline:
         # 1. Scan product contraindications for serious condition mentions
         if products:
             all_contras = " ".join(
-                (p.contraindications or "").lower() for p in products
+                (p.contraindications or "").lower()
+                for p in products
                 if hasattr(p, "contraindications") and p.contraindications
             )
             # High fever warning (from contraindication context)
@@ -2462,9 +2677,7 @@ class Pipeline:
     # Forms suitable for babies/toddlers
     _BABY_FORMS = {"суспензия", "сироп", "капки", "супозитори", "разтвор"}
 
-    def _filter_by_age_appropriateness(
-        self, products: list, original_query: str
-    ) -> list:
+    def _filter_by_age_appropriateness(self, products: list, original_query: str) -> list:
         """Filter and reorder products based on patient age from query.
 
         For child/baby queries:
@@ -2475,12 +2688,8 @@ class Pipeline:
         query_lower = (original_query or "").lower()
 
         # Detect if query is about a child/baby
-        is_child_query = any(
-            kw in query_lower for kw in ["бебе", "дете", "детето", "месец", "бебет"]
-        )
-        any(
-            kw in query_lower for kw in ["бебе", "бебет", "месец"]
-        )
+        is_child_query = any(kw in query_lower for kw in ["бебе", "дете", "детето", "месец", "бебет"])
+        any(kw in query_lower for kw in ["бебе", "бебет", "месец"])
 
         if not is_child_query:
             return products  # No filtering needed
@@ -2489,8 +2698,8 @@ class Pipeline:
         child_neutral = []
 
         for p in products:
-            title = (getattr(p, 'title', '') or '').lower()
-            desc = (getattr(p, 'description', '') or '').lower()
+            title = (getattr(p, "title", "") or "").lower()
+            desc = (getattr(p, "description", "") or "").lower()
             combined = f"{title} {desc}"
 
             # Exclude adult-only products
@@ -2537,9 +2746,9 @@ class Pipeline:
             homeopathic = []
 
             for p in products:
-                comp = (getattr(p, 'composition', '') or '').lower()
-                title = (getattr(p, 'title', '') or '').lower()
-                desc = (getattr(p, 'description', '') or '').lower()
+                comp = (getattr(p, "composition", "") or "").lower()
+                title = (getattr(p, "title", "") or "").lower()
+                desc = (getattr(p, "description", "") or "").lower()
                 combined = f"{comp} {title} {desc}"
 
                 if _is_homeopathic_product(combined):
@@ -2578,8 +2787,13 @@ class Pipeline:
         if not is_combo:
             td = f"{(product.title or '')} {(product.description or '')}".lower()
             combo_keywords = [
-                "грип и настинка", "при грип", "за грип", "грипни симптоми",
-                "простуд", "простуда и грип", "при простуда"
+                "грип и настинка",
+                "при грип",
+                "за грип",
+                "грипни симптоми",
+                "простуд",
+                "простуда и грип",
+                "при простуда",
             ]
             symptom_keywords = ["температур", "кашлица", "хрема", "болка"]
             if any(kw in td for kw in combo_keywords) and any(kw in td for kw in symptom_keywords):
@@ -2688,8 +2902,8 @@ class Pipeline:
 
         # Check for model output artifacts (word/word/word patterns, repeated substrings)
         artifact_patterns = [
-            r'\w+/\s*\w+/\s*\w+',  # word/word/word patterns like "си гол/ си гол/ си гол"
-            r'(.{2,10})\1{2,}',    # repeated substrings 2+ times
+            r"\w+/\s*\w+/\s*\w+",  # word/word/word patterns like "си гол/ си гол/ си гол"
+            r"(.{2,10})\1{2,}",  # repeated substrings 2+ times
         ]
         for pattern in artifact_patterns:
             if re.search(pattern, text_lower):
@@ -2699,6 +2913,7 @@ class Pipeline:
         words = text_lower.split()
         if len(words) >= 5:
             from collections import Counter
+
             word_counts = Counter(words)
             # If any word appears more than 50% of the time, it's garbage
             max_count = max(word_counts.values())
@@ -2708,14 +2923,14 @@ class Pipeline:
         # Check for 2-word phrase repetition (catches patterns like "си гол си гол")
         if len(words) >= 4:
             for i in range(len(words) - 1):
-                phrase = " ".join(words[i:i+2])
+                phrase = " ".join(words[i : i + 2])
                 if len(phrase) > 3 and text_lower.count(phrase) >= 2:
                     return True
 
         # Check for 3-word phrase repetition
         if len(words) > 10:
             for i in range(len(words) - 5):
-                phrase = " ".join(words[i:i+3])
+                phrase = " ".join(words[i : i + 3])
                 if text_lower.count(phrase) >= 3:
                     return True
 
@@ -2735,9 +2950,15 @@ class Pipeline:
 
         # Check for critical garbage patterns
         critical_patterns = [
-            "зъбні протези", "зъбни протези", "грижа за зъбні протези",
-            "защита на личните", "лични данни", "средство за защита",
-            "репелент", "комар", "комари",
+            "зъбні протези",
+            "зъбни протези",
+            "грижа за зъбні протези",
+            "защита на личните",
+            "лични данни",
+            "средство за защита",
+            "репелент",
+            "комар",
+            "комари",
             "металокерамика",  # Dental materials hallucination
             "система за запаметяване",  # System for remembering (nonsense)
         ]
@@ -2747,7 +2968,7 @@ class Pipeline:
             return response
 
         # Remove sentences containing garbage
-        lines = response.split('\n')
+        lines = response.split("\n")
         cleaned_lines = []
 
         for line in lines:
@@ -2758,11 +2979,11 @@ class Pipeline:
                 continue
             cleaned_lines.append(line)
 
-        cleaned = '\n'.join(cleaned_lines)
+        cleaned = "\n".join(cleaned_lines)
 
         # Clean up any double newlines
-        while '\n\n\n' in cleaned:
-            cleaned = cleaned.replace('\n\n\n', '\n\n')
+        while "\n\n\n" in cleaned:
+            cleaned = cleaned.replace("\n\n\n", "\n\n")
 
         return cleaned
 
@@ -2771,7 +2992,7 @@ class Pipeline:
         if not text or len(text.strip()) < 5:
             return ""
         # Split by sentence-ending punctuation; also by comma for long run-ons (catches LLM garbage)
-        sentences = re.split(r'(?<=[.!?])\s+', text)
+        sentences = re.split(r"(?<=[.!?])\s+", text)
         kept = []
         for s in sentences:
             s = s.strip()
@@ -2795,7 +3016,14 @@ class Pipeline:
             kept.append(s)
         result = " ".join(kept) if kept else ""
         # Fallback: if critical garbage still present (e.g. cached/missed), truncate before that sentence
-        critical = ["защита на личните", "лични данни", "средство за защита", "зъбні протези", "зъбни протези", "металокерамика"]
+        critical = [
+            "защита на личните",
+            "лични данни",
+            "средство за защита",
+            "зъбні протези",
+            "зъбни протези",
+            "металокерамика",
+        ]
         for phrase in critical:
             if phrase in result.lower():
                 idx = result.lower().index(phrase)
@@ -2818,27 +3046,70 @@ class Pipeline:
 
     # Garbage patterns for self-care tips (LLM/translation artifacts)
     _TIP_GARBAGE = (
-        "стъпления", "заявление за одобряване", "субекти които не са",
-        "сребрист пръстен", "гимназиален", "направено е от лекар",
-        "допълнение на външната", "допълнение на вътрешни",
-        "корекция на дозата", "препарат за дългосрочна",
-        "белезникав", "хранителна добавка за",
+        "стъпления",
+        "заявление за одобряване",
+        "субекти които не са",
+        "сребрист пръстен",
+        "гимназиален",
+        "направено е от лекар",
+        "допълнение на външната",
+        "допълнение на вътрешни",
+        "корекция на дозата",
+        "препарат за дългосрочна",
+        "белезникав",
+        "хранителна добавка за",
         "приложете повече от една доза веднъж на всеки две седмици",
-        "сметки на бюджетите", "това е всичко което",
+        "сметки на бюджетите",
+        "това е всичко което",
         # LLM hallucination patterns (Issue #17)
-        "зъбні протези", "зъбни протези", "грижа за зъбні протези",
-        "защита на личните", "средство за защита",
-        "репелент", "комар", "комари",
-        "пластмасов", "ламарин", "металокерамика",
+        "зъбні протези",
+        "зъбни протези",
+        "грижа за зъбні протези",
+        "защита на личните",
+        "средство за защита",
+        "репелент",
+        "комар",
+        "комари",
+        "пластмасов",
+        "ламарин",
+        "металокерамика",
         "отпадъчни препарати",
     )
     # Valid self-care keywords — tip should have at least one
     _VALID_TIP_KEYWORDS = (
-        "течност", "вода", "почивка", "почивайте", "компрес", "храна", "сън",
-        "витамин", "солен", "гаргар", "топл", "студен", "въздух", "влажност",
-        "хидратаци", "масаж", "дишане", "избягвайте", "проверете", "облечете",
-        "давайте", "пийте", "яжте", "отдих", "отпочин", "намалете", "приложете",
-        "бебе", "дете", "грижа", "листовка", "доза", "възстановяване",
+        "течност",
+        "вода",
+        "почивка",
+        "почивайте",
+        "компрес",
+        "храна",
+        "сън",
+        "витамин",
+        "солен",
+        "гаргар",
+        "топл",
+        "студен",
+        "въздух",
+        "влажност",
+        "хидратаци",
+        "масаж",
+        "дишане",
+        "избягвайте",
+        "проверете",
+        "облечете",
+        "давайте",
+        "пийте",
+        "яжте",
+        "отдих",
+        "отпочин",
+        "намалете",
+        "приложете",
+        "бебе",
+        "дете",
+        "грижа",
+        "листовка",
+        "доза",
+        "възстановяване",
     )
 
     def _is_valid_self_care_tip(self, tip: str) -> bool:
@@ -2866,6 +3137,7 @@ class Pipeline:
         Drop sentences that can't be translated.
         """
         import re
+
         if not text or self._calculate_bulgarian_ratio(text) >= 0.95:
             return text  # Already clean Bulgarian
 
@@ -2873,16 +3145,27 @@ class Pipeline:
             return text  # Too much English — not a "leak" scenario
 
         # Split into sentences and clean each
-        sentences = re.split(r'(?<=[.!?])\s+', text)
+        sentences = re.split(r"(?<=[.!?])\s+", text)
         if len(sentences) <= 1:
             # Single sentence: check for English words
-            latin_words = re.findall(r'\b[a-zA-Z]{3,}\b', text)
+            latin_words = re.findall(r"\b[a-zA-Z]{3,}\b", text)
             # Filter out known OK words (brands, medical terms)
             eng_words = [
-                w for w in latin_words
-                if not w[0].isupper() and w.lower() not in {
-                    "covid", "sars", "otc", "nsaid", "paracetamol",
-                    "ibuprofen", "aspirin", "mg", "ml", "ph",
+                w
+                for w in latin_words
+                if not w[0].isupper()
+                and w.lower()
+                not in {
+                    "covid",
+                    "sars",
+                    "otc",
+                    "nsaid",
+                    "paracetamol",
+                    "ibuprofen",
+                    "aspirin",
+                    "mg",
+                    "ml",
+                    "ph",
                 }
             ]
             if eng_words:
@@ -2924,6 +3207,7 @@ class Pipeline:
             return False
         # Check for word repetition (same word appearing > threshold times)
         from collections import Counter
+
         counts = Counter(words)
         return any(c >= threshold for w, c in counts.items() if len(w) > 2)
 

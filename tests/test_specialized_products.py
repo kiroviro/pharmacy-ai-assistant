@@ -1,6 +1,7 @@
 """
 Test specialized product detection and helpful messaging.
 """
+
 import sys
 from pathlib import Path
 
@@ -57,6 +58,7 @@ def test_atopic_skin_query():
     print("=" * 80)
 
     return all_passed
+
 
 if __name__ == "__main__":
     success = test_atopic_skin_query()

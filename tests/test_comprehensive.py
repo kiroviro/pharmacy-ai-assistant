@@ -30,6 +30,7 @@ API_URL = "http://localhost:8000/v1/chat/completions"
 @dataclass
 class TestResult:
     """Result of a single test question."""
+
     question: str
     category: str
     response: str
@@ -303,21 +304,24 @@ def analyze_response(question: str, response: str, category: str) -> TestResult:
     EXPECTED_BEHAVIORS.get(category, {})
 
     # Check for emergency/doctor referral
-    has_doctor_referral = any(phrase in response_lower for phrase in [
-        "лекар", "консултирайте", "112", "спешно", "спешна помощ",
-        "фармацевт", "медицински специалист"
-    ])
+    has_doctor_referral = any(
+        phrase in response_lower
+        for phrase in ["лекар", "консултирайте", "112", "спешно", "спешна помощ", "фармацевт", "медицински специалист"]
+    )
 
     # Check for product recommendations
     has_products = "лв" in response or "€" in response or "###" in response
 
     # Check for rejection message
-    is_rejection = any(phrase in response_lower for phrase in [
-        "мога да помогна само",
-        "здраве и лекарства",
-        "медицински въпроси",
-        "използвайте подходящ език",
-    ])
+    is_rejection = any(
+        phrase in response_lower
+        for phrase in [
+            "мога да помогна само",
+            "здраве и лекарства",
+            "медицински въпроси",
+            "използвайте подходящ език",
+        ]
+    )
 
     # Category-specific validation
     issues = []
@@ -394,10 +398,10 @@ def run_tests(categories: list | None = None, verbose: bool = True) -> dict:
             continue
 
         if verbose:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"Testing: {category.upper()} ({len(questions)} questions)")
             print(f"Expected: {EXPECTED_BEHAVIORS.get(category, {}).get('description', 'N/A')}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
 
         passed = 0
         failed = 0
@@ -440,14 +444,14 @@ def run_tests(categories: list | None = None, verbose: bool = True) -> dict:
                         print(f"    ⚠️  {issue}")
                 # Print preview of response
                 if response:
-                    preview = response[:150].replace('\n', ' ')
+                    preview = response[:150].replace("\n", " ")
                     print(f"  → {preview}...")
 
         category_stats[category] = {
             "total": len(questions),
             "passed": passed,
             "failed": failed,
-            "pass_rate": f"{(passed/len(questions)*100):.1f}%" if questions else "N/A",
+            "pass_rate": f"{(passed / len(questions) * 100):.1f}%" if questions else "N/A",
             "avg_time_ms": total_time / len(questions) if questions else 0,
         }
 
@@ -482,7 +486,7 @@ def _build_summary(results: list, stats: dict) -> dict:
         "total_questions": total,
         "passed": passed,
         "failed": failed,
-        "pass_rate": f"{(passed/total*100):.1f}%" if total else "N/A",
+        "pass_rate": f"{(passed / total * 100):.1f}%" if total else "N/A",
         "critical_failures": len(critical_failures),
         "avg_response_time_ms": round(avg_time, 2),
         "issues_by_type": all_issues,
@@ -494,28 +498,28 @@ def print_final_summary(test_data: dict):
     summary = test_data["summary"]
     stats = test_data["category_stats"]
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("FINAL SUMMARY")
-    print("="*60)
+    print("=" * 60)
     print(f"Total: {summary['total_questions']} questions")
     print(f"Passed: {summary['passed']} ({summary['pass_rate']})")
     print(f"Failed: {summary['failed']}")
-    if summary['critical_failures'] > 0:
+    if summary["critical_failures"] > 0:
         print(f"🚨 CRITICAL FAILURES: {summary['critical_failures']}")
     print(f"Avg response time: {summary['avg_response_time_ms']:.0f}ms")
 
-    print("\n" + "-"*60)
+    print("\n" + "-" * 60)
     print("Results by Category:")
-    print("-"*60)
+    print("-" * 60)
     print(f"{'Category':<20} {'Total':>6} {'Pass':>6} {'Fail':>6} {'Rate':>8}")
-    print("-"*60)
+    print("-" * 60)
     for cat, s in stats.items():
         print(f"{cat:<20} {s['total']:>6} {s['passed']:>6} {s['failed']:>6} {s['pass_rate']:>8}")
 
     if summary["issues_by_type"]:
-        print("\n" + "-"*60)
+        print("\n" + "-" * 60)
         print("Issues Found:")
-        print("-"*60)
+        print("-" * 60)
         for issue, questions in list(summary["issues_by_type"].items())[:10]:
             print(f"\n{issue} ({len(questions)} occurrences)")
             for q in questions[:3]:
@@ -568,9 +572,9 @@ if __name__ == "__main__":
     if args.quick:
         QUESTIONS = {k: v[:2] for k, v in QUESTIONS.items()}
 
-    print("="*60)
+    print("=" * 60)
     print("ViaPharma Comprehensive Test Suite")
-    print("="*60)
+    print("=" * 60)
     print(f"API: {API_URL}")
     print(f"Categories: {args.categories or 'all'}")
     print(f"Questions: {sum(len(v) for v in QUESTIONS.values())}")
@@ -587,10 +591,7 @@ if __name__ == "__main__":
         exit(1)
 
     # Run tests
-    test_data = run_tests(
-        categories=args.categories,
-        verbose=not args.quiet
-    )
+    test_data = run_tests(categories=args.categories, verbose=not args.quiet)
 
     # Print summary
     print_final_summary(test_data)

@@ -12,9 +12,11 @@ from pydantic import Field
 # Check if pydantic-settings is available, fallback to dataclass if not
 try:
     from pydantic_settings import BaseSettings
+
     PYDANTIC_SETTINGS_AVAILABLE = True
 except ImportError:
     from pydantic import BaseModel as BaseSettings
+
     PYDANTIC_SETTINGS_AVAILABLE = False
 
 
@@ -35,27 +37,21 @@ class Settings(BaseSettings):
     # ==========================================================================
     # Models
     # ==========================================================================
-    medgemma_model_path: str = Field(
-        default="./models/medgemma-4b-it-bf16",
-        description="Path to MedGemma model"
-    )
+    medgemma_model_path: str = Field(default="./models/medgemma-4b-it-bf16", description="Path to MedGemma model")
     medgemma_max_tokens: int = Field(default=250, description="Max tokens for MedGemma")
     medgemma_temperature: float = Field(default=0.3, description="Temperature for MedGemma")
 
     # Translation models (Helsinki-NLP)
     translation_model_bg_en: str = Field(
-        default="Helsinki-NLP/opus-mt-bg-en",
-        description="Bulgarian to English translation model"
+        default="Helsinki-NLP/opus-mt-bg-en", description="Bulgarian to English translation model"
     )
     translation_model_en_bg: str = Field(
-        default="Helsinki-NLP/opus-mt-en-bg",
-        description="English to Bulgarian translation model"
+        default="Helsinki-NLP/opus-mt-en-bg", description="English to Bulgarian translation model"
     )
 
     # Embedding model for product search
     embedding_model: str = Field(
-        default="paraphrase-multilingual-MiniLM-L12-v2",
-        description="Sentence transformer model for embeddings"
+        default="paraphrase-multilingual-MiniLM-L12-v2", description="Sentence transformer model for embeddings"
     )
 
     # ==========================================================================
@@ -67,10 +63,7 @@ class Settings(BaseSettings):
     # ==========================================================================
     # Product Settings
     # ==========================================================================
-    product_base_url: str = Field(
-        default="https://viapharma.us/products",
-        description="Base URL for product links"
-    )
+    product_base_url: str = Field(default="https://viapharma.us/products", description="Base URL for product links")
     product_data_dir: str = Field(default="output", description="Directory with product CSV files")
 
     # ==========================================================================
@@ -89,7 +82,7 @@ class Settings(BaseSettings):
     request_timeout_seconds: int = Field(default=60, description="Request timeout in seconds")
     cors_origins: str = Field(
         default="https://viapharma.us,http://localhost:3000,http://localhost:8080",
-        description="Comma-separated list of allowed CORS origins"
+        description="Comma-separated list of allowed CORS origins",
     )
 
     # ==========================================================================
@@ -110,36 +103,23 @@ class Settings(BaseSettings):
     # Translation & Language Settings
     # ==========================================================================
     generate_bulgarian_directly: bool = Field(
-        default=False,
-        description="Generate Bulgarian responses directly from MedGemma (skip translation, faster)"
+        default=False, description="Generate Bulgarian responses directly from MedGemma (skip translation, faster)"
     )
 
     # ==========================================================================
     # Unified Processor (LLM-driven architecture)
     # ==========================================================================
     unified_processor_enabled: bool = Field(
-        default=False,
-        description="Enable unified LLM processor (replaces hard-coded patterns)"
+        default=False, description="Enable unified LLM processor (replaces hard-coded patterns)"
     )
     unified_processor_temperature: float = Field(
-        default=0.1,
-        description="Temperature for unified processor (low for consistency)"
+        default=0.1, description="Temperature for unified processor (low for consistency)"
     )
-    unified_processor_max_tokens: int = Field(
-        default=1200,
-        description="Max tokens for unified processor response"
-    )
-    unified_processor_cache_size: int = Field(
-        default=500,
-        description="Cache size for unified processor results"
-    )
-    unified_processor_timeout_ms: int = Field(
-        default=5000,
-        description="Timeout for unified processor inference"
-    )
+    unified_processor_max_tokens: int = Field(default=1200, description="Max tokens for unified processor response")
+    unified_processor_cache_size: int = Field(default=500, description="Cache size for unified processor results")
+    unified_processor_timeout_ms: int = Field(default=5000, description="Timeout for unified processor inference")
     fallback_to_hardcoded: bool = Field(
-        default=True,
-        description="Fall back to hard-coded patterns if unified processor fails"
+        default=True, description="Fall back to hard-coded patterns if unified processor fails"
     )
 
     if PYDANTIC_SETTINGS_AVAILABLE:
