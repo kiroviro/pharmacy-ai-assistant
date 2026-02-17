@@ -2737,9 +2737,11 @@ class Pipeline:
 
         # Check for critical garbage patterns
         critical_patterns = [
-            "зъбні протези", "грижа за зъбні протези",
-            "защита на личните", "средство за защита",
+            "зъбні протези", "зъбни протези", "грижа за зъбні протези",
+            "защита на личните", "лични данни", "средство за защита",
             "репелент", "комар", "комари",
+            "металокерамика",  # Dental materials hallucination
+            "система за запаметяване",  # System for remembering (nonsense)
         ]
 
         has_garbage = any(p in response_lower for p in critical_patterns)
@@ -2795,7 +2797,7 @@ class Pipeline:
             kept.append(s)
         result = " ".join(kept) if kept else ""
         # Fallback: if critical garbage still present (e.g. cached/missed), truncate before that sentence
-        critical = ["защита на личните", "средство за защита"]
+        critical = ["защита на личните", "лични данни", "средство за защита", "зъбні протези", "зъбни протези", "металокерамика"]
         for phrase in critical:
             if phrase in result.lower():
                 idx = result.lower().index(phrase)
