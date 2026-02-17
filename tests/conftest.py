@@ -17,13 +17,38 @@ sys.path.insert(0, str(project_root))
 try:
     import mlx.core  # noqa: F401
 except (ImportError, ModuleNotFoundError):
-    # Create mock modules for MLX
-    sys.modules["mlx"] = MagicMock()
-    sys.modules["mlx.core"] = MagicMock()
-    sys.modules["mlx.nn"] = MagicMock()
-    sys.modules["mlx_lm"] = MagicMock()
-    sys.modules["mlx_lm.sample_utils"] = MagicMock()
-    sys.modules["mlx_lm.utils"] = MagicMock()
+    # Create proper mock modules for MLX with __spec__ set
+    # This is required for importlib.util.find_spec() to work (used by transformers)
+    from importlib.machinery import ModuleSpec
+
+    mlx_mock = MagicMock()
+    mlx_mock.__spec__ = ModuleSpec("mlx", None)
+    mlx_mock.__version__ = "0.0.0"
+
+    mlx_core_mock = MagicMock()
+    mlx_core_mock.__spec__ = ModuleSpec("mlx.core", None)
+
+    mlx_nn_mock = MagicMock()
+    mlx_nn_mock.__spec__ = ModuleSpec("mlx.nn", None)
+
+    mlx_lm_mock = MagicMock()
+    mlx_lm_mock.__spec__ = ModuleSpec("mlx_lm", None)
+    mlx_lm_mock.generate = MagicMock(return_value=("", 0))
+    mlx_lm_mock.load = MagicMock(return_value=(MagicMock(), MagicMock()))
+
+    mlx_lm_sample_utils_mock = MagicMock()
+    mlx_lm_sample_utils_mock.__spec__ = ModuleSpec("mlx_lm.sample_utils", None)
+    mlx_lm_sample_utils_mock.make_sampler = MagicMock(return_value=MagicMock())
+
+    mlx_lm_utils_mock = MagicMock()
+    mlx_lm_utils_mock.__spec__ = ModuleSpec("mlx_lm.utils", None)
+
+    sys.modules["mlx"] = mlx_mock
+    sys.modules["mlx.core"] = mlx_core_mock
+    sys.modules["mlx.nn"] = mlx_nn_mock
+    sys.modules["mlx_lm"] = mlx_lm_mock
+    sys.modules["mlx_lm.sample_utils"] = mlx_lm_sample_utils_mock
+    sys.modules["mlx_lm.utils"] = mlx_lm_utils_mock
 
 from src.intent_classifier import IntentClassifier  # noqa: E402
 from src.safety import SafetyLayer  # noqa: E402
