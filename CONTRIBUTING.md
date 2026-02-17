@@ -14,7 +14,7 @@ Thank you for your interest in contributing to the Pharmacy AI Assistant project
 
 ```bash
 # Clone the repository
-git clone https://github.com/kiril/pharmacy-ai-assistant.git
+git clone https://github.com/kiroviro/pharmacy-ai-assistant.git
 cd pharmacy-ai-assistant
 
 # Create virtual environment
