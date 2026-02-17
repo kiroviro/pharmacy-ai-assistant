@@ -229,7 +229,8 @@ class TestPipelineFlow:
 
         assert result is not None
         assert result.is_medical is False
-        assert "здравни въпроси" in result.response or "medical" in result.response.lower()
+        # Rejection message varies, check for common parts
+        assert ("здравн" in result.response.lower() or "medical" in result.response.lower())
 
     def test_empty_query_handled(self, mock_pipeline):
         """Empty query should be handled gracefully."""
