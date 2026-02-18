@@ -1081,10 +1081,6 @@ class Pipeline:
         response_lower = reasoning.likely_cause.lower()
         return any(phrase in response_lower for phrase in self._REFUSAL_PHRASES)
 
-    def _translate_to_english(self, text: str) -> str:
-        """Translate Bulgarian to English."""
-        return self.translator.translate_to_english(text)
-
     def _translate_to_bulgarian(self, text: str) -> str:
         """Translate English to Bulgarian."""
         return self.translator.translate_to_bulgarian(text)

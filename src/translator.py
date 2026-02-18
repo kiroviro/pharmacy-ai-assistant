@@ -1,27 +1,14 @@
 """
-Translation module for Bulgarian ↔ English using MarianMT.
+Translation module for English → Bulgarian using MarianMT.
 
-Uses Helsinki-NLP's MarianMT models:
-- BG → EN: Helsinki-NLP/opus-mt-bg-en
-- EN → BG: Helsinki-NLP/opus-mt-en-bg
+Uses Helsinki-NLP's MarianMT model: Helsinki-NLP/opus-mt-en-bg
 
-DEPRECATION NOTICE:
-    The translate_to_english() method is being replaced by the unified
-    LLM processor (src/unified_processor.py) which handles translation
-    as part of its single-call processing.
+This module handles:
+- Response translation (EN→BG) for medical advice text
+- Product description translation
+- Medical term dictionary for common translations
 
-    When unified_processor_enabled=True:
-    - Query translation (BG→EN) is done by the unified processor
-    - Response translation (EN→BG) still uses this module
-    - The medical dictionary is still used for product descriptions
-
-    The module will NOT be fully deprecated as it's still needed for:
-    - Response formatting and translation back to Bulgarian
-    - Product description translation
-    - Symptom term translation
-
-    Migration: Set VIAPHARMA_UNIFIED_PROCESSOR_ENABLED=true to use
-    LLM-driven query translation.
+Query translation (BG→EN) is handled by the unified processor.
 """
 
 from collections import OrderedDict
@@ -96,29 +83,17 @@ class Translator:
     """
 
     # Model identifiers
-    BG_TO_EN_MODEL = "Helsinki-NLP/opus-mt-bg-en"
     EN_TO_BG_MODEL = "Helsinki-NLP/opus-mt-en-bg"
 
     def __init__(self):
         """Initialize the translator (models loaded lazily)."""
-        self._bg_to_en_model = None
-        self._bg_to_en_tokenizer = None
         self._en_to_bg_model = None
         self._en_to_bg_tokenizer = None
 
         # LRU cache for frequent translations
         settings = get_settings()
         cache_size = settings.translation_cache_size
-        self._cache_bg_to_en = LRUCache(max_size=cache_size)
         self._cache_en_to_bg = LRUCache(max_size=cache_size)
-
-    def _load_bg_to_en(self) -> None:
-        """Load the Bulgarian to English model."""
-        if self._bg_to_en_model is None:
-            logger.info(f"Loading translation model: {self.BG_TO_EN_MODEL}...")
-            self._bg_to_en_tokenizer = MarianTokenizer.from_pretrained(self.BG_TO_EN_MODEL)
-            self._bg_to_en_model = MarianMTModel.from_pretrained(self.BG_TO_EN_MODEL)
-            logger.info("BG→EN model loaded!")
 
     def _load_en_to_bg(self) -> None:
         """Load the English to Bulgarian model."""
@@ -129,40 +104,8 @@ class Translator:
             logger.info("EN→BG model loaded!")
 
     def load_all(self) -> None:
-        """Pre-load both translation models."""
-        self._load_bg_to_en()
+        """Pre-load the EN→BG translation model."""
         self._load_en_to_bg()
-
-    def translate_to_english(self, text: str) -> str:
-        """
-        Translate Bulgarian text to English.
-
-        Args:
-            text: Bulgarian text to translate
-
-        Returns:
-            English translation
-        """
-        if not text or not text.strip():
-            return text
-
-        # Check cache
-        cached = self._cache_bg_to_en.get(text)
-        if cached is not None:
-            return cached
-
-        # Load model if needed
-        self._load_bg_to_en()
-
-        # Tokenize and translate
-        inputs = self._bg_to_en_tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512)
-        translated = self._bg_to_en_model.generate(**inputs)
-        result = self._bg_to_en_tokenizer.decode(translated[0], skip_special_tokens=True)
-
-        # Cache result
-        self._cache_bg_to_en.set(text, result)
-
-        return result
 
     # Common medical terms that often fail to translate
     _MEDICAL_TERM_TRANSLATIONS = {
@@ -763,13 +706,12 @@ class Translator:
 
     def clear_cache(self) -> None:
         """Clear the translation cache."""
-        self._cache_bg_to_en.clear()
         self._cache_en_to_bg.clear()
-        logger.info("Translation caches cleared")
+        logger.info("Translation cache cleared")
 
     def get_cache_stats(self) -> dict:
         """Get cache statistics for monitoring."""
-        return {"bg_to_en": self._cache_bg_to_en.stats, "en_to_bg": self._cache_en_to_bg.stats}
+        return {"en_to_bg": self._cache_en_to_bg.stats}
 
 
 # Global translator instance (lazy loaded)
