@@ -129,23 +129,6 @@ class MockProductStore:
         return self._get_mock_products()[:n_results]
 
 
-class MockIntentClassifier:
-    """Mock intent classifier for testing."""
-
-    def is_medical_query(self, query: str):
-        # Check for known non-medical patterns
-        non_medical = ["време", "weather", "виц", "joke", "новини"]
-        for pattern in non_medical:
-            if pattern in query.lower():
-                return False, 0.9, "Non-medical query"
-        return True, 0.9, "Medical query detected"
-
-    def get_rejection_message(self, lang: str = "bg", reason: str = None):
-        if lang == "bg":
-            return "Съжалявам, мога да помагам само със здравни въпроси."
-        return "Sorry, I can only help with health-related questions."
-
-
 class MockSafetyLayer:
     """Mock safety layer for testing."""
 
@@ -185,23 +168,21 @@ def mock_pipeline():
     mock_translator = MockTranslator()
     mock_model = MockMedicalModel()
     mock_store = MockProductStore()
-    mock_intent = MockIntentClassifier()
     mock_safety = MockSafetyLayer()
 
     with patch("src.translator.get_translator", return_value=mock_translator):
         with patch("src.medical_model.get_medical_model", return_value=mock_model):
             with patch("src.product_store.get_product_store", return_value=mock_store):
-                with patch("src.intent_classifier.get_intent_classifier", return_value=mock_intent):
-                    with patch("src.safety.get_safety_layer", return_value=mock_safety):
-                        # Clear the global pipeline instance
-                        import src.pipeline as pipeline_module
+                with patch("src.safety.get_safety_layer", return_value=mock_safety):
+                    # Clear the global pipeline instance
+                    import src.pipeline as pipeline_module
 
-                        pipeline_module._pipeline = None
+                    pipeline_module._pipeline = None
 
-                        from src.pipeline import Pipeline
+                    from src.pipeline import Pipeline
 
-                        pipeline = Pipeline()
-                        yield pipeline
+                    pipeline = Pipeline()
+                    yield pipeline
 
 
 class TestPipelineInitialization:
@@ -209,8 +190,8 @@ class TestPipelineInitialization:
 
     def test_pipeline_components_exist(self, mock_pipeline):
         """Pipeline should have all required components."""
-        assert mock_pipeline.intent_classifier is not None
         assert mock_pipeline.safety_layer is not None
+        assert mock_pipeline.unified_processor is not None
 
     def test_lazy_loading_works(self, mock_pipeline):
         """Components should be lazily loaded."""
@@ -321,21 +302,6 @@ class TestPipelineWithRealComponents:
 
     These tests are marked as slow and can be skipped in CI.
     """
-
-    @pytest.mark.slow
-    def test_real_intent_classifier(self):
-        """Test with real intent classifier."""
-        from src.intent_classifier import IntentClassifier
-
-        classifier = IntentClassifier()
-
-        # Medical query
-        is_medical, _, _ = classifier.is_medical_query("имам главоболие")
-        assert is_medical
-
-        # Non-medical query
-        is_medical, _, _ = classifier.is_medical_query("какво е времето")
-        assert not is_medical
 
     @pytest.mark.slow
     def test_real_safety_layer(self):

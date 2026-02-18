@@ -50,7 +50,6 @@ except (ImportError, ModuleNotFoundError):
     sys.modules["mlx_lm.sample_utils"] = mlx_lm_sample_utils_mock
     sys.modules["mlx_lm.utils"] = mlx_lm_utils_mock
 
-from src.intent_classifier import IntentClassifier  # noqa: E402
 from src.safety import SafetyLayer  # noqa: E402
 from src.unified_processor import (  # noqa: E402
     ProcessorCache,
@@ -67,12 +66,6 @@ def safety_layer():
 def processor_cache():
     """Create a fresh ProcessorCache instance for testing."""
     return ProcessorCache(max_size=100)
-
-
-@pytest.fixture
-def intent_classifier():
-    """Create a fresh IntentClassifier instance for testing."""
-    return IntentClassifier()
 
 
 # =============================================================================

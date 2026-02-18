@@ -10,7 +10,6 @@ import re
 import time
 
 from src.config import get_settings
-from src.intent_classifier import get_intent_classifier
 from src.logging_config import get_logger
 from src.medical_model import MedicalReasoning, get_medical_model
 from src.medical_terms_validator import get_medical_validator
@@ -69,8 +68,7 @@ class Pipeline:
         Args:
             lazy_load: If True, models are loaded on first use. If False, load immediately.
         """
-        # Initialize intent classifier, safety layer, and medical validator
-        self.intent_classifier = get_intent_classifier()
+        # Initialize safety layer and medical validator
         self.safety_layer = get_safety_layer()
         self.medical_validator = get_medical_validator()
 
@@ -85,15 +83,12 @@ class Pipeline:
 
         # Feature flags
         settings = get_settings()
-        self._use_unified_processor = getattr(settings, "unified_processor_enabled", False)
         self._generate_bulgarian_directly = getattr(settings, "generate_bulgarian_directly", False)
 
         if not lazy_load:
-            self._load_medical_model()
             self._load_translator()
             self._load_product_store()
-            if self._use_unified_processor:
-                self._load_unified_processor()
+            self._load_unified_processor()
 
     @property
     def product_store(self):
@@ -604,19 +599,15 @@ class Pipeline:
 
     def process(self, user_input: str) -> PipelineResult:
         """
-        Process user input through the full pipeline.
+        Process user input through the unified LLM processor.
 
-        Steps:
-        1. Intent Classification - is this a medical query?
-        2. Translate BG → EN
-        3. Medical Reasoning (MedGemma) - understand symptoms
-        4. Safety Check (red flags, OTC only)
-        5a. Product Retrieval (Vector DB) - get top-K candidates [FAST]
-        5b. Product Refinement (LLM) - pick best matches [ACCURATE]
-        6. Translate EN → BG
-        7. Format Response
+        The unified processor handles all steps in a single LLM call:
+        - Intent classification
+        - Safety assessment
+        - Medical reasoning
+        - Product extraction and recommendation
 
-        If unified_processor_enabled=True, uses LLM-driven processing instead.
+        Fast-path safety checks (emergencies) and catalog queries are handled first.
         """
         start_time = time.perf_counter()
         logger.info(
@@ -624,7 +615,6 @@ class Pipeline:
             extra={
                 "query_length": len(user_input),
                 "query_preview": user_input[:50] + "..." if len(user_input) > 50 else user_input,
-                "unified_processor": self._use_unified_processor,
             },
         )
 
@@ -667,180 +657,8 @@ class Pipeline:
         if is_help_clarification_query(user_input):
             return PipelineResult(response=get_help_clarification_message(), is_medical=False, original_text=user_input)
 
-        # Route to unified processor if enabled
-        if self._use_unified_processor:
-            try:
-                return self._process_with_unified_processor(user_input, start_time)
-            except Exception as e:
-                logger.error(f"Unified processor failed, falling back to legacy: {e}", exc_info=True)
-                # Fall through to legacy processing
-
-        # Legacy processing path (or fallback if unified processor fails)
-        # Performance tracking
-        timings = {}
-
-        # Step 1: Intent Classification
-        stage_start = time.perf_counter()
-        is_medical, confidence, reason = self.intent_classifier.is_medical_query(user_input)
-        timings['intent_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
-        logger.debug(
-            "Intent classification", extra={"is_medical": is_medical, "confidence": confidence, "reason": reason, "duration_ms": timings['intent_ms']}
-        )
-        if not is_medical:
-            # Edge case: Short queries (1-2 words) might be product names - try catalog search first
-            words = user_input.strip().split()
-            if len(words) <= 2:
-                try:
-                    products = self.product_store.search(user_input, top_k=5)
-                    if products and len(products) > 0:
-                        logger.info(
-                            "Short query matched products in catalog",
-                            extra={"query": user_input, "products_found": len(products)},
-                        )
-                        return self._process_catalog_query(user_input, user_input)
-                except Exception as e:
-                    logger.debug(f"Catalog search for short query failed: {e}")
-
-            return PipelineResult(
-                response=self.intent_classifier.get_rejection_message("bg", reason),
-                is_medical=False,
-                original_text=user_input,
-            )
-
-        # Step 2: Translate BG → EN
-        stage_start = time.perf_counter()
-        translated = self._translate_to_english(user_input)
-        timings['translation_bg_to_en_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
-
-        # Step 3: Medical Reasoning - understand symptoms and suggest treatment types
-        stage_start = time.perf_counter()
-        medical_reasoning = self._get_medical_reasoning(translated)
-        timings['medical_reasoning_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
-
-        # Step 3b: Extract user conditions from both BG and EN text
-        conditions_bg = extract_user_conditions(user_input)
-        conditions_en = extract_user_conditions(translated)
-        all_conditions = list(set(conditions_bg + conditions_en))
-        if all_conditions:
-            medical_reasoning.user_conditions = all_conditions
-            logger.info(f"User conditions detected: {all_conditions}")
-
-        # Check if MedGemma refused to help (non-medical query slipped through)
-        if self._is_refusal_response(medical_reasoning):
-            return PipelineResult(
-                response=self.intent_classifier.get_rejection_message("bg"),
-                is_medical=False,
-                original_text=user_input,
-                translated_text=translated,
-                medical_reasoning=medical_reasoning,
-            )
-
-        # Step 4: Safety Check (check BOTH original Bulgarian and translated English)
-        stage_start = time.perf_counter()
-        is_red_flag, safety_message = self._check_safety(user_input, translated, medical_reasoning)
-        timings['safety_check_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
-        logger.debug("Safety check", extra={"is_red_flag": is_red_flag, "duration_ms": timings['safety_check_ms']})
-        if is_red_flag:
-            logger.warning("Red flag detected, referring to doctor")
-            # Safety messages are already in Bulgarian, no translation needed
-            return PipelineResult(
-                response=safety_message,
-                is_medical=True,
-                is_red_flag=True,
-                original_text=user_input,
-                translated_text=translated,
-                medical_reasoning=medical_reasoning,
-            )
-
-        # Step 5a: Product Retrieval - Vector DB returns top-K candidates (FAST)
-        stage_start = time.perf_counter()
-        candidate_products = self._retrieve_product_candidates(medical_reasoning, user_input)
-        timings['vector_search_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
-        logger.debug(f"Vector search returned {len(candidate_products)} candidates (duration: {timings['vector_search_ms']}ms)")
-
-        # Filter to OTC-only products
-        candidate_products = self.safety_layer.filter_otc_only(candidate_products)
-
-        # Age-appropriate filtering (exclude adult products for child queries)
-        candidate_products = self._filter_by_age_appropriateness(candidate_products, user_input)
-
-        # Step 5a2: Filter by contraindications based on user conditions
-        contraindicated_products = []
-        if medical_reasoning.user_conditions:
-            candidate_products, contraindicated_products = filter_by_contraindications(
-                products=candidate_products,
-                user_conditions=medical_reasoning.user_conditions,
-                strict=True,  # Completely exclude contraindicated products
-            )
-            logger.info(
-                f"Contraindication filter: {len(candidate_products)} safe, {len(contraindicated_products)} removed"
-            )
-
-        # Step 5b: Product Refinement - LLM picks best matches (ACCURATE)
-        stage_start = time.perf_counter()
-        selected_products = self._refine_product_selection(
-            user_query=translated, medical_reasoning=medical_reasoning, candidates=candidate_products
-        )
-        timings['product_refinement_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
-
-        # Check for warning-level symptoms (not blocking, but add message)
-        warning_result = self.safety_layer.check_safety(user_input)
-
-        # Step 6 & 7: Translate back and format response
-        stage_start = time.perf_counter()
-        final_response = self._format_response(
-            medical_reasoning=medical_reasoning, products=selected_products, original_query=user_input
-        )
-        timings['response_formatting_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
-
-        # Add warning message if applicable
-        final_response = self.safety_layer.add_safety_disclaimer(final_response, warning_result)
-
-        # Add child-specific disclaimer if query is about children/babies
-        if self._is_child_related_query(user_input):
-            final_response = self._add_child_disclaimer(final_response)
-
-        # Add safety information disclaimer for medication safety questions
-        if self._is_safety_information_query(user_input):
-            final_response = self._add_safety_info_disclaimer(final_response)
-
-        # Add prescription warning for chronic disease queries
-        if self._is_chronic_disease_query(user_input):
-            final_response = self._add_chronic_disease_disclaimer(final_response)
-
-        # Add contraindication warning if products were filtered
-        if contraindicated_products:
-            final_response = self._add_contraindication_warning(
-                final_response, contraindicated_products, all_conditions
-            )
-
-        duration_ms = (time.perf_counter() - start_time) * 1000
-        timings['total_ms'] = round(duration_ms, 2)
-        logger.info(
-            "Pipeline completed",
-            extra={
-                "duration_ms": round(duration_ms, 2),
-                "timings": timings,
-                "candidates": len(candidate_products),
-                "selected": len(selected_products),
-                "contraindicated": len(contraindicated_products),
-                "user_conditions": all_conditions,
-                "is_red_flag": False,
-            },
-        )
-
-        return PipelineResult(
-            response=final_response,
-            is_medical=True,
-            is_red_flag=False,
-            original_text=user_input,
-            translated_text=translated,
-            medical_reasoning=medical_reasoning,
-            candidate_products=candidate_products,
-            selected_products=selected_products,
-            user_conditions=all_conditions,
-            contraindicated_products=contraindicated_products,
-        )
+        # Route to unified processor
+        return self._process_with_unified_processor(user_input, start_time)
 
     # =========================================================================
     # UNIFIED PROCESSOR PATH (LLM-driven)
@@ -878,8 +696,12 @@ class Pipeline:
                     "reason": llm_result.intent.rejection_reason,
                 },
             )
+            rejection_message = (
+                "Съжалявам, но мога да помагам само със здравни въпроси, лекарства и аптечни продукти. "
+                "Моля, попитайте нещо свързано със здраве."
+            )
             return PipelineResult(
-                response=self.intent_classifier.get_rejection_message("bg", llm_result.intent.rejection_reason or ""),
+                response=rejection_message,
                 is_medical=False,
                 original_text=user_input,
             )

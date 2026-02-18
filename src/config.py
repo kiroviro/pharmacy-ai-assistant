@@ -110,7 +110,7 @@ class Settings(BaseSettings):
     # Unified Processor (LLM-driven architecture)
     # ==========================================================================
     unified_processor_enabled: bool = Field(
-        default=False, description="Enable unified LLM processor (replaces hard-coded patterns)"
+        default=True, description="Enable unified LLM processor (replaces hard-coded patterns)"
     )
     unified_processor_temperature: float = Field(
         default=0.1, description="Temperature for unified processor (low for consistency)"

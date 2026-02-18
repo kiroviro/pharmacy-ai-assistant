@@ -81,7 +81,14 @@
       "WebFetch(domain:benu.bg)",
       "WebFetch(domain:viapharma.us)",
       "Bash(shuf:*)",
-      "Bash(xargs ls:*)"
+      "Bash(xargs ls:*)",
+      "Bash(if [ -f output/test_results.json ])",
+      "Bash(then)",
+      "Bash(else)",
+      "Bash(fi)",
+      "Bash(else echo \"No JSON output found\")",
+      "Bash(kill:*)",
+      "Bash(__NEW_LINE_b18278ccfd9d1d5e__ echo \"✅ Deleted documentation and log files\")"
     ]
   }
 }
