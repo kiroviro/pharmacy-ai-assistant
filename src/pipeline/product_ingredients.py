@@ -13,6 +13,7 @@ import re
 # Maps canonical ingredient names to recognition patterns (BG/EN/brand names)
 
 INGREDIENT_PATTERNS_GLOBAL = {
+    # Standard OTC medications
     "ibuprofen": ["ибупрофен", "ibuprofen", "нурофен", "бруфен", "advil"],
     "paracetamol": ["парацетамол", "paracetamol", "acetaminophen", "панадол", "ефералган", "tylenol"],
     "aspirin": ["аспирин", "aspirin", "ацетилсалицилова"],
@@ -33,6 +34,32 @@ INGREDIENT_PATTERNS_GLOBAL = {
     "benzydamine": ["бензидамин", "benzydamine", "тантум"],
     "domperidone": ["домперидон", "domperidone", "мотилиум"],
     "guaifenesin": ["гвайфенезин", "guaifenesin"],
+
+    # Supplements and herbal (Issue #18 - extend for better coverage)
+    "glucosamine": ["глюкозамин", "glucosamine"],
+    "chondroitin": ["хондроитин", "chondroitin"],
+    "collagen": ["колаген", "collagen"],
+    "cynarin": ["цинарин", "cynarin", "артишок", "artichoke"],
+    "valerian": ["валериана", "valerian"],
+    "melatonin": ["мелатонин", "melatonin"],
+    "magnesium": ["магнезий", "magnesium"],
+    "calcium": ["калций", "calcium"],
+    "vitamin_c": ["витамин c", "vitamin c", "аскорбинова"],
+    "vitamin_d": ["витамин d", "vitamin d"],
+    "vitamin_b": ["витамин b", "vitamin b"],
+    "zinc": ["цинк", "zinc"],
+    "omega3": ["омега 3", "omega 3", "omega-3"],
+    "probiotics": ["пробиотик", "probiotic", "лактобацил", "lactobacil"],
+    "coq10": ["коензим q10", "coenzyme q10", "coq10"],
+
+    # Skin/topical products
+    "hyaluronic_acid": ["хиалуронова", "hyaluronic"],
+    "urea": ["урея", "urea", "карбамид"],
+    "salicylic_acid": ["салицилова", "salicylic"],
+    "glycerin": ["глицерин", "glycerin"],
+    "allantoin": ["алантоин", "allantoin"],
+    "chamomile": ["лайка", "chamomile"],
+    "calendula": ["невен", "calendula"],
 }
 
 # Treatment type → recommended active ingredients (pharmacist logic)
@@ -82,6 +109,7 @@ TREATMENT_TO_INGREDIENTS = {
 
 # Bulgarian display name for known ingredients (fallback; prefer product's own Състав)
 INGREDIENT_BG_NAMES = {
+    # Standard medications
     "paracetamol": "парацетамол",
     "ibuprofen": "ибупрофен",
     "aspirin": "аспирин",
@@ -102,6 +130,32 @@ INGREDIENT_BG_NAMES = {
     "benzydamine": "бензидамин",
     "domperidone": "домперидон",
     "guaifenesin": "гвайфенезин",
+
+    # Supplements and herbal
+    "glucosamine": "глюкозамин",
+    "chondroitin": "хондроитин",
+    "collagen": "колаген",
+    "cynarin": "цинарин (артишок)",
+    "valerian": "валериана",
+    "melatonin": "мелатонин",
+    "magnesium": "магнезий",
+    "calcium": "калций",
+    "vitamin_c": "витамин C",
+    "vitamin_d": "витамин D",
+    "vitamin_b": "витамини от група B",
+    "zinc": "цинк",
+    "omega3": "омега-3 мастни киселини",
+    "probiotics": "пробиотици",
+    "coq10": "коензим Q10",
+
+    # Skin/topical products
+    "hyaluronic_acid": "хиалуронова киселина",
+    "urea": "урея",
+    "salicylic_acid": "салицилова киселина",
+    "glycerin": "глицерин",
+    "allantoin": "алантоин",
+    "chamomile": "лайка",
+    "calendula": "невен",
 }
 
 
