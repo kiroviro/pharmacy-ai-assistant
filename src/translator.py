@@ -158,6 +158,14 @@ class Translator:
         "chest pain": "болка в гърдите",
         "joint pain": "болка в ставите",
         "teething": "никнене на зъби",
+        # Mouth/oral conditions (Issue #19 - fix English leaks)
+        "afts": "афти",
+        "aphthous ulcers": "афтозни язви",
+        "mouth ulcers": "язви в устата",
+        "canker sores": "афти",
+        "gingivitis": "гингивит",
+        "gums": "венци",
+        "inflamed gums": "възпалени венци",
         "teething pain": "болка при никнене на зъби",
         # Infant/Baby related
         "infant": "бебе",

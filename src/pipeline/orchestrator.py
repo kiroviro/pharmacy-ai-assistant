@@ -3041,24 +3041,21 @@ class Pipeline:
         if len(sentences) <= 1:
             # Single sentence: check for English words
             latin_words = re.findall(r"\b[a-zA-Z]{3,}\b", text)
-            # Filter out known OK words (brands, medical terms)
+            # Known OK words (medical terms, units, brands that can stay in English)
+            known_ok_lower = {
+                # Standard medical terms / abbreviations
+                "covid", "sars", "otc", "nsaid",
+                "paracetamol", "ibuprofen", "aspirin", "diclofenac",
+                # Units and dilutions
+                "mg", "ml", "ph", "dh", "ch",
+                # Major brands
+                "nurofen", "brufen", "voltaren", "advil", "tylenol",
+                "claritine", "zyrtec", "boiron", "tantum", "motilium",
+            }
+            # English words to clean (Issue #19: include capitalized medical terms)
             eng_words = [
-                w
-                for w in latin_words
-                if not w[0].isupper()
-                and w.lower()
-                not in {
-                    "covid",
-                    "sars",
-                    "otc",
-                    "nsaid",
-                    "paracetamol",
-                    "ibuprofen",
-                    "aspirin",
-                    "mg",
-                    "ml",
-                    "ph",
-                }
+                w for w in latin_words
+                if w.lower() not in known_ok_lower
             ]
             if eng_words:
                 # Re-translate the entire sentence
