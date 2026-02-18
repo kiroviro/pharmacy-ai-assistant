@@ -6,6 +6,7 @@ multilingual embeddings. Includes async wrappers for non-blocking operations.
 """
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
 
 import chromadb
@@ -31,6 +32,12 @@ MIN_SIMILARITY_THRESHOLD = 0.25
 
 # Keyword boost for exact matches in hybrid search
 KEYWORD_BOOST_PER_MATCH = 0.08
+
+# Timeout configuration (prevents slow vector searches)
+VECTOR_SEARCH_TIMEOUT_SECONDS = 3.0  # Max time for vector search
+
+# Thread pool for timeout-protected vector search
+_search_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="vector-search-timeout")
 
 # Treatment type to category mapping for category-aware search
 TREATMENT_CATEGORY_MAP = {
@@ -405,6 +412,92 @@ class ProductStore:
         enhanced_query = f"лекарство за {symptoms} лечение симптоми"
         return self.search(enhanced_query, n_results=n_results)
 
+    def _keyword_search_fallback(
+        self,
+        query: str,
+        n_results: int = 10,
+        preferred_ingredients: list[str] | None = None,
+    ) -> list[dict]:
+        """
+        Simple keyword-based fallback when vector search times out.
+
+        No embeddings needed - just matches query terms in product titles.
+        Fast but less accurate than semantic search.
+
+        Args:
+            query: Search query
+            n_results: Number of results to return
+            preferred_ingredients: Optional ingredient keywords to prioritize
+
+        Returns:
+            List of products matching query keywords
+        """
+        logger.warning(
+            f"Vector search fallback triggered for query: '{query[:50]}...'",
+            extra={"query_length": len(query), "timeout": VECTOR_SEARCH_TIMEOUT_SECONDS}
+        )
+
+        # Get all products from collection (this is cached by ChromaDB)
+        all_results = self.collection.get(include=["metadatas"])
+
+        if not all_results["ids"]:
+            return []
+
+        # Extract query terms
+        query_lower = query.lower()
+        query_terms = [term for term in query_lower.split() if len(term) > 2]
+
+        # Score products by keyword matches
+        scored_products = []
+        for i, product_id in enumerate(all_results["ids"]):
+            metadata = all_results["metadatas"][i]
+            title_lower = metadata.get("title", "").lower()
+            brand_lower = metadata.get("brand", "").lower()
+            composition_lower = metadata.get("composition", "").lower()
+            description_lower = metadata.get("description", "").lower()
+
+            # Count keyword matches
+            title_matches = sum(1 for term in query_terms if term in title_lower)
+            brand_matches = sum(1 for term in query_terms if term in brand_lower)
+            desc_matches = sum(1 for term in query_terms if term in description_lower)
+
+            # Skip if no matches
+            if title_matches == 0 and brand_matches == 0 and desc_matches == 0:
+                continue
+
+            # Calculate base score (keyword matching only)
+            score = (title_matches * 0.3) + (brand_matches * 0.2) + (desc_matches * 0.1)
+
+            # Ingredient boost (if specified)
+            if preferred_ingredients:
+                combined_text = f"{composition_lower} {title_lower}"
+                ingredient_hits = sum(1 for ing in preferred_ingredients if ing.lower() in combined_text)
+                if ingredient_hits > 0:
+                    score += ingredient_hits * 0.2
+
+            # Homeopathy penalty
+            if preferred_ingredients:
+                combined_text = f"{composition_lower} {title_lower} {description_lower}"
+                if _is_homeopathic_product(combined_text):
+                    score -= 0.3
+
+            # Normalize score to 0-1 range
+            score = max(0.0, min(1.0, score))
+
+            product = metadata.copy()
+            product["id"] = product_id
+            product["score"] = score
+            product["fallback_search"] = True  # Flag for debugging
+            scored_products.append(product)
+
+        # Sort by score and return top N
+        scored_products.sort(key=lambda x: x["score"], reverse=True)
+        logger.info(
+            f"Keyword fallback returned {min(len(scored_products), n_results)} products",
+            extra={"total_matches": len(scored_products), "requested": n_results}
+        )
+        return scored_products[:n_results]
+
     def hybrid_search(
         self,
         query: str,
@@ -419,6 +512,8 @@ class ProductStore:
         Improves handling of exact product/brand name queries like "Нурофен" or "Панадол".
         Also supports ingredient-based boosting for symptom-driven selection.
 
+        Includes timeout protection (3s) - falls back to keyword search if vector search is slow.
+
         Args:
             query: Search query (Bulgarian or English)
             n_results: Number of results to return
@@ -429,6 +524,58 @@ class ProductStore:
 
         Returns:
             List of products with combined semantic + keyword scores
+        """
+        try:
+            # Run vector search with timeout protection using concurrent.futures
+            future = _search_executor.submit(
+                self._run_hybrid_search,
+                query,
+                n_results,
+                where,
+                keyword_boost,
+                preferred_ingredients
+            )
+            return future.result(timeout=VECTOR_SEARCH_TIMEOUT_SECONDS)
+
+        except FuturesTimeoutError:
+            logger.warning(
+                f"Vector search timeout, using keyword fallback",
+                extra={"query_preview": query[:50], "timeout": VECTOR_SEARCH_TIMEOUT_SECONDS}
+            )
+            return self._keyword_search_fallback(
+                query,
+                n_results=n_results,
+                preferred_ingredients=preferred_ingredients
+            )
+        except Exception as e:
+            logger.error(f"Error during hybrid search: {e}", exc_info=True)
+            # Fallback to keyword search on any error
+            return self._keyword_search_fallback(
+                query,
+                n_results=n_results,
+                preferred_ingredients=preferred_ingredients
+            )
+
+    def _run_hybrid_search(
+        self,
+        query: str,
+        n_results: int,
+        where: dict | None,
+        keyword_boost: float,
+        preferred_ingredients: list[str] | None
+    ) -> list[dict]:
+        """
+        Run the actual hybrid search (called in thread pool for timeout protection).
+
+        Args:
+            query: Search query
+            n_results: Number of results
+            where: Optional filter conditions
+            keyword_boost: Keyword boost value
+            preferred_ingredients: Optional ingredient keywords
+
+        Returns:
+            List of products with scores
         """
         # Get more results for re-ranking
         semantic_results = self.search(

@@ -11,6 +11,7 @@ import os
 import re
 import time
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import asdict, dataclass
 
 from mlx_lm import generate, load
@@ -29,6 +30,13 @@ REASONING_CACHE_SIZE = 500
 # Retry configuration for model inference
 MAX_INFERENCE_RETRIES = 3
 RETRY_BASE_DELAY_SECONDS = 0.5  # Exponential backoff: 0.5s, 1.0s, 2.0s
+
+# Timeout configuration (prevents 49s outliers)
+MEDICAL_REASONING_TIMEOUT_SECONDS = 15.0  # Max time for inference
+
+# Thread pool for timeout-protected inference
+# Using 1 worker since MLX doesn't support concurrent inference
+_inference_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="medgemma-timeout")
 
 
 @dataclass
@@ -514,11 +522,13 @@ class MedicalModel:
         temperature: float = 0.3,
         system_prompt: str = None,
         use_cache: bool = True,
+        timeout_seconds: float = MEDICAL_REASONING_TIMEOUT_SECONDS,
     ) -> MedicalReasoning:
         """
-        Get medical reasoning for the given symptoms.
+        Get medical reasoning for the given symptoms with timeout protection.
 
         Uses LRU caching to avoid redundant inference for repeated queries.
+        Adds timeout protection to prevent 49s outliers.
 
         Args:
             symptoms: Description of symptoms (in English)
@@ -526,9 +536,13 @@ class MedicalModel:
             temperature: Sampling temperature (0.0 = deterministic, 1.0 = creative)
             system_prompt: Optional custom system prompt
             use_cache: Whether to use caching (default True)
+            timeout_seconds: Maximum time allowed for inference (default 15s)
 
         Returns:
             MedicalReasoning object with structured data
+
+        Raises:
+            TimeoutError: If inference exceeds timeout_seconds (caught internally, returns fallback)
         """
         # Check cache first (only for default system prompt)
         cache_key = None
@@ -545,7 +559,53 @@ class MedicalModel:
         if not self._loaded:
             self.load()
 
-        # Run inference with retry logic
+        # Run inference with timeout protection using concurrent.futures
+        # This is thread-safe and works in async context
+        try:
+            future = _inference_executor.submit(
+                self._run_inference,
+                symptoms,
+                max_tokens,
+                temperature,
+                system_prompt,
+                cache_key
+            )
+            result = future.result(timeout=timeout_seconds)
+            return result
+
+        except FuturesTimeoutError:
+            logger.warning(
+                f"MedGemma inference timeout after {timeout_seconds}s, using fallback reasoning",
+                extra={"query_preview": symptoms[:50], "timeout": timeout_seconds}
+            )
+            # Return simple fallback reasoning instead of failing
+            return self._get_fallback_reasoning(symptoms)
+        except Exception as e:
+            logger.error(f"Error during medical reasoning: {e}", exc_info=True)
+            # Return fallback on any error
+            return self._get_fallback_reasoning(symptoms)
+
+    def _run_inference(
+        self,
+        symptoms: str,
+        max_tokens: int,
+        temperature: float,
+        system_prompt: str,
+        cache_key: str
+    ) -> MedicalReasoning:
+        """
+        Run the actual inference (called in thread pool for timeout protection).
+
+        Args:
+            symptoms: Symptom description
+            max_tokens: Max tokens to generate
+            temperature: Sampling temperature
+            system_prompt: Optional system prompt
+            cache_key: Cache key for storing result
+
+        Returns:
+            MedicalReasoning object
+        """
         start_time = time.perf_counter()
         prompt = self._format_prompt(symptoms, system_prompt)
 
@@ -577,6 +637,53 @@ class MedicalModel:
             )
 
         return result
+
+    def _get_fallback_reasoning(self, symptoms: str) -> MedicalReasoning:
+        """
+        Provide simple fallback reasoning when MedGemma times out.
+
+        This ensures we always return a response, even if inference is slow.
+        The fallback provides generic but safe advice.
+
+        Args:
+            symptoms: The original symptom query
+
+        Returns:
+            Basic MedicalReasoning with generic recommendations
+        """
+        logger.info("Using fallback medical reasoning")
+
+        # Extract simple keywords for basic categorization
+        symptoms_lower = symptoms.lower()
+
+        # Determine basic treatment category
+        if any(word in symptoms_lower for word in ["fever", "temperature", "температура"]):
+            treatment_type = "antipyretics"
+            likely_cause = "fever"
+        elif any(word in symptoms_lower for word in ["pain", "headache", "болка", "главоболие"]):
+            treatment_type = "pain relief"
+            likely_cause = "pain"
+        elif any(word in symptoms_lower for word in ["cough", "кашлица"]):
+            treatment_type = "cough suppressants"
+            likely_cause = "cough"
+        elif any(word in symptoms_lower for word in ["allergy", "алергия"]):
+            treatment_type = "antihistamines"
+            likely_cause = "allergy"
+        else:
+            treatment_type = "general OTC treatment"
+            likely_cause = "unspecified symptoms"
+
+        return MedicalReasoning(
+            symptoms=[symptoms[:100]],  # Truncate long symptoms
+            likely_cause=likely_cause,
+            treatment_type=treatment_type,
+            warnings=["Consult a pharmacist for personalized advice"],
+            see_doctor=False,
+            explanation=f"Based on your symptoms, over-the-counter {treatment_type} may help.",
+            how_treatment_helps="Addresses the symptoms you described",
+            self_care_tips=["Rest", "Stay hydrated", "Monitor symptoms"],
+            duration_guidance="Consult a healthcare provider if symptoms persist",
+        )
 
     # Garbage phrases that should not appear in output (from product side effects, etc.)
     GARBAGE_PHRASES = [

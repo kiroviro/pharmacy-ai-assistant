@@ -38,17 +38,44 @@ INGREDIENT_PATTERNS_GLOBAL = {
 # Treatment type → recommended active ingredients (pharmacist logic)
 # Aspirin and metamizole excluded from default lists (contraindicated for children).
 TREATMENT_TO_INGREDIENTS = {
+    # Pain relief
     "analgesics": ["paracetamol", "ibuprofen"],
+    "pain": ["paracetamol", "ibuprofen"],
+    "headache": ["paracetamol", "ibuprofen"],
+    "migraine": ["paracetamol", "ibuprofen"],
+    "toothache": ["paracetamol", "ibuprofen"],
+    # Fever
     "antipyretics": ["paracetamol", "ibuprofen"],
+    "fever": ["paracetamol", "ibuprofen"],
+    "temperature": ["paracetamol", "ibuprofen"],
+    # Respiratory
     "cough": ["dextromethorphan"],
     "decongestants": ["pseudoephedrine"],
+    "cold": ["paracetamol", "pseudoephedrine"],
+    "flu": ["paracetamol", "pseudoephedrine"],
+    "nasal_congestion": ["pseudoephedrine"],
+    # Allergy
     "antihistamines": ["loratadine", "cetirizine"],
+    "allergy": ["loratadine", "cetirizine"],
+    "allergic_rhinitis": ["loratadine", "cetirizine"],
+    # Digestive
     "antacids": ["omeprazole", "pantoprazole"],
     "digestive": ["omeprazole", "pantoprazole"],
+    "heartburn": ["omeprazole", "pantoprazole"],
+    "acid_reflux": ["omeprazole", "pantoprazole"],
+    "indigestion": ["omeprazole", "pantoprazole"],
     "antidiarrheal": ["loperamide", "smectite"],
+    "diarrhea": ["loperamide", "smectite"],
+    # Topical
     "topical": ["dexpanthenol", "diclofenac"],
+    "muscle_pain": ["diclofenac"],
+    "joint_pain": ["diclofenac"],
+    "skin": ["dexpanthenol"],
+    # Other
     "throat": [],
+    "sore_throat": [],
     "laxatives": [],
+    "constipation": [],
     "vitamins": [],
     "supplements": [],
 }

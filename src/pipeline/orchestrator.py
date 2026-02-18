@@ -676,10 +676,15 @@ class Pipeline:
                 # Fall through to legacy processing
 
         # Legacy processing path (or fallback if unified processor fails)
+        # Performance tracking
+        timings = {}
+
         # Step 1: Intent Classification
+        stage_start = time.perf_counter()
         is_medical, confidence, reason = self.intent_classifier.is_medical_query(user_input)
+        timings['intent_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
         logger.debug(
-            "Intent classification", extra={"is_medical": is_medical, "confidence": confidence, "reason": reason}
+            "Intent classification", extra={"is_medical": is_medical, "confidence": confidence, "reason": reason, "duration_ms": timings['intent_ms']}
         )
         if not is_medical:
             # Edge case: Short queries (1-2 words) might be product names - try catalog search first
@@ -703,10 +708,14 @@ class Pipeline:
             )
 
         # Step 2: Translate BG → EN
+        stage_start = time.perf_counter()
         translated = self._translate_to_english(user_input)
+        timings['translation_bg_to_en_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
 
         # Step 3: Medical Reasoning - understand symptoms and suggest treatment types
+        stage_start = time.perf_counter()
         medical_reasoning = self._get_medical_reasoning(translated)
+        timings['medical_reasoning_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
 
         # Step 3b: Extract user conditions from both BG and EN text
         conditions_bg = extract_user_conditions(user_input)
@@ -727,8 +736,10 @@ class Pipeline:
             )
 
         # Step 4: Safety Check (check BOTH original Bulgarian and translated English)
+        stage_start = time.perf_counter()
         is_red_flag, safety_message = self._check_safety(user_input, translated, medical_reasoning)
-        logger.debug("Safety check", extra={"is_red_flag": is_red_flag})
+        timings['safety_check_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
+        logger.debug("Safety check", extra={"is_red_flag": is_red_flag, "duration_ms": timings['safety_check_ms']})
         if is_red_flag:
             logger.warning("Red flag detected, referring to doctor")
             # Safety messages are already in Bulgarian, no translation needed
@@ -742,8 +753,10 @@ class Pipeline:
             )
 
         # Step 5a: Product Retrieval - Vector DB returns top-K candidates (FAST)
+        stage_start = time.perf_counter()
         candidate_products = self._retrieve_product_candidates(medical_reasoning, user_input)
-        logger.debug(f"Vector search returned {len(candidate_products)} candidates")
+        timings['vector_search_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
+        logger.debug(f"Vector search returned {len(candidate_products)} candidates (duration: {timings['vector_search_ms']}ms)")
 
         # Filter to OTC-only products
         candidate_products = self.safety_layer.filter_otc_only(candidate_products)
@@ -764,17 +777,21 @@ class Pipeline:
             )
 
         # Step 5b: Product Refinement - LLM picks best matches (ACCURATE)
+        stage_start = time.perf_counter()
         selected_products = self._refine_product_selection(
             user_query=translated, medical_reasoning=medical_reasoning, candidates=candidate_products
         )
+        timings['product_refinement_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
 
         # Check for warning-level symptoms (not blocking, but add message)
         warning_result = self.safety_layer.check_safety(user_input)
 
         # Step 6 & 7: Translate back and format response
+        stage_start = time.perf_counter()
         final_response = self._format_response(
             medical_reasoning=medical_reasoning, products=selected_products, original_query=user_input
         )
+        timings['response_formatting_ms'] = round((time.perf_counter() - stage_start) * 1000, 2)
 
         # Add warning message if applicable
         final_response = self.safety_layer.add_safety_disclaimer(final_response, warning_result)
@@ -798,10 +815,12 @@ class Pipeline:
             )
 
         duration_ms = (time.perf_counter() - start_time) * 1000
+        timings['total_ms'] = round(duration_ms, 2)
         logger.info(
             "Pipeline completed",
             extra={
                 "duration_ms": round(duration_ms, 2),
+                "timings": timings,
                 "candidates": len(candidate_products),
                 "selected": len(selected_products),
                 "contraindicated": len(contraindicated_products),
