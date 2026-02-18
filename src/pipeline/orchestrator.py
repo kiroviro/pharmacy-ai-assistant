@@ -975,17 +975,24 @@ class Pipeline:
         parts.append("## 🛒 Подходящи продукти\n")
         if products:
             displayed_products = self._filter_by_severity(products, symptom_count)
-            # Add combo note when single symptom + cold/flu combo product shown
-            if symptom_count <= 1:
-                any_combo = any(
-                    len(extract_all_product_ingredients(p)) >= 2
-                    or "грип" in (p.title or "").lower()
-                    or "настинка" in (p.title or "").lower()
-                    for p in displayed_products
-                )
-                if any_combo:
+            # Add combo note when showing cold/flu combo products
+            any_combo = any(
+                len(extract_all_product_ingredients(p)) >= 2
+                or "грип" in (p.title or "").lower()
+                or "настинка" in (p.title or "").lower()
+                or "простуд" in (p.title or "").lower()
+                for p in displayed_products
+            )
+            if any_combo:
+                if symptom_count <= 1:
+                    # Single symptom - explain why combo might be shown
                     parts.append(
                         "*Комбиниран продукт за грип/настинка. При единствен симптом (напр. само температура) по-подходящ е продукт само с една активна съставка.*\n"
+                    )
+                else:
+                    # Multiple symptoms - explain that combo addresses multiple symptoms
+                    parts.append(
+                        "*Комбиниран продукт, подходящ при няколко симптома едновременно (температура, кашлица, хрема и др.).*\n"
                     )
             for i, product in enumerate(displayed_products, 1):
                 if i > 1:
@@ -2662,21 +2669,27 @@ class Pipeline:
         ingredient = extract_product_ingredient(product)
         all_ingredients = extract_all_product_ingredients(product)
         is_combo = len(all_ingredients) >= 2
-        # Also treat cold/flu multi-symptom products as combo (title/desc keywords)
+        # Also treat cold/flu multi-symptom products as combo (title keywords only)
+        # Narrowed to avoid false positives on simple paracetamol (Issue #18)
         if not is_combo:
-            td = f"{(product.title or '')} {(product.description or '')}".lower()
-            combo_keywords = [
+            title_lower = (product.title or "").lower()
+            # Require specific cold/flu combo terms in title (not just description)
+            combo_markers = [
                 "грип и настинка",
                 "при грип",
-                "за грип",
                 "грипни симптоми",
                 "простуд",
                 "простуда и грип",
-                "при простуда",
+                "мулти-симптом",
+                "multi-symptom",
             ]
-            symptom_keywords = ["температур", "кашлица", "хрема", "болка"]
-            if any(kw in td for kw in combo_keywords) and any(kw in td for kw in symptom_keywords):
-                is_combo = True
+            # Product must have combo marker AND multiple symptom mentions to qualify
+            if any(marker in title_lower for marker in combo_markers):
+                symptom_count_in_title = sum(
+                    1 for s in ["температур", "кашлица", "хрема", "болка в гърл"]
+                    if s in title_lower
+                )
+                is_combo = symptom_count_in_title >= 2
 
         # ✔ Active ingredient line (from product's own Състав)
         ingredient_bg = INGREDIENT_BG_NAMES.get(ingredient, "") if ingredient else ""
