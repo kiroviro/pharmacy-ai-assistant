@@ -161,6 +161,22 @@ class MockSafetyLayer:
     def add_safety_disclaimer(self, response: str, safety_result) -> str:
         return response
 
+    def check_safety_with_llm_result(self, text: str, llm_safety_level: str, llm_detected_flags: list):
+        """Check safety with LLM result (hybrid approach)."""
+        result = Mock()
+        # Simple mock: trust LLM if it says emergency
+        if llm_safety_level == "emergency":
+            result.is_red_flag = True
+            result.severity = "emergency"
+            result.message = "Seek immediate medical attention"
+            result.matched_symptoms = llm_detected_flags
+        else:
+            result.is_red_flag = False
+            result.severity = "safe"
+            result.message = ""
+            result.matched_symptoms = []
+        return result
+
 
 @pytest.fixture
 def mock_pipeline():

@@ -44,6 +44,7 @@ from src.pipeline.query_router import (
     is_help_clarification_query,
     is_single_drug_name_query,
 )
+from src.pipeline.response_validator import validate_and_clean
 from src.product_store import get_product_store
 from src.safety import get_safety_layer
 from src.translator import get_translator
@@ -179,6 +180,12 @@ class Pipeline:
 
         # Format the comparison response
         response = self._format_comparison_response(drug_names, products_by_drug)
+
+        # Validate response for garbage text
+        is_valid, cleaned_response, validation_metadata = validate_and_clean(response, strict=False)
+        if validation_metadata.get("cleaned", False):
+            logger.info("Comparison response cleaned", extra={"patterns": validation_metadata.get("patterns_found", [])})
+            response = cleaned_response
 
         duration_ms = (time.perf_counter() - start_time) * 1000
         logger.info(
@@ -393,6 +400,12 @@ class Pipeline:
 
         # Format catalog response with VP template (safety, triage, footer)
         response = self._format_catalog_response(search_term, products, user_input)
+
+        # Validate response for garbage text
+        is_valid, cleaned_response, validation_metadata = validate_and_clean(response, strict=False)
+        if validation_metadata.get("cleaned", False):
+            logger.info("Catalog response cleaned", extra={"patterns": validation_metadata.get("patterns_found", [])})
+            response = cleaned_response
 
         duration_ms = (time.perf_counter() - start_time) * 1000
         logger.info(
@@ -772,6 +785,33 @@ class Pipeline:
                 llm_result.extraction.user_conditions,
             )
 
+        # Validate response for garbage text (Issue #17 - Phase 1)
+        is_valid, cleaned_response, validation_metadata = validate_and_clean(final_response, strict=False)
+
+        if not is_valid:
+            logger.error(
+                "Response validation failed - garbage text detected and could not be cleaned",
+                extra={
+                    "patterns_found": validation_metadata.get("patterns_found", []),
+                    "severity": validation_metadata.get("severity", "unknown"),
+                },
+            )
+            # Fall back to a safe generic response
+            final_response = (
+                "Съжалявам, не мога да генерирам подходящ отговор в момента. "
+                "Моля, консултирайте се с фармацевт или лекар."
+            )
+        elif validation_metadata.get("cleaned", False):
+            # Response was cleaned - use the cleaned version
+            logger.info(
+                "Response cleaned successfully",
+                extra={
+                    "patterns_removed": validation_metadata.get("patterns_found", []),
+                    "patterns_remaining": validation_metadata.get("patterns_remaining", []),
+                },
+            )
+            final_response = cleaned_response
+
         duration_ms = (time.perf_counter() - start_time) * 1000
         logger.info(
             "Unified processor pipeline completed",
@@ -781,6 +821,8 @@ class Pipeline:
                 "candidates": len(candidate_products),
                 "selected": len(selected_products),
                 "conditions": llm_result.extraction.user_conditions,
+                "response_validated": is_valid,
+                "response_cleaned": validation_metadata.get("cleaned", False),
             },
         )
 
