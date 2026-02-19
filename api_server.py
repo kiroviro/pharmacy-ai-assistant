@@ -410,7 +410,6 @@ async def health_check():
 
     models_loaded = {
         "medgemma": pipeline._medical_model is not None and pipeline._medical_model._loaded,
-        "translator_bg_en": pipeline._translator is not None and pipeline._translator._bg_to_en_model is not None,
         "translator_en_bg": pipeline._translator is not None and pipeline._translator._en_to_bg_model is not None,
     }
 
