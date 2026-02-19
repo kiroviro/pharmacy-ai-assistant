@@ -37,6 +37,7 @@ from src.pipeline.product_ingredients import (
     get_recommended_ingredients,
     is_combination_product,
 )
+from src.pipeline.product_matcher import ProductMatcher
 from src.pipeline.query_router import (
     get_help_clarification_message,
     is_catalog_query,
@@ -75,6 +76,7 @@ class Pipeline:
         translator=None,
         unified_processor=None,
         settings=None,
+        product_matcher=None,
     ):
         """
         Initialize the pipeline with dependency injection.
@@ -89,6 +91,7 @@ class Pipeline:
             translator: Optional Translator instance (defaults to singleton)
             unified_processor: Optional UnifiedProcessor instance (defaults to singleton)
             settings: Optional Settings instance (defaults to singleton)
+            product_matcher: Optional ProductMatcher instance (defaults to new instance)
         """
         # Initialize dependencies (use provided or fall back to singletons)
         self.safety_layer = safety_layer or get_safety_layer()
@@ -114,6 +117,12 @@ class Pipeline:
         # Feature flags
         settings = settings or get_settings()
         self._generate_bulgarian_directly = getattr(settings, "generate_bulgarian_directly", False)
+
+        # Product matcher (uses product_store and medical_model via properties)
+        self.product_matcher = product_matcher or ProductMatcher(
+            product_store=self.product_store,
+            medical_model=self.medical_model
+        )
 
         if not lazy_load:
             self._load_translator()
@@ -256,48 +265,6 @@ class Pipeline:
         "гр",
     }
 
-    def _filter_by_product_name_match(self, products: list, search_term: str) -> list:
-        """
-        Filter products to only those whose title contains key search terms.
-
-        This prevents semantic search from returning unrelated products that match
-        on generic terms like 'мг', 'капсули', etc.
-
-        Args:
-            products: List of Product objects
-            search_term: The extracted search term (e.g., "нурофен 200 мг")
-
-        Returns:
-            Filtered list of products that contain at least one key term
-        """
-        # Extract key terms (excluding generic terms and short words)
-        search_lower = search_term.lower()
-        key_terms = [term for term in search_lower.split() if term not in self._GENERIC_TERMS and len(term) > 2]
-
-        if not key_terms:
-            # No key terms to filter on, return all
-            return products
-
-        logger.debug(f"Filtering products by key terms: {key_terms}")
-
-        filtered = []
-        for product in products:
-            title_lower = product.title.lower() if hasattr(product, "title") else ""
-            brand_lower = product.brand.lower() if hasattr(product, "brand") else ""
-
-            # Check if any key term is in title or brand
-            if any(term in title_lower or term in brand_lower for term in key_terms):
-                filtered.append(product)
-            else:
-                logger.debug(f"Filtered out: {product.title[:40]}... (no match for {key_terms})")
-
-        # If filtering removed all results, be more lenient and return top results
-        if not filtered and products:
-            logger.warning(f"No products matched key terms {key_terms}, returning top semantic matches")
-            return products[:3]
-
-        return filtered
-
     def _process_catalog_query(self, user_input: str, search_term: str) -> PipelineResult:
         """
         Process a catalog query without medical reasoning.
@@ -324,7 +291,7 @@ class Pipeline:
 
         # For catalog queries, filter to products that actually contain the key search terms
         # This prevents matching on generic terms like "мг", "капсули", etc.
-        products = self._filter_by_product_name_match(products, search_term)
+        products = self.product_matcher.filter_by_name_match(products, search_term)
 
         # Format catalog response with VP template (safety, triage, footer)
         response = self.response_builder.format_catalog_response(search_term, products, user_input)
@@ -507,7 +474,7 @@ class Pipeline:
         medical_reasoning = self._build_medical_reasoning_from_unified(llm_result)
 
         # Product retrieval (uses vector DB + age filtering)
-        candidate_products = self._retrieve_product_candidates(medical_reasoning, user_input)
+        candidate_products = self.product_matcher.retrieve_candidates(medical_reasoning, user_input)
         candidate_products = self.safety_layer.filter_otc_only(candidate_products)
         candidate_products = self._filter_by_age_appropriateness(candidate_products, user_input)
 
@@ -521,10 +488,19 @@ class Pipeline:
             )
 
         # Product refinement (uses existing LLM-based refinement)
-        selected_products = self._refine_product_selection(
-            user_query=llm_result.extraction.query_translated,
-            medical_reasoning=medical_reasoning,
-            candidates=candidate_products,
+        # Step 1: Pharmacological reranking
+        reranked_products = self.product_matcher.pharmacological_rerank(
+            candidate_products, medical_reasoning.treatment_type
+        )
+
+        # Step 2: LLM-based refinement
+        refined_products = self.product_matcher.refine_selection(
+            reranked_products, medical_reasoning, max_products=5  # Get extra for deduplication
+        )
+
+        # Step 3: Deduplicate by ingredient
+        selected_products = self.product_matcher.deduplicate_by_ingredient(
+            refined_products, max_products=3
         )
 
         # Format response using unified result's Bulgarian translations
@@ -1128,60 +1104,6 @@ class Pipeline:
 
         return any(kw in text_lower for kw in substitute_keywords)
 
-    def _retrieve_product_candidates(
-        self, medical_reasoning: MedicalReasoning, original_query: str = "", top_k: int = 10
-    ) -> list:
-        """
-        Stage 1: Fast vector similarity search to get top-K product candidates.
-
-        Uses ChromaDB with multilingual embeddings based on MedGemma's analysis.
-        Now uses hybrid search (semantic + keyword) with category awareness.
-
-        Also validates treatment_type against original query keywords to catch
-        MedGemma misclassifications (e.g., GI symptoms classified as cold/flu).
-        """
-        if self.product_store.collection.count() == 0:
-            logger.warning("Product store is empty. Run product_store.py --reload to load products.")
-            return []
-
-        search_query = self._build_search_query(medical_reasoning, original_query)
-
-        # Validate/correct treatment_type using original query keywords
-        treatment_type = medical_reasoning.treatment_type
-        if original_query:
-            query_treatment = self._extract_treatment_from_query(original_query)
-            if query_treatment:
-                # Override if MedGemma's treatment doesn't match query symptoms
-                # This catches cases like GI symptoms being classified as cold/flu
-                if treatment_type:
-                    # Check if there's a category mismatch
-                    gi_types = {"antidiarrheal", "digestive", "antacids", "laxatives"}
-                    cold_types = {"cough", "decongestants", "antipyretics"}
-
-                    # If query has GI symptoms but MedGemma returned cold/flu, override
-                    if query_treatment in gi_types and treatment_type.lower() in cold_types:
-                        logger.info(
-                            f"Overriding treatment_type from '{treatment_type}' to '{query_treatment}' based on query keywords"
-                        )
-                        treatment_type = query_treatment
-                    # Also override if no treatment type from MedGemma
-                else:
-                    treatment_type = query_treatment
-                    logger.debug(f"Using query-extracted treatment_type: {treatment_type}")
-
-        # Use category-aware hybrid search for better results
-        if treatment_type:
-            results = self.product_store.search_by_category(
-                query=search_query,
-                treatment_type=treatment_type,
-                n_results=top_k,
-            )
-        else:
-            # Fallback to hybrid search without category
-            results = self.product_store.hybrid_search(search_query, n_results=top_k)
-
-        return self._convert_to_products(results)
-
     def _build_search_query(self, medical_reasoning: MedicalReasoning, original_query: str = "") -> str:
         """Build search query from medical reasoning components.
 
@@ -1376,164 +1298,6 @@ class Pipeline:
             except Exception as e:
                 logger.warning("Failed to parse product", extra={"error": str(e)})
         return products
-
-    def _refine_product_selection(
-        self, user_query: str, medical_reasoning: MedicalReasoning, candidates: list, max_products: int = 3
-    ) -> list:
-        """Stage 2: Use LLM to pick the best products from candidates.
-
-        Applies pharmacological reranking BEFORE sending to LLM, so the
-        LLM sees ingredient-matched products at the top of the list.
-        """
-        if not candidates:
-            return []
-
-        # Pre-sort candidates: ingredient-matched first, homeopathy last
-        candidates = self._pharmacological_rerank(candidates, medical_reasoning)
-
-        # Build comprehensive reasoning string with user conditions
-        reasoning_parts = [
-            f"Symptoms: {', '.join(medical_reasoning.symptoms)}",
-            f"Likely cause: {medical_reasoning.likely_cause}",
-            f"Treatment type: {medical_reasoning.treatment_type}",
-        ]
-
-        # Add user conditions if present
-        if medical_reasoning.user_conditions:
-            conditions_str = ", ".join(medical_reasoning.user_conditions)
-            reasoning_parts.append(f"User conditions: {conditions_str}")
-            reasoning_parts.append(
-                "IMPORTANT: Products must be safe for the user's conditions. "
-                "Avoid recommending anything that could be contraindicated."
-            )
-
-        reasoning_str = ". ".join(reasoning_parts) + "."
-
-        selected = self.medical_model.refine_product_selection(
-            user_query=user_query,
-            medical_reasoning=reasoning_str,
-            candidate_products=candidates,
-            max_products=max_products + 2,  # Get extra for deduplication
-        )
-
-        # Deduplicate by active ingredient to ensure variety
-        deduplicated = self._deduplicate_by_ingredient(selected, max_products)
-
-        return deduplicated
-
-    def _pharmacological_rerank(self, candidates: list, medical_reasoning: MedicalReasoning) -> list:
-        """Rerank candidates so clinically relevant products appear first.
-
-        Priority (5 tiers):
-        1a. Simple products with a recommended active ingredient (e.g., pure paracetamol)
-        1b. Combo products with a recommended active ingredient (e.g., cold/flu + paracetamol)
-        2. Other non-homeopathic products
-        3. Homeopathic products (last)
-
-        This ensures the LLM sees the best candidates at the top of the list
-        (LLMs have positional bias toward earlier items).
-        """
-        from src.product_store import _is_homeopathic_product
-
-        treatment_type = (medical_reasoning.treatment_type or "").lower().strip()
-        recommended = self._get_recommended_ingredients(treatment_type) if treatment_type else []
-
-        tier1_simple = []  # Recommended ingredient, single-ingredient product
-        tier1_combo = []  # Recommended ingredient, combination product
-        tier2 = []  # Non-homeopathic, no matching ingredient
-        tier3 = []  # Homeopathic
-
-        for product in candidates:
-            comp = (getattr(product, "composition", "") or "").lower()
-            title = (getattr(product, "title", "") or "").lower()
-            desc = (getattr(product, "description", "") or "").lower()
-            combined = f"{comp} {title} {desc}"
-
-            if _is_homeopathic_product(combined):
-                tier3.append(product)
-                continue
-
-            ingredient = extract_product_ingredient(product)
-            if ingredient and ingredient in recommended:
-                if is_combination_product(product):
-                    tier1_combo.append(product)
-                else:
-                    tier1_simple.append(product)
-            else:
-                tier2.append(product)
-
-        reranked = tier1_simple + tier1_combo + tier2 + tier3
-        if tier1_simple or tier1_combo:
-            logger.info(
-                f"Pharmacological rerank: {len(tier1_simple)} simple, "
-                f"{len(tier1_combo)} combo, {len(tier2)} other, {len(tier3)} homeopathic"
-            )
-        return reranked
-
-    def _deduplicate_by_ingredient(self, products: list, max_products: int, max_per_ingredient: int = 1) -> list:
-        """
-        Deduplicate products by active ingredient to ensure recommendation variety.
-
-        Prevents recommending 3 versions of the same drug (e.g., 3 ibuprofen brands).
-
-        Args:
-            products: List of Product objects
-            max_products: Maximum products to return
-            max_per_ingredient: Maximum products per active ingredient
-
-        Returns:
-            Deduplicated list of products
-        """
-        if not products:
-            return []
-
-        seen_ingredients: dict[str, int] = {}
-        result = []
-        selected_keys: set[str] = set()
-
-        def product_key(product: Product) -> str:
-            """Stable key for de-dup across fill pass."""
-            sku = (getattr(product, "sku", None) or "").strip()
-            if sku:
-                return f"sku:{sku}"
-            pid = getattr(product, "id", None)
-            if pid:
-                return f"id:{pid}"
-            title = (getattr(product, "title", "") or "").strip().lower()
-            return f"title:{title}"
-
-        for product in products:
-            # Use fallback_to_title=True for deduplication grouping
-            ingredient = extract_product_ingredient(product, fallback_to_title=True)
-            count = seen_ingredients.get(ingredient, 0)
-
-            if count < max_per_ingredient:
-                result.append(product)
-                seen_ingredients[ingredient] = count + 1
-                selected_keys.add(product_key(product))
-                logger.debug(f"Selected '{product.title}' (ingredient: {ingredient})")
-
-                if len(result) >= max_products:
-                    break
-            else:
-                logger.debug(f"Skipped '{product.title}' (duplicate ingredient: {ingredient})")
-
-        # Fill pass: never return too few products just because ingredient diversity is low.
-        # Example: fever query may have many relevant paracetamol SKUs; we still want >=3 shown.
-        if len(result) < max_products:
-            for product in products:
-                if len(result) >= max_products:
-                    break
-                key = product_key(product)
-                if key in selected_keys:
-                    continue
-                result.append(product)
-                selected_keys.add(key)
-                logger.debug(
-                    f"Fill-pass selected '{product.title}' to reach minimum count ({len(result)}/{max_products})"
-                )
-
-        return result
 
     def _is_child_related_query(self, text: str) -> bool:
         """Check if query mentions children, babies, or age-related terms."""
