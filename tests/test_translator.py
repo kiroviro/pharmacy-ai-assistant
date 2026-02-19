@@ -293,7 +293,7 @@ class TestCaching:
     def test_cache_stats_initial(self, translator):
         """Test initial cache stats."""
         stats = translator.get_cache_stats()
-        assert stats["bg_to_en"]["size"] == 0
+        # BG→EN translation was removed in commit 6b5358a
         assert stats["en_to_bg"]["size"] == 0
 
     def test_clear_cache(self, translator):
@@ -301,7 +301,7 @@ class TestCaching:
         # This shouldn't raise any errors
         translator.clear_cache()
         stats = translator.get_cache_stats()
-        assert stats["bg_to_en"]["hits"] == 0
+        # BG→EN translation was removed in commit 6b5358a
         assert stats["en_to_bg"]["hits"] == 0
 
 

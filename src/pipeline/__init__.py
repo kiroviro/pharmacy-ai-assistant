@@ -8,19 +8,20 @@ It follows the Perplexity two-stage retrieval pattern:
 
 Modules:
 - constants: Keyword patterns for condition extraction and query detection
-- models: Product and PipelineResult dataclasses
-- conditions: User condition extraction and contraindication filtering
+- models: DEPRECATED - moved to src.common.models
+- conditions: DEPRECATED - moved to src.common.contraindications
 - product_ingredients: Ingredient recognition and product utilities
 - query_router: Query type detection (catalog, comparison, help)
 - orchestrator: Main Pipeline class
+
+Note: Contraindication functions and data models have been moved to src.common
+to prevent circular imports. Import from src.common instead:
+    from src.common import Product, PipelineResult, extract_user_conditions
 """
 
-# Re-export main classes for backward compatibility
-from src.pipeline.conditions import (
-    check_contraindication,
-    extract_user_conditions,
-    filter_by_contraindications,
-)
+# Re-export constants for backward compatibility
+# NOTE: Pipeline and get_pipeline are NOT imported here to avoid circular imports.
+# Import directly from orchestrator: from src.pipeline.orchestrator import Pipeline
 from src.pipeline.constants import (
     CATALOG_CATEGORIES,
     CATALOG_PATTERNS_BG,
@@ -31,20 +32,12 @@ from src.pipeline.constants import (
     SAFETY_KEYWORDS,
     USER_CONDITION_PATTERNS,
 )
-from src.pipeline.models import PipelineResult, Product
-from src.pipeline.orchestrator import Pipeline, get_pipeline
+from src.common.models import PipelineResult, Product
 
 __all__ = [
-    # Main classes
-    "Pipeline",
-    "get_pipeline",
-    # Models
+    # Models (import from src.common preferred)
     "Product",
     "PipelineResult",
-    # Condition functions
-    "extract_user_conditions",
-    "check_contraindication",
-    "filter_by_contraindications",
     # Constants
     "USER_CONDITION_PATTERNS",
     "CONTRAINDICATION_KEYWORDS",

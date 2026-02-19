@@ -13,7 +13,7 @@ from src.config import get_settings
 from src.logging_config import get_logger
 from src.medical_model import MedicalReasoning, get_medical_model
 from src.medical_terms_validator import get_medical_validator
-from src.pipeline.conditions import (
+from src.common.contraindications import (
     extract_user_conditions,
     filter_by_contraindications,
 )
@@ -25,7 +25,7 @@ from src.pipeline.constants import (
 )
 
 # Import from pipeline submodules
-from src.pipeline.models import PipelineResult, Product
+from src.common.models import PipelineResult, Product
 from src.pipeline.ingredient_analyzer import IngredientAnalyzer
 from src.pipeline.product_ingredients import (
     INGREDIENT_BG_NAMES,

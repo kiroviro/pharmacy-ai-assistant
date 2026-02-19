@@ -9,7 +9,7 @@ Extracted from orchestrator.py as part of Issue #1 (Phase 2).
 
 from src.logging_config import get_logger
 from src.pipeline.constants import CHILD_KEYWORDS, CHRONIC_DISEASE_KEYWORDS, SAFETY_KEYWORDS
-from src.pipeline.models import Product
+from src.common.models import Product
 from src.pipeline.product_ingredients import is_combination_product
 
 logger = get_logger("viapharma.safety_validator")

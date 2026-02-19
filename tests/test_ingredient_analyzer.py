@@ -7,7 +7,7 @@ Tests ingredient extraction, treatment recommendations, and section building.
 import pytest
 
 from src.pipeline.ingredient_analyzer import IngredientAnalyzer
-from src.pipeline.models import Product
+from src.common.models import Product
 
 
 # =============================================================================

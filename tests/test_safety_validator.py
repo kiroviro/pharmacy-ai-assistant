@@ -6,7 +6,7 @@ Tests safety validation, age-appropriate filtering, and disclaimer generation.
 
 import pytest
 
-from src.pipeline.models import Product
+from src.common.models import Product
 from src.pipeline.safety_validator import SafetyValidator
 
 

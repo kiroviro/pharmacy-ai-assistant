@@ -92,7 +92,17 @@
       "Bash(/Users/kiril/IdeaProjects/pharmacy-ai-assistant/docs/PERFORMANCE_ANALYSIS.md:*)",
       "Bash(/Users/kiril/IdeaProjects/pharmacy-ai-assistant/docs/PROGRESS_REPORT.md:*)",
       "Bash(cloc:*)",
-      "Bash(/tmp/SESSION_SUMMARY.md:*)"
+      "Bash(/tmp/SESSION_SUMMARY.md:*)",
+      "Bash(__NEW_LINE_8b250b53ea8b975c__ tail -15 /tmp/headache_test.txt)",
+      "Bash(__NEW_LINE_65962523cb7c6a09__ tail -30 /tmp/intent_test.txt)",
+      "Bash(/tmp/test_intents.sh:*)",
+      "Bash(__NEW_LINE_165925f4b19ed5aa__ chmod +x /tmp/test_intents.sh)",
+      "Bash(bash /tmp/test_intents.sh)",
+      "Bash(src/common/__init__.py:*)",
+      "Bash(__NEW_LINE_b7ae7e0f64450cf9__ tail -10 src/pipeline/models.py)",
+      "Bash(src/pipeline/models.py:*)",
+      "Bash(src/pipeline/conditions.py:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }

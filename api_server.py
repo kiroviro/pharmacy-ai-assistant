@@ -28,7 +28,7 @@ from src.logging_config import (
     log_medical_query,
     set_request_id,
 )
-from src.pipeline import get_pipeline
+from src.pipeline.orchestrator import get_pipeline
 
 # Load settings
 settings = get_settings()

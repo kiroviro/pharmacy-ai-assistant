@@ -12,7 +12,7 @@ Tests the two-stage product matching pipeline:
 import pytest
 
 from src.medical_model import MedicalReasoning
-from src.pipeline.models import Product
+from src.common.models import Product
 from src.pipeline.product_matcher import ProductMatcher
 from src.pipeline.symptom_mappings import extract_treatment_from_query
 

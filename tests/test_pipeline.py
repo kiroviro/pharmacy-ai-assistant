@@ -424,7 +424,7 @@ class TestUserConditionExtraction:
 
     def test_pregnancy_detection_bulgarian(self):
         """Should detect pregnancy mentions in Bulgarian."""
-        from src.pipeline import extract_user_conditions
+        from src.common.contraindications import extract_user_conditions
 
         conditions = extract_user_conditions("Бременна съм и ме боли главата")
         assert "pregnancy" in conditions
@@ -434,14 +434,14 @@ class TestUserConditionExtraction:
 
     def test_pregnancy_detection_english(self):
         """Should detect pregnancy mentions in English."""
-        from src.pipeline import extract_user_conditions
+        from src.common.contraindications import extract_user_conditions
 
         conditions = extract_user_conditions("I am pregnant and have a headache")
         assert "pregnancy" in conditions
 
     def test_breastfeeding_detection(self):
         """Should detect breastfeeding mentions."""
-        from src.pipeline import extract_user_conditions
+        from src.common.contraindications import extract_user_conditions
 
         conditions = extract_user_conditions("Кърмя и ме боли гърлото")
         assert "breastfeeding" in conditions
@@ -451,7 +451,7 @@ class TestUserConditionExtraction:
 
     def test_child_detection_bulgarian(self):
         """Should detect child/baby mentions in Bulgarian."""
-        from src.pipeline import extract_user_conditions
+        from src.common.contraindications import extract_user_conditions
 
         conditions = extract_user_conditions("Детето ми има температура")
         assert "child" in conditions
@@ -461,14 +461,14 @@ class TestUserConditionExtraction:
 
     def test_child_detection_with_age(self):
         """Should detect age patterns indicating children."""
-        from src.pipeline import extract_user_conditions
+        from src.common.contraindications import extract_user_conditions
 
         conditions = extract_user_conditions("Дете на 3 години има хрема")
         assert "child" in conditions
 
     def test_diabetes_detection(self):
         """Should detect diabetes mentions."""
-        from src.pipeline import extract_user_conditions
+        from src.common.contraindications import extract_user_conditions
 
         conditions = extract_user_conditions("Имам диабет, какво да взема за болка")
         assert "diabetes" in conditions
@@ -478,7 +478,7 @@ class TestUserConditionExtraction:
 
     def test_heart_condition_detection(self):
         """Should detect heart condition mentions."""
-        from src.pipeline import extract_user_conditions
+        from src.common.contraindications import extract_user_conditions
 
         conditions = extract_user_conditions("Имам проблеми със сърцето")
         assert "heart" in conditions
@@ -488,7 +488,7 @@ class TestUserConditionExtraction:
 
     def test_multiple_conditions(self):
         """Should detect multiple conditions in one query."""
-        from src.pipeline import extract_user_conditions
+        from src.common.contraindications import extract_user_conditions
 
         conditions = extract_user_conditions("Бременна съм и имам диабет")
         assert "pregnancy" in conditions
@@ -496,21 +496,21 @@ class TestUserConditionExtraction:
 
     def test_no_conditions(self):
         """Should return empty list when no conditions detected."""
-        from src.pipeline import extract_user_conditions
+        from src.common.contraindications import extract_user_conditions
 
         conditions = extract_user_conditions("Имам главоболие")
         assert conditions == []
 
     def test_allergy_detection(self):
         """Should detect allergy mentions."""
-        from src.pipeline import extract_user_conditions
+        from src.common.contraindications import extract_user_conditions
 
         conditions = extract_user_conditions("Имам алергия към аспирин")
         assert "allergy" in conditions
 
     def test_stomach_issues_detection(self):
         """Should detect stomach/GI condition mentions."""
-        from src.pipeline import extract_user_conditions
+        from src.common.contraindications import extract_user_conditions
 
         conditions = extract_user_conditions("Имам гастрит, какво да взема")
         assert "stomach" in conditions
@@ -524,7 +524,7 @@ class TestContraindicationCheck:
 
     def test_pregnancy_contraindication_match(self):
         """Should detect pregnancy contraindication in product."""
-        from src.pipeline import check_contraindication
+        from src.common.contraindications import check_contraindication
 
         contra_text = "Не се препоръчва по време на бременност и кърмене"
         has_contra, matching = check_contraindication(contra_text, ["pregnancy"])
@@ -534,7 +534,7 @@ class TestContraindicationCheck:
 
     def test_no_contraindication(self):
         """Should return False when no matching contraindication."""
-        from src.pipeline import check_contraindication
+        from src.common.contraindications import check_contraindication
 
         contra_text = "Може да се приема от възрастни"
         has_contra, matching = check_contraindication(contra_text, ["pregnancy"])
@@ -544,7 +544,7 @@ class TestContraindicationCheck:
 
     def test_empty_contraindications(self):
         """Should handle empty contraindications text."""
-        from src.pipeline import check_contraindication
+        from src.common.contraindications import check_contraindication
 
         has_contra, matching = check_contraindication("", ["pregnancy"])
         assert has_contra is False
@@ -554,14 +554,14 @@ class TestContraindicationCheck:
 
     def test_empty_conditions(self):
         """Should handle empty user conditions."""
-        from src.pipeline import check_contraindication
+        from src.common.contraindications import check_contraindication
 
         has_contra, matching = check_contraindication("Some text", [])
         assert has_contra is False
 
     def test_multiple_matching_conditions(self):
         """Should detect multiple matching contraindications."""
-        from src.pipeline import check_contraindication
+        from src.common.contraindications import check_contraindication
 
         contra_text = "Не се препоръчва при бременност, диабет или сърдечни заболявания"
         has_contra, matching = check_contraindication(contra_text, ["pregnancy", "diabetes", "heart"])
@@ -571,7 +571,7 @@ class TestContraindicationCheck:
 
     def test_child_age_contraindication(self):
         """Should detect child age restrictions."""
-        from src.pipeline import check_contraindication
+        from src.common.contraindications import check_contraindication
 
         contra_text = "Не давайте на деца под 12 години"
         has_contra, matching = check_contraindication(contra_text, ["child"])
@@ -594,7 +594,7 @@ class TestContraindicationFiltering:
 
     def test_filter_removes_contraindicated(self):
         """Should remove products with matching contraindications."""
-        from src.pipeline import filter_by_contraindications
+        from src.common.contraindications import filter_by_contraindications
 
         products = [
             self.MockProduct("1", "Product A", "Не се препоръчва при бременност"),
@@ -610,7 +610,7 @@ class TestContraindicationFiltering:
 
     def test_filter_no_conditions(self):
         """Should return all products when no conditions specified."""
-        from src.pipeline import filter_by_contraindications
+        from src.common.contraindications import filter_by_contraindications
 
         products = [
             self.MockProduct("1", "Product A", "Не се препоръчва при бременност"),
@@ -624,7 +624,7 @@ class TestContraindicationFiltering:
 
     def test_filter_empty_products(self):
         """Should handle empty product list."""
-        from src.pipeline import filter_by_contraindications
+        from src.common.contraindications import filter_by_contraindications
 
         safe, contraindicated = filter_by_contraindications([], ["pregnancy"])
 
@@ -633,7 +633,7 @@ class TestContraindicationFiltering:
 
     def test_contraindicated_includes_reason(self):
         """Contraindicated products should include matching conditions."""
-        from src.pipeline import filter_by_contraindications
+        from src.common.contraindications import filter_by_contraindications
 
         products = [
             self.MockProduct("1", "Product A", "Противопоказан при диабет и бременност"),

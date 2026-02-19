@@ -8,7 +8,7 @@ Tests using this contract will survive refactoring as long as the behavior contr
 from typing import Protocol
 
 from src.medical_model import MedicalReasoning
-from src.pipeline.models import Product
+from src.common.models import Product
 
 
 class ProductMatchingContract(Protocol):

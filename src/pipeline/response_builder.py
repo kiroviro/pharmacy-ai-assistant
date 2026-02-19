@@ -9,7 +9,7 @@ Extracted from orchestrator.py to improve code organization and testability.
 
 from src.logging_config import get_logger
 from src.medical_model import MedicalReasoning
-from src.pipeline.models import Product
+from src.common.models import Product
 from src.pipeline.product_ingredients import (
     INGREDIENT_BG_NAMES,
     build_ingredient_duplication_warning,

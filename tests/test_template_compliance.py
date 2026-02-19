@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.medical_model import MedicalReasoning
-from src.pipeline.models import Product
+from src.common.models import Product
 from src.pipeline.orchestrator import Pipeline
 from src.unified_processor import (
     ExtractionResult,

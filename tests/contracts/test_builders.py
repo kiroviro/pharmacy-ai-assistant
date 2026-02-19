@@ -5,7 +5,7 @@ These builders make it easy to create valid test data that satisfies contracts.
 """
 
 from src.medical_model import MedicalReasoning
-from src.pipeline.models import Product
+from src.common.models import Product
 
 
 class MedicalReasoningBuilder:

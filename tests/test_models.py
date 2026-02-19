@@ -14,13 +14,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.pipeline.models import Product
+from src.common.models import Product
 
 
 @pytest.fixture(autouse=True)
 def mock_settings():
     """Avoid config/settings dependency in unit tests."""
-    with patch("src.pipeline.models.get_settings") as m:
+    with patch("src.common.models.get_settings") as m:
         m.return_value.product_base_url = "https://viapharma.bg/products"
         yield m
 

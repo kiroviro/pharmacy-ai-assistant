@@ -10,7 +10,7 @@ Handles product search, retrieval, and recommendation logic:
 
 from src.logging_config import get_logger
 from src.medical_model import MedicalReasoning
-from src.pipeline.models import Product
+from src.common.models import Product
 
 logger = get_logger("viapharma.services.product_recommendation")
 
@@ -226,7 +226,7 @@ class ProductRecommendationService:
         if user_conditions:
             logger.info(f"Stage 4: Filtering by contraindications ({len(user_conditions)} conditions)")
             # Import here to avoid circular dependency
-            from src.pipeline.conditions import filter_by_contraindications
+            from src.common.contraindications import filter_by_contraindications
 
             candidate_products, contraindicated_products = filter_by_contraindications(
                 candidate_products, user_conditions

@@ -1,130 +1,24 @@
 """
 Data models for the ViaPharma pipeline.
 
-Contains Product and PipelineResult dataclasses.
+DEPRECATED: This module has been moved to src.common.models to prevent
+circular imports between pipeline and services layers.
+
+Please import from src.common.models instead:
+    from src.common.models import Product, PipelineResult
+
+This file re-exports for backward compatibility but will be removed in a future version.
 """
 
-from dataclasses import dataclass, field
+import warnings
 
-from src.config import get_settings
-from src.medical_model import MedicalReasoning
+warnings.warn(
+    "src.pipeline.models is deprecated. Import from src.common.models instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
+# Re-export from new location for backward compatibility
+from src.common.models import PipelineResult, Product
 
-@dataclass
-class Product:
-    """Represents a product from the catalogue."""
-
-    id: str
-    title: str  # Product name
-    brand: str = ""  # Марка
-    manufacturer: str = ""  # Производител
-    category: str = ""
-    tags: str = ""
-    url_handle: str = ""  # URL slug for product link
-
-    # Pricing
-    price_bgn: float = 0.0  # Price in лв
-    price_eur: float = 0.0  # Price in €
-
-    # Product details
-    description: str = ""  # Описание
-    composition: str = ""  # Състав
-    usage: str = ""  # Начин на употреба
-    contraindications: str = ""  # Противопоказания
-
-    # Additional info
-    barcode: str = ""
-    image_url: str = ""
-    target_audience: str = ""  # За кого
-    form: str = ""  # Форма
-    is_otc: bool = True
-
-    # Search relevance
-    score: float = 0.0
-
-    @property
-    def product_url(self) -> str:
-        """Get the full URL to the product page."""
-        if self.url_handle:
-            base_url = get_settings().product_base_url
-            return f"{base_url}/{self.url_handle}"
-        return ""
-
-    @classmethod
-    def from_chromadb(cls, data: dict) -> "Product":
-        """Create a Product from ChromaDB search result."""
-        return cls(
-            id=str(data.get("id", data.get("sku", ""))),
-            title=data.get("title", ""),
-            brand=data.get("brand", ""),
-            manufacturer=data.get("manufacturer", ""),
-            category=data.get("category", ""),
-            tags=data.get("tags", ""),
-            url_handle=data.get("url_handle", ""),
-            price_bgn=float(data.get("price_bgn", 0)),
-            price_eur=float(data.get("price_eur", 0)),
-            description=data.get("description", ""),
-            composition=data.get("composition", ""),
-            usage=data.get("usage", ""),
-            contraindications=data.get("contraindications", ""),
-            barcode=data.get("barcode", ""),
-            image_url=data.get("image_url", ""),
-            target_audience=data.get("target_audience", ""),
-            form=data.get("form", ""),
-            is_otc=data.get("is_otc", True),
-            score=float(data.get("score", 0)),
-        )
-
-    def to_display_string(self) -> str:
-        """Format product for display in chat — title (## heading), image, price, desc, buy link."""
-        lines = []
-
-        # Title first as ## heading (matches other section headings like "Подходящи продукти")
-        if self.product_url:
-            lines.append(f"## [{self.title}]({self.product_url})")
-        else:
-            lines.append(f"## {self.title}")
-
-        # Product image second (Markdown — universally supported, HTML <img> often not rendered)
-        if self.image_url and self.image_url.strip():
-            lines.append(f"![{self.title}]({self.image_url})")
-
-        # Price and brand
-        price_line = f"💰 {self.price_bgn:.2f} лв ({self.price_eur:.2f} €)"
-        if self.brand:
-            price_line += f"  •  🏷️ {self.brand}"
-        lines.append(price_line)
-
-        # Short description (max 150 chars — keep product cards compact)
-        if self.description:
-            desc = self.description[:150].strip()
-            if len(self.description) > 150:
-                last_period = desc.rfind(".")
-                if last_period > 80:
-                    desc = desc[: last_period + 1]
-                else:
-                    desc = desc.rsplit(" ", 1)[0] + "..."
-            lines.append(f"\n{desc}")
-
-        # Prominent buy link — separator before, after, and extra below before ✔ Съдържа
-        if self.product_url:
-            lines.append(f"\n\n---\n🛒 **[Виж продукта / Купи]({self.product_url})**\n---\n---")
-
-        return "\n".join(lines)
-
-
-@dataclass
-class PipelineResult:
-    """Result from the pipeline processing."""
-
-    response: str
-    is_medical: bool = True
-    is_red_flag: bool = False
-    original_text: str = ""
-    translated_text: str = ""
-    medical_reasoning: MedicalReasoning | None = None
-    candidate_products: list = field(default_factory=list)  # Stage 1: top-K from vector DB
-    selected_products: list = field(default_factory=list)  # Stage 2: LLM-refined selection
-    # Contraindication filtering results
-    user_conditions: list = field(default_factory=list)  # Detected user conditions (pregnancy, diabetes, etc.)
-    contraindicated_products: list = field(default_factory=list)  # Products filtered due to contraindications
+__all__ = ["Product", "PipelineResult"]

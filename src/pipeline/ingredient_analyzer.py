@@ -8,7 +8,7 @@ Extracted from orchestrator.py as part of Issue #2 (Phase 5).
 """
 
 from src.logging_config import get_logger
-from src.pipeline.models import Product
+from src.common.models import Product
 from src.pipeline.product_ingredients import (
     INGREDIENT_BG_NAMES,
     extract_all_product_ingredients,
