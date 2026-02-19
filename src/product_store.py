@@ -803,16 +803,44 @@ class ProductStore:
         return await asyncio.to_thread(self.search_by_category, query, treatment_type, n_results)
 
 
-# Global store instance
+# Global store instance (singleton for production)
 _store: ProductStore | None = None
 
 
-def get_product_store() -> ProductStore:
-    """Get or create the global product store instance."""
+def get_product_store(use_singleton: bool = True) -> ProductStore:
+    """
+    Get or create a product store instance with optional singleton bypass.
+
+    Args:
+        use_singleton: If True (default), returns cached singleton instance.
+                       If False, creates a new instance (useful for testing).
+
+    Returns:
+        ProductStore instance
+
+    Examples:
+        # Production: Use singleton
+        store = get_product_store()
+
+        # Testing: Create fresh instance with mock data
+        store = get_product_store(use_singleton=False)
+    """
     global _store
+
+    # If use_singleton=False, create new instance
+    if not use_singleton:
+        return ProductStore()
+
+    # Otherwise use singleton pattern
     if _store is None:
         _store = ProductStore()
     return _store
+
+
+def reset_product_store() -> None:
+    """Reset the global product store singleton (useful for testing)."""
+    global _store
+    _store = None
 
 
 if __name__ == "__main__":

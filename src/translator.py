@@ -722,13 +722,41 @@ class Translator:
         return {"en_to_bg": self._cache_en_to_bg.stats}
 
 
-# Global translator instance (lazy loaded)
+# Global translator instance (lazy loaded, singleton for production)
 _translator: Translator | None = None
 
 
-def get_translator() -> Translator:
-    """Get or create the global translator instance."""
+def get_translator(use_singleton: bool = True) -> Translator:
+    """
+    Get or create a translator instance with optional singleton bypass.
+
+    Args:
+        use_singleton: If True (default), returns cached singleton instance.
+                       If False, creates a new instance (useful for testing).
+
+    Returns:
+        Translator instance
+
+    Examples:
+        # Production: Use singleton
+        translator = get_translator()
+
+        # Testing: Create fresh instance
+        translator = get_translator(use_singleton=False)
+    """
     global _translator
+
+    # If use_singleton=False, create new instance
+    if not use_singleton:
+        return Translator()
+
+    # Otherwise use singleton pattern
     if _translator is None:
         _translator = Translator()
     return _translator
+
+
+def reset_translator() -> None:
+    """Reset the global translator singleton (useful for testing)."""
+    global _translator
+    _translator = None

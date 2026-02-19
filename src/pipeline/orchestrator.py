@@ -1153,13 +1153,65 @@ class Pipeline:
             return texts
 
 
-# Global pipeline instance
+# Global pipeline instance (singleton for production use)
 _pipeline: Pipeline | None = None
 
 
-def get_pipeline() -> Pipeline:
-    """Get or create the pipeline instance."""
+def get_pipeline(
+    product_store=None,
+    medical_model=None,
+    translator=None,
+    unified_processor=None,
+    use_singleton: bool = True,
+) -> Pipeline:
+    """
+    Get or create a pipeline instance with optional dependency injection.
+
+    Args:
+        product_store: Optional ProductStore instance (loads default if None)
+        medical_model: Optional MedicalModel instance (loads default if None)
+        translator: Optional Translator instance (loads default if None)
+        unified_processor: Optional UnifiedProcessor instance (loads default if None)
+        use_singleton: If True (default), returns cached singleton instance when
+                       no dependencies are provided. If False or dependencies are
+                       provided, creates a new instance.
+
+    Returns:
+        Pipeline instance
+
+    Examples:
+        # Production: Use singleton
+        pipeline = get_pipeline()
+
+        # Testing: Inject mocks
+        pipeline = get_pipeline(
+            product_store=mock_store,
+            medical_model=mock_model,
+            use_singleton=False
+        )
+    """
     global _pipeline
+
+    # If dependencies are provided, always create new instance (bypass singleton)
+    if any([product_store, medical_model, translator, unified_processor]):
+        return Pipeline(
+            product_store=product_store,
+            medical_model=medical_model,
+            translator=translator,
+            unified_processor=unified_processor,
+        )
+
+    # If use_singleton=False, create new instance
+    if not use_singleton:
+        return Pipeline()
+
+    # Otherwise use singleton pattern
     if _pipeline is None:
         _pipeline = Pipeline()
     return _pipeline
+
+
+def reset_pipeline() -> None:
+    """Reset the global pipeline singleton (useful for testing)."""
+    global _pipeline
+    _pipeline = None

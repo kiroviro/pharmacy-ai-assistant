@@ -476,11 +476,48 @@ class UnifiedProcessor:
 _unified_processor: UnifiedProcessor | None = None
 
 
-def get_unified_processor() -> UnifiedProcessor:
-    """Get or create the global unified processor instance."""
+def get_unified_processor(
+    model_path: str | None = None,
+    cache_size: int | None = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    use_singleton: bool = True,
+) -> UnifiedProcessor:
+    """
+    Get or create a unified processor instance with optional dependency injection.
+
+    Args:
+        model_path: Optional path to model (uses settings default if None)
+        cache_size: Optional cache size (uses settings default if None)
+        temperature: Optional temperature (uses settings default if None)
+        max_tokens: Optional max tokens (uses settings default if None)
+        use_singleton: If True (default), returns cached singleton when no params provided.
+                       If False or params provided, creates new instance.
+
+    Returns:
+        UnifiedProcessor instance
+
+    Examples:
+        # Production: Use singleton
+        processor = get_unified_processor()
+
+        # Testing: Create fresh instance
+        processor = get_unified_processor(use_singleton=False)
+    """
     global _unified_processor
+    settings = get_settings()
+
+    # If any parameters provided, create new instance (bypass singleton)
+    if any(p is not None for p in [model_path, cache_size, temperature, max_tokens]) or not use_singleton:
+        return UnifiedProcessor(
+            model_path=model_path or settings.medgemma_model_path,
+            cache_size=cache_size,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    # Otherwise use singleton pattern
     if _unified_processor is None:
-        settings = get_settings()
         _unified_processor = UnifiedProcessor(
             model_path=settings.medgemma_model_path,
             cache_size=getattr(settings, "unified_processor_cache_size", 500),
@@ -488,3 +525,9 @@ def get_unified_processor() -> UnifiedProcessor:
             max_tokens=getattr(settings, "unified_processor_max_tokens", 800),
         )
     return _unified_processor
+
+
+def reset_unified_processor() -> None:
+    """Reset the global unified processor singleton (useful for testing)."""
+    global _unified_processor
+    _unified_processor = None

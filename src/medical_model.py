@@ -1061,16 +1061,55 @@ Replace the numbers with your chosen product numbers. Output nothing else.
 _medical_model: MedicalModel | None = None
 
 
-def get_medical_model() -> MedicalModel:
-    """Get or create the global medical model instance."""
+def get_medical_model(
+    model_path: str | None = None,
+    cache_size: int | None = None,
+    use_bulgarian: bool | None = None,
+    use_singleton: bool = True,
+) -> MedicalModel:
+    """
+    Get or create a medical model instance with optional dependency injection.
+
+    Args:
+        model_path: Optional path to MedGemma model (uses settings default if None)
+        cache_size: Optional cache size (uses default if None)
+        use_bulgarian: Optional flag for Bulgarian generation (uses settings if None)
+        use_singleton: If True (default), returns cached singleton when no params provided.
+                       If False or params provided, creates new instance.
+
+    Returns:
+        MedicalModel instance
+
+    Examples:
+        # Production: Use singleton
+        model = get_medical_model()
+
+        # Testing: Create fresh instance
+        model = get_medical_model(use_singleton=False)
+
+        # Testing: Inject specific config
+        model = get_medical_model(model_path="/custom/path", use_singleton=False)
+    """
     global _medical_model
+    from src.config import get_settings
+
+    settings = get_settings()
+
+    # If any parameters provided, create new instance (bypass singleton)
+    if any(p is not None for p in [model_path, cache_size, use_bulgarian]) or not use_singleton:
+        model_path = model_path or os.environ.get("MEDGEMMA_MODEL_PATH", settings.medgemma_model_path)
+        use_bulgarian = use_bulgarian if use_bulgarian is not None else settings.generate_bulgarian_directly
+        return MedicalModel(model_path=model_path, cache_size=cache_size or REASONING_CACHE_SIZE, use_bulgarian=use_bulgarian)
+
+    # Otherwise use singleton pattern
     if _medical_model is None:
-        from src.config import get_settings
-
-        settings = get_settings()
-
         model_path = os.environ.get("MEDGEMMA_MODEL_PATH", settings.medgemma_model_path)
         use_bulgarian = settings.generate_bulgarian_directly
-
         _medical_model = MedicalModel(model_path=model_path, use_bulgarian=use_bulgarian)
     return _medical_model
+
+
+def reset_medical_model() -> None:
+    """Reset the global medical model singleton (useful for testing)."""
+    global _medical_model
+    _medical_model = None
