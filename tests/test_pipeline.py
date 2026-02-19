@@ -53,6 +53,10 @@ class MockTranslator:
     def translate_to_bulgarian(self, text: str) -> str:
         return f"[BG] {text}"
 
+    def translate_symptom(self, symptom: str) -> str:
+        """Translate a symptom to Bulgarian."""
+        return f"[BG] {symptom}"
+
     def load_all(self):
         pass
 
@@ -200,7 +204,17 @@ def mock_pipeline():
     # Create mock unified processor (UnifiedProcessor is complex, so we mock it)
     mock_unified_processor = Mock()
     mock_unified_processor.load = Mock()
-    mock_unified_processor.process = Mock(return_value=_create_mock_unified_result())
+
+    # Make process() smarter - detect non-medical queries
+    def mock_process(query: str):
+        query_lower = query.lower()
+        # Detect non-medical queries
+        non_medical_keywords = ["времето", "weather", "футбол", "football", "политика"]
+        is_medical = not any(kw in query_lower for kw in non_medical_keywords)
+
+        return _create_mock_unified_result(is_medical=is_medical)
+
+    mock_unified_processor.process = mock_process
 
     # Create mock medical validator
     mock_validator = Mock(spec=MedicalTermsValidator)
@@ -224,16 +238,16 @@ def mock_pipeline():
     return pipeline
 
 
-def _create_mock_unified_result():
+def _create_mock_unified_result(is_medical=True):
     """Helper to create a mock unified processor result."""
     # Use a simple Mock object instead of trying to match the complex dataclass structure
     result = Mock()
 
     # Intent
     result.intent = Mock()
-    result.intent.is_pharmacy_related = True
-    result.intent.confidence = 0.9
-    result.intent.rejection_reason = ""
+    result.intent.is_pharmacy_related = is_medical
+    result.intent.confidence = 0.9 if is_medical else 0.1
+    result.intent.rejection_reason = "" if is_medical else "Not a medical query"
 
     # Extraction
     result.extraction = Mock()

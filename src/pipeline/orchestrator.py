@@ -781,7 +781,7 @@ class Pipeline:
 
         response = "\n".join(parts)
         # Final garbage cleanup pass (Issue #17)
-        return self._final_garbage_cleanup(response)
+        return self.response_builder._final_garbage_cleanup(response)
 
     def _collect_triage_items_unified(self, reasoning, medical_reasoning, products, original_query) -> list[str]:
         """Collect triage bullet points for the unified path."""
@@ -2089,7 +2089,7 @@ class Pipeline:
 
         response = "\n".join(parts)
         # Final garbage cleanup pass (Issue #17)
-        return self._final_garbage_cleanup(response)
+        return self.response_builder._final_garbage_cleanup(response)
 
     def _collect_triage_items_legacy(self, medical_reasoning, products, original_query, get_translated) -> list[str]:
         """Collect triage bullet points for the legacy path."""
