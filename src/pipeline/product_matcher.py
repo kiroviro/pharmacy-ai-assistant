@@ -431,7 +431,7 @@ class ProductMatcher:
         products = []
         for item in results:
             try:
-                product = Product(**item) if isinstance(item, dict) else item
+                product = Product.from_chromadb(item) if isinstance(item, dict) else item
                 products.append(product)
             except Exception as e:
                 logger.warning(f"Failed to convert result to Product: {e}")
