@@ -3,12 +3,14 @@ Integration tests for the Pipeline orchestration.
 
 Tests the pipeline flow with mocked components to verify correct orchestration
 without loading the actual ML models.
+
+Uses dependency injection instead of patching for cleaner, more maintainable tests.
 """
 
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -180,25 +182,88 @@ class MockSafetyLayer:
 
 @pytest.fixture
 def mock_pipeline():
-    """Create a pipeline with all components mocked."""
+    """
+    Create a pipeline with all components mocked using dependency injection.
+
+    This is cleaner than patching - explicitly inject test doubles.
+    """
+    from src.pipeline.orchestrator import Pipeline
+    from src.pipeline.response_builder import ResponseBuilder
+    from src.medical_terms_validator import MedicalTermsValidator
+
+    # Create mock components
     mock_translator = MockTranslator()
-    mock_model = MockMedicalModel()
-    mock_store = MockProductStore()
-    mock_safety = MockSafetyLayer()
+    mock_medical_model = MockMedicalModel()
+    mock_product_store = MockProductStore()
+    mock_safety_layer = MockSafetyLayer()
 
-    with patch("src.translator.get_translator", return_value=mock_translator):
-        with patch("src.medical_model.get_medical_model", return_value=mock_model):
-            with patch("src.product_store.get_product_store", return_value=mock_store):
-                with patch("src.safety.get_safety_layer", return_value=mock_safety):
-                    # Clear the global pipeline instance
-                    import src.pipeline as pipeline_module
+    # Create mock unified processor (UnifiedProcessor is complex, so we mock it)
+    mock_unified_processor = Mock()
+    mock_unified_processor.load = Mock()
+    mock_unified_processor.process = Mock(return_value=_create_mock_unified_result())
 
-                    pipeline_module._pipeline = None
+    # Create mock medical validator
+    mock_validator = Mock(spec=MedicalTermsValidator)
+    mock_validator.validate_and_correct = Mock(return_value=("validated text", []))
 
-                    from src.pipeline import Pipeline
+    # Create real ResponseBuilder (it's simple and doesn't need heavy dependencies)
+    response_builder = ResponseBuilder()
 
-                    pipeline = Pipeline()
-                    yield pipeline
+    # Inject dependencies directly - no patching needed!
+    pipeline = Pipeline(
+        lazy_load=False,  # Load immediately for testing
+        safety_layer=mock_safety_layer,
+        medical_validator=mock_validator,
+        response_builder=response_builder,
+        product_store=mock_product_store,
+        medical_model=mock_medical_model,
+        translator=mock_translator,
+        unified_processor=mock_unified_processor,
+    )
+
+    return pipeline
+
+
+def _create_mock_unified_result():
+    """Helper to create a mock unified processor result."""
+    # Use a simple Mock object instead of trying to match the complex dataclass structure
+    result = Mock()
+
+    # Intent
+    result.intent = Mock()
+    result.intent.is_pharmacy_related = True
+    result.intent.confidence = 0.9
+    result.intent.rejection_reason = ""
+
+    # Extraction
+    result.extraction = Mock()
+    result.extraction.symptoms = ["главоболие"]
+    result.extraction.user_conditions = []
+    result.extraction.treatment_query = ""
+
+    # Reasoning
+    result.reasoning = Mock()
+    result.reasoning.treatment_category = "analgesics"
+    result.reasoning.recommended_products = ["paracetamol", "ibuprofen"]
+    result.reasoning.explanation_bg = "Можете да вземете обезболяващо."
+    result.reasoning.explanation = ""
+    result.reasoning.self_care_tips_bg = []
+    result.reasoning.self_care_tips = []
+    result.reasoning.warnings_bg = []
+    result.reasoning.warnings = []
+
+    # Safety
+    result.safety = Mock()
+    result.safety.level = "safe"
+    result.safety.severity_score = 0.1
+    result.safety.detected_flags = []
+
+    # Metadata
+    result.processing_time_ms = 100.0
+    result.from_cache = False
+    result.raw_response = ""
+
+    return result
 
 
 class TestPipelineInitialization:

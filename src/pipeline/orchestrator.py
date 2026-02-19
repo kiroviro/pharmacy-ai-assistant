@@ -63,31 +63,56 @@ class Pipeline:
     - Stage 2: LLM refinement for best matches
     """
 
-    def __init__(self, lazy_load: bool = True):
+    def __init__(
+        self,
+        lazy_load: bool = True,
+        # Dependency injection (backward compatible - defaults to singletons)
+        safety_layer=None,
+        medical_validator=None,
+        response_builder=None,
+        product_store=None,
+        medical_model=None,
+        translator=None,
+        unified_processor=None,
+        settings=None,
+    ):
         """
-        Initialize the pipeline.
+        Initialize the pipeline with dependency injection.
 
         Args:
             lazy_load: If True, models are loaded on first use. If False, load immediately.
+            safety_layer: Optional SafetyLayer instance (defaults to singleton)
+            medical_validator: Optional MedicalValidator instance (defaults to singleton)
+            response_builder: Optional ResponseBuilder instance (defaults to new instance)
+            product_store: Optional ProductStore instance (defaults to singleton)
+            medical_model: Optional MedicalModel instance (defaults to singleton)
+            translator: Optional Translator instance (defaults to singleton)
+            unified_processor: Optional UnifiedProcessor instance (defaults to singleton)
+            settings: Optional Settings instance (defaults to singleton)
         """
-        # Initialize safety layer and medical validator
-        self.safety_layer = get_safety_layer()
-        self.medical_validator = get_medical_validator()
+        # Initialize dependencies (use provided or fall back to singletons)
+        self.safety_layer = safety_layer or get_safety_layer()
+        self.medical_validator = medical_validator or get_medical_validator()
+        self.response_builder = response_builder or ResponseBuilder()
 
-        # Response builder (handles formatting and templates)
-        self.response_builder = ResponseBuilder()
+        # Product store (can be provided or lazy loaded)
+        self._product_store = product_store
+        self._product_store_provided = product_store is not None
 
-        # Product store (ChromaDB)
-        self._product_store = None
+        # Models (can be provided or lazy loaded)
+        self._medical_model = medical_model
+        self._medical_model_provided = medical_model is not None
 
-        # Models (lazy loaded by default for faster startup)
-        self._medical_model = None
-        self._translator = None
-        self._unified_processor = None
+        self._translator = translator
+        self._translator_provided = translator is not None
+
+        self._unified_processor = unified_processor
+        self._unified_processor_provided = unified_processor is not None
+
         self._lazy_load = lazy_load
 
         # Feature flags
-        settings = get_settings()
+        settings = settings or get_settings()
         self._generate_bulgarian_directly = getattr(settings, "generate_bulgarian_directly", False)
 
         if not lazy_load:
@@ -114,7 +139,8 @@ class Pipeline:
         """Get the medical model, loading lazily if necessary."""
         if self._medical_model is None:
             self._medical_model = get_medical_model()
-            self._medical_model.load()
+            if not self._medical_model_provided:  # Only call load() if we created it
+                self._medical_model.load()
         return self._medical_model
 
     @property
@@ -122,13 +148,15 @@ class Pipeline:
         """Get the unified processor, loading lazily if necessary."""
         if self._unified_processor is None:
             self._unified_processor = get_unified_processor()
-            self._unified_processor.load()
+            if not self._unified_processor_provided:  # Only call load() if we created it
+                self._unified_processor.load()
         return self._unified_processor
 
     def _load_unified_processor(self):
         """Load the unified processor."""
         if self._unified_processor is None:
             self._unified_processor = get_unified_processor()
+        if not self._unified_processor_provided:
             self._unified_processor.load()
 
     def _load_product_store(self):
@@ -140,12 +168,14 @@ class Pipeline:
         """Load the translator models."""
         if self._translator is None:
             self._translator = get_translator()
+        if not self._translator_provided:
             self._translator.load_all()
 
     def _load_medical_model(self):
         """Load the MedGemma model."""
         if self._medical_model is None:
             self._medical_model = get_medical_model()
+        if not self._medical_model_provided:
             self._medical_model.load()
 
     # =========================================================================
