@@ -26,6 +26,7 @@ from src.pipeline.constants import (
 
 # Import from pipeline submodules
 from src.pipeline.models import PipelineResult, Product
+from src.pipeline.ingredient_analyzer import IngredientAnalyzer
 from src.pipeline.product_ingredients import (
     INGREDIENT_BG_NAMES,
     INGREDIENT_PATTERNS_GLOBAL,
@@ -34,7 +35,6 @@ from src.pipeline.product_ingredients import (
     extract_composition_summary,
     extract_contraindication_summary,
     extract_product_ingredient,
-    get_recommended_ingredients,
     is_combination_product,
 )
 from src.pipeline.product_matcher import ProductMatcher
@@ -79,6 +79,7 @@ class Pipeline:
         settings=None,
         product_matcher=None,
         safety_validator=None,
+        ingredient_analyzer=None,
     ):
         """
         Initialize the pipeline with dependency injection.
@@ -95,6 +96,7 @@ class Pipeline:
             settings: Optional Settings instance (defaults to singleton)
             product_matcher: Optional ProductMatcher instance (defaults to new instance)
             safety_validator: Optional SafetyValidator instance (defaults to new instance)
+            ingredient_analyzer: Optional IngredientAnalyzer instance (defaults to new instance)
         """
         # Initialize dependencies (use provided or fall back to singletons)
         self.safety_layer = safety_layer or get_safety_layer()
@@ -129,6 +131,9 @@ class Pipeline:
 
         # Safety validator (handles age filtering, severity filtering, disclaimers)
         self.safety_validator = safety_validator or SafetyValidator()
+
+        # Ingredient analyzer (handles ingredient extraction and display)
+        self.ingredient_analyzer = ingredient_analyzer or IngredientAnalyzer()
 
         if not lazy_load:
             self._load_translator()
@@ -657,7 +662,7 @@ class Pipeline:
         # ALWAYS show this section when products are present (Issue #18)
         parts.append("---")
         treatment_type = reasoning.treatment_category or ""
-        recommended_ingredients = self._get_recommended_ingredients(treatment_type)
+        recommended_ingredients = self.ingredient_analyzer.get_recommended_ingredients(treatment_type)
         # Fallback: derive from products when LLM omits (P3 improvement)
         if not recommended_ingredients and products:
             seen = set()
@@ -674,7 +679,7 @@ class Pipeline:
                 ingredient_names_bg = [INGREDIENT_BG_NAMES.get(ing, ing) for ing in recommended_ingredients]
                 for name_bg in ingredient_names_bg:
                     parts.append(f"• **{name_bg}**")
-                action_text = self._get_treatment_action_text(treatment_type)
+                action_text = self.ingredient_analyzer.get_treatment_action_text(treatment_type)
                 if action_text:
                     parts.append(f"\n{action_text}")
             else:
@@ -1742,7 +1747,7 @@ class Pipeline:
         # ALWAYS show this section when products are present (Issue #18)
         parts.append("---")
         treatment_type = medical_reasoning.treatment_type or ""
-        recommended_ingredients = self._get_recommended_ingredients(treatment_type)
+        recommended_ingredients = self.ingredient_analyzer.get_recommended_ingredients(treatment_type)
         # Fallback: derive from products when LLM omits
         if not recommended_ingredients and products:
             seen = set()
@@ -1759,7 +1764,7 @@ class Pipeline:
                 ingredient_names_bg = [INGREDIENT_BG_NAMES.get(ing, ing) for ing in recommended_ingredients]
                 for name_bg in ingredient_names_bg:
                     parts.append(f"• **{name_bg}**")
-                action_text = self._get_treatment_action_text(treatment_type)
+                action_text = self.ingredient_analyzer.get_treatment_action_text(treatment_type)
                 if action_text:
                     parts.append(f"\n{action_text}")
             else:
@@ -1904,35 +1909,6 @@ class Pipeline:
                     return translated.capitalize()
 
         return "вашите симптоми"
-
-    def _get_recommended_ingredients(self, treatment_type: str) -> list[str]:
-        """Get recommended active ingredients for a treatment type."""
-        return get_recommended_ingredients(treatment_type)
-
-    # Brief action descriptions per treatment type (what the ingredients DO)
-    _TREATMENT_ACTION_TEXTS = {
-        "analgesics": "Те блокират болковите сигнали и намаляват възпалението.",
-        "antipyretics": "Те намаляват температурата и облекчават дискомфорта.",
-        "cough": "Потиска кашличния рефлекс за спокоен сън.",
-        "decongestants": "Намаляват отока на носната лигавица и улесняват дишането.",
-        "antihistamines": "Блокират хистамина и намаляват алергичните реакции.",
-        "antacids": "Намаляват стомашната киселинност и облекчават киселините.",
-        "digestive": "Подобряват храносмилането и облекчават стомашния дискомфорт.",
-        "antidiarrheal": "Забавят чревната перисталтика и намаляват загубата на течности.",
-        "topical": "Действат локално за облекчаване на болката и възпалението.",
-    }
-
-    def _get_treatment_action_text(self, treatment_type: str) -> str:
-        """Get a brief explanation of what the recommended ingredients do."""
-        if not treatment_type:
-            return ""
-        tt = treatment_type.lower().strip()
-        if tt in self._TREATMENT_ACTION_TEXTS:
-            return self._TREATMENT_ACTION_TEXTS[tt]
-        for key, text in self._TREATMENT_ACTION_TEXTS.items():
-            if key in tt or tt in key:
-                return text
-        return ""
 
     def _collect_texts_for_translation(self, medical_reasoning: MedicalReasoning) -> dict[str, str]:
         """Collect all texts from MedicalReasoning that need translation."""
