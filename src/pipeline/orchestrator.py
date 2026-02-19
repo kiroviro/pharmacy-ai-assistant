@@ -89,6 +89,10 @@ class Pipeline:
         safety_validator=None,
         ingredient_analyzer=None,
         text_validator=None,
+        # Service layer (Phase 5)
+        medical_reasoning_service=None,
+        product_recommendation_service=None,
+        safety_check_service=None,
     ):
         """
         Initialize the pipeline with dependency injection.
@@ -147,6 +151,25 @@ class Pipeline:
 
         # Text validator (handles garbage detection, Bulgarian ratio, English leaks)
         self.text_validator = text_validator or get_text_validator(translator=self.translator)
+
+        # Service layer (Phase 5) - orchestrates business logic
+        self.medical_reasoning_service = medical_reasoning_service or MedicalReasoningService(
+            medical_model=self.medical_model,
+            user_condition_patterns=USER_CONDITION_PATTERNS
+        )
+
+        self.product_recommendation_service = product_recommendation_service or ProductRecommendationService(
+            product_matcher=self.product_matcher,
+            safety_validator=self.safety_validator,
+            safety_layer=self.safety_layer,
+            medical_reasoning_service=self.medical_reasoning_service
+        )
+
+        self.safety_check_service = safety_check_service or SafetyCheckService(
+            safety_layer=self.safety_layer,
+            safety_validator=self.safety_validator,
+            medical_reasoning_service=self.medical_reasoning_service
+        )
 
         if not lazy_load:
             self._load_translator()
@@ -495,7 +518,7 @@ class Pipeline:
             )
 
         # Build MedicalReasoning from unified result (for compatibility)
-        medical_reasoning = self._build_medical_reasoning_from_unified(llm_result)
+        medical_reasoning = self.medical_reasoning_service.build_medical_reasoning_from_unified(llm_result)
 
         # Product retrieval (uses vector DB + age filtering)
         candidate_products = self.product_matcher.retrieve_candidates(medical_reasoning, user_input)
@@ -646,7 +669,7 @@ class Pipeline:
             parts.append("*Не можах да анализирам запитването.*")
             return "\n".join(parts)
 
-        medical_reasoning = self._build_medical_reasoning_from_unified(llm_result)
+        medical_reasoning = self.medical_reasoning_service.build_medical_reasoning_from_unified(llm_result)
 
         # ── SECTION 1: Symptom info header ──────────────────────────────
         symptom_label = self._build_symptom_header(llm_result.extraction.symptoms, original_query)
@@ -905,7 +928,7 @@ class Pipeline:
             return self.medical_model.get_medical_reasoning(text)
         except Exception as e:
             logger.error(f"MedGemma inference failed: {e}", exc_info=True)
-            return self._create_fallback_reasoning(text)
+            return self.medical_reasoning_service.create_fallback_reasoning(text)
 
     def _create_fallback_reasoning(self, text: str) -> MedicalReasoning:
         """
@@ -981,19 +1004,19 @@ class Pipeline:
                 return False, ""  # Continue to product search
 
             # For pregnancy-related queries, DON'T block - continue with warnings
-            if self._is_pregnancy_related_query(original_query):
+            if self.safety_check_service.is_pregnancy_query(original_query):
                 logger.info("Pregnancy query with see_doctor=True - proceeding with warnings")
                 return False, ""  # Continue to product search
 
             # For drug combination/interaction queries, DON'T block - these are valid OTC questions
             # (e.g., "Can I take ibuprofen with paracetamol?")
-            if self._is_drug_combination_query(original_query):
+            if self.safety_check_service.is_drug_combination_query(original_query):
                 logger.info("Drug combination query with see_doctor=True - proceeding with info")
                 return False, ""  # Continue to provide helpful information
 
             # For substitute/alternative queries, DON'T block - search for OTC alternatives
             # (e.g., "Generic substitute for Aulin", "Алтернатива на нимезулид")
-            if self._is_substitute_query(original_query):
+            if self.safety_check_service.is_substitute_query(original_query):
                 logger.info("Substitute query with see_doctor=True - proceeding to find OTC alternatives")
                 return False, ""  # Continue to find OTC alternatives
 
@@ -1154,8 +1177,8 @@ class Pipeline:
             parts.extend(useful_symptoms)
 
         # For drug combo queries, extract actual drug names from original query
-        if original_query and self._is_drug_combination_query(original_query):
-            drug_names = self._extract_drug_names(original_query)
+        if original_query and self.medical_reasoning_service.is_drug_combination_query(original_query):
+            drug_names = self.product_recommendation_service.extract_drug_names(original_query)
             if drug_names:
                 parts.extend(drug_names)
 

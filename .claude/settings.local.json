@@ -91,7 +91,8 @@
       "Bash(__NEW_LINE_b18278ccfd9d1d5e__ echo \"✅ Deleted documentation and log files\")",
       "Bash(/Users/kiril/IdeaProjects/pharmacy-ai-assistant/docs/PERFORMANCE_ANALYSIS.md:*)",
       "Bash(/Users/kiril/IdeaProjects/pharmacy-ai-assistant/docs/PROGRESS_REPORT.md:*)",
-      "Bash(cloc:*)"
+      "Bash(cloc:*)",
+      "Bash(/tmp/SESSION_SUMMARY.md:*)"
     ]
   }
 }
