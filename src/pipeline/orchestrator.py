@@ -47,6 +47,7 @@ from src.pipeline.query_router import (
 )
 from src.pipeline.response_builder import ResponseBuilder
 from src.pipeline.response_validator import validate_and_clean
+from src.pipeline.safety_validator import SafetyValidator
 from src.product_store import get_product_store
 from src.safety import get_safety_layer
 from src.translator import get_translator
@@ -77,6 +78,7 @@ class Pipeline:
         unified_processor=None,
         settings=None,
         product_matcher=None,
+        safety_validator=None,
     ):
         """
         Initialize the pipeline with dependency injection.
@@ -92,6 +94,7 @@ class Pipeline:
             unified_processor: Optional UnifiedProcessor instance (defaults to singleton)
             settings: Optional Settings instance (defaults to singleton)
             product_matcher: Optional ProductMatcher instance (defaults to new instance)
+            safety_validator: Optional SafetyValidator instance (defaults to new instance)
         """
         # Initialize dependencies (use provided or fall back to singletons)
         self.safety_layer = safety_layer or get_safety_layer()
@@ -123,6 +126,9 @@ class Pipeline:
             product_store=self.product_store,
             medical_model=self.medical_model
         )
+
+        # Safety validator (handles age filtering, severity filtering, disclaimers)
+        self.safety_validator = safety_validator or SafetyValidator()
 
         if not lazy_load:
             self._load_translator()
@@ -476,7 +482,7 @@ class Pipeline:
         # Product retrieval (uses vector DB + age filtering)
         candidate_products = self.product_matcher.retrieve_candidates(medical_reasoning, user_input)
         candidate_products = self.safety_layer.filter_otc_only(candidate_products)
-        candidate_products = self._filter_by_age_appropriateness(candidate_products, user_input)
+        candidate_products = self.safety_validator.filter_by_age_appropriateness(candidate_products, user_input)
 
         # Filter by contraindications
         contraindicated_products = []
@@ -508,7 +514,7 @@ class Pipeline:
 
         # Add disclaimers based on conditions detected by LLM
         if "child" in llm_result.extraction.user_conditions or llm_result.extraction.age_group in ("infant", "child"):
-            final_response = self._add_child_disclaimer(final_response)
+            final_response = self.safety_validator.add_child_disclaimer(final_response)
 
         if llm_result.reasoning and llm_result.reasoning.see_doctor:
             # Add general doctor recommendation if not already in response
@@ -711,7 +717,7 @@ class Pipeline:
         parts.append("---")
         parts.append("## 🛒 Подходящи продукти\n")
         if products:
-            displayed_products = self._filter_by_severity(products, symptom_count)
+            displayed_products = self.safety_validator.filter_by_severity(products, symptom_count)
             # Add combo note when showing cold/flu combo products
             any_combo = any(
                 len(extract_all_product_ingredients(p)) >= 2
@@ -951,8 +957,8 @@ class Pipeline:
         # For MedGemma's see_doctor recommendation, handle differently based on query type
         if medical_reasoning.see_doctor:
             # For child-related queries, DON'T block - continue to find products
-            # but add pediatric warnings (handled by _add_child_disclaimer later)
-            if self._is_child_related_query(original_query):
+            # but add pediatric warnings (handled by add_child_disclaimer later)
+            if self.safety_validator.is_child_related_query(original_query):
                 logger.info("Child query with see_doctor=True - proceeding with pediatric warnings")
                 return False, ""  # Continue to product search
 
@@ -1298,45 +1304,6 @@ class Pipeline:
             except Exception as e:
                 logger.warning("Failed to parse product", extra={"error": str(e)})
         return products
-
-    def _is_child_related_query(self, text: str) -> bool:
-        """Check if query mentions children, babies, or age-related terms."""
-        text_lower = text.lower()
-        return any(kw in text_lower for kw in CHILD_KEYWORDS)
-
-    def _is_safety_information_query(self, text: str) -> bool:
-        """Check if query asks about medication safety."""
-        text_lower = text.lower()
-        return any(kw in text_lower for kw in SAFETY_KEYWORDS)
-
-    def _add_child_disclaimer(self, response: str) -> str:
-        """Child safety is now handled inside the main template (triage section
-        + safety block + product card warnings). No extra block appended."""
-        return response
-
-    def _add_safety_info_disclaimer(self, response: str) -> str:
-        """Safety info is now in the main template (safety block + footer).
-        No extra block appended."""
-        return response
-
-    def _is_chronic_disease_query(self, text: str) -> bool:
-        """Check if query is about chronic disease medications."""
-        text_lower = text.lower()
-        return any(kw in text_lower for kw in CHRONIC_DISEASE_KEYWORDS)
-
-    def _add_chronic_disease_disclaimer(self, response: str) -> str:
-        """Add prescription warning for chronic disease queries."""
-        # Don't add if response already refers to doctor
-        if "консултация с лекар" in response.lower() or "112" in response:
-            return response
-
-        disclaimer = """
-📋 **Важно за хронични заболявания:**
-- Лекарствата за хронични заболявания обикновено се отпускат **по лекарска рецепта**
-- Не променяйте дозировката без консултация с вашия лекар
-- Мога да ви помогна с допълнителни продукти: тест ленти, глюкомери, хранителни добавки
-- За предписани лекарства, моля консултирайте се с вашия лекар или фармацевт"""
-        return response + "\n" + disclaimer
 
     # Condition name translations for user-friendly messages
     _CONDITION_NAMES_BG = {
@@ -1826,7 +1793,7 @@ class Pipeline:
         parts.append("---")
         parts.append("## 🛒 Подходящи продукти\n")
         if products:
-            displayed_products = self._filter_by_severity(products, symptom_count)
+            displayed_products = self.safety_validator.filter_by_severity(products, symptom_count)
             for i, product in enumerate(displayed_products, 1):
                 if i > 1:
                     parts.append("---")
@@ -1966,99 +1933,6 @@ class Pipeline:
             if key in tt or tt in key:
                 return text
         return ""
-
-    # Keywords indicating a product is for adults only
-    _ADULT_ONLY_MARKERS = {"за възрастни", "for adults", "над 15 години", "над 16 години", "над 18 години"}
-    # Keywords indicating a product is child/baby-appropriate
-    _CHILD_MARKERS = {"за деца", "бебе", "бейби", "baby", "junior", "джуниър", "юноши", "kids", "педиатрич"}
-    # Forms suitable for babies/toddlers
-    _BABY_FORMS = {"суспензия", "сироп", "капки", "супозитори", "разтвор"}
-
-    def _filter_by_age_appropriateness(self, products: list, original_query: str) -> list:
-        """Filter and reorder products based on patient age from query.
-
-        For child/baby queries:
-        - Exclude products explicitly marked 'for adults'
-        - Boost products marked for children/babies
-        - Boost liquid forms (suspension, syrup, suppositories)
-        """
-        query_lower = (original_query or "").lower()
-
-        # Detect if query is about a child/baby
-        is_child_query = any(kw in query_lower for kw in ["бебе", "дете", "детето", "месец", "бебет"])
-        any(kw in query_lower for kw in ["бебе", "бебет", "месец"])
-
-        if not is_child_query:
-            return products  # No filtering needed
-
-        child_appropriate = []
-        child_neutral = []
-
-        for p in products:
-            title = (getattr(p, "title", "") or "").lower()
-            desc = (getattr(p, "description", "") or "").lower()
-            combined = f"{title} {desc}"
-
-            # Exclude adult-only products
-            if any(marker in combined for marker in self._ADULT_ONLY_MARKERS):
-                logger.info(f"Excluding adult-only product for child query: {title[:50]}")
-                continue
-
-            # Check if product is child-appropriate
-            has_child_marker = any(marker in combined for marker in self._CHILD_MARKERS)
-            has_baby_form = any(form in combined for form in self._BABY_FORMS)
-
-            if has_child_marker or has_baby_form:
-                child_appropriate.append(p)
-            else:
-                child_neutral.append(p)
-
-        # For baby queries, strongly prefer baby-specific products
-        result = child_appropriate + child_neutral
-        if not result:
-            # If filtering removed everything, return originals (better than nothing)
-            return products
-
-        logger.info(
-            f"Age filter: {len(child_appropriate)} child-specific, "
-            f"{len(child_neutral)} neutral, {len(products) - len(result)} excluded"
-        )
-        return result
-
-    def _filter_by_severity(self, products: list, symptom_count: int) -> list:
-        """Filter products by symptom severity and clinical relevance.
-
-        For single symptoms: simple (single-ingredient) products first, combos last.
-        Always: homeopathic products after evidence-based ones.
-        """
-        from src.product_store import _is_homeopathic_product
-
-        if not products:
-            return []
-
-        if symptom_count <= 1 and len(products) > 1:
-            # Three-tier sort: simple evidence-based → combo → homeopathic
-            evidence_simple = []
-            evidence_combo = []
-            homeopathic = []
-
-            for p in products:
-                comp = (getattr(p, "composition", "") or "").lower()
-                title = (getattr(p, "title", "") or "").lower()
-                desc = (getattr(p, "description", "") or "").lower()
-                combined = f"{comp} {title} {desc}"
-
-                if _is_homeopathic_product(combined):
-                    homeopathic.append(p)
-                elif is_combination_product(p):
-                    evidence_combo.append(p)
-                else:
-                    evidence_simple.append(p)
-
-            reordered = evidence_simple + evidence_combo + homeopathic
-            return reordered[:3]
-
-        return products[:3]
 
     def _collect_texts_for_translation(self, medical_reasoning: MedicalReasoning) -> dict[str, str]:
         """Collect all texts from MedicalReasoning that need translation."""
