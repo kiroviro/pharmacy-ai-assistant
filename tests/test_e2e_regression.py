@@ -75,9 +75,9 @@ class TestE2ERegressions:
         for query in common_queries:
             result = pipeline.process(query)
 
-            # Should return products
-            assert result.products is not None, f"No products returned for '{query}'"
-            assert len(result.products) > 0, f"Empty products list for '{query}'"
+            # Should return products (after Phase 5 refactoring: selected_products)
+            assert result.selected_products is not None, f"No products returned for '{query}'"
+            assert len(result.selected_products) > 0, f"Empty products list for '{query}'"
 
             # Products should appear in response
             assert "🛒" in result.response, f"Products section missing for '{query}'"
@@ -88,15 +88,19 @@ class TestE2ERegressions:
 
         Catches the timeout bug where 20s limit was too short for 13-18s processing,
         causing incomplete responses.
+
+        Note: After Phase 5 refactoring, processing_time_ms is not tracked in
+        PipelineResult, but we can still verify response completeness.
         """
         result = pipeline.process("боли ме главата")
 
-        # Processing should complete (not timeout)
-        assert result.processing_time_ms > 0, "Processing time not recorded"
-        assert result.processing_time_ms < 60000, "Processing took too long (>60s)"
+        # Response should be substantial (not truncated)
+        assert len(result.response) > 1000, (
+            f"Response too short ({len(result.response)} chars), likely truncated by timeout"
+        )
 
         # Response should be complete (not cut off mid-sentence)
-        assert result.response.endswith((".", "листовката.", "фармацевт.")), (
+        assert result.response.endswith((".", "листовката.", "фармацевт.", "здраве.")), (
             "Response appears truncated (doesn't end with proper sentence)"
         )
 
@@ -132,18 +136,30 @@ class TestE2EPerformance:
 
     @pytest.fixture
     def pipeline(self):
-        return Pipeline(use_unified_processor=True)
+        # After Phase 5 refactoring: unified processor is now default
+        return Pipeline()
 
     def test_processing_time_within_acceptable_range(self, pipeline):
-        """Verify processing doesn't regress significantly."""
-        result = pipeline.process("боли ме главата")
+        """
+        Verify processing doesn't regress significantly.
 
-        # Should complete within reasonable time
-        # (adjust based on your hardware/model speed)
-        assert result.processing_time_ms < 30000, (
-            f"Processing too slow: {result.processing_time_ms}ms\n"
+        Note: After Phase 5 refactoring, processing_time_ms is not tracked in
+        PipelineResult. We verify performance by ensuring the test completes
+        within pytest's timeout and response is substantial.
+        """
+        import time
+        start = time.time()
+        result = pipeline.process("боли ме главата")
+        elapsed_ms = (time.time() - start) * 1000
+
+        # Should complete within reasonable time (30s max)
+        assert elapsed_ms < 30000, (
+            f"Processing too slow: {elapsed_ms:.0f}ms\n"
             "Possible performance regression"
         )
+
+        # Response should be complete (indicates no timeout)
+        assert len(result.response) > 1000, "Response too short, possible timeout"
 
 
 @pytest.mark.skip(reason="Requires running API server - use for smoke tests before deployment")
