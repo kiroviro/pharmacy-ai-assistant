@@ -572,19 +572,12 @@ class Pipeline:
             )
 
         # Validate response for garbage text (Issue #17 - Phase 1)
-        if self.text_validator.contains_garbage(final_response):
-            cleaned_response = self.text_validator.filter_garbage_sentences(final_response)
-            if not cleaned_response:
-                logger.error("Response validation failed - garbage text detected and could not be cleaned")
-                # Fall back to a safe generic response
-                final_response = (
-                    "Съжалявам, не мога да генерирам подходящ отговор в момента. "
-                    "Моля, консултирайте се с фармацевт или лекар."
-                )
-            else:
-                # Response was cleaned - use the cleaned version
-                logger.info("Response cleaned successfully")
-                final_response = cleaned_response
+        # DISABLED: text_validator.filter_garbage_sentences is too aggressive and destroys valid sections
+        # TODO: Fix text validator to not destroy properly formatted responses
+        # if self.text_validator.contains_garbage(final_response):
+        #     cleaned_response = self.text_validator.filter_garbage_sentences(final_response)
+        #     if cleaned_response:
+        #         final_response = cleaned_response
 
         duration_ms = (time.perf_counter() - start_time) * 1000
         logger.info(
