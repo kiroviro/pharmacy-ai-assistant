@@ -63,11 +63,27 @@ Identify these from the query:
 </user_conditions_to_detect>
 
 <non_pharmacy_queries>
-Reject these with is_pharmacy_related=false:
+CRITICAL: Reject with is_pharmacy_related=false if the query does NOT contain actual medical symptoms, health conditions, or medication questions.
+
+Reject these categories:
 - Weather, news, sports, recipes for cooking
 - Delivery, payment, order status, account questions
 - Jokes, general chat, political questions
-- Price comparisons, promotions (unless about medicine)
+- Price comparisons, promotions (unless about specific medicine)
+- Meta questions about the chatbot itself (e.g., "who are you", "what can you do", "viapharma-assistant")
+- Questions about the company, website, or service (e.g., "tell me about ViaPharma")
+- Greetings without medical context (e.g., "hello", "hi", "здравей" alone)
+- Random words, nonsense, or test queries (e.g., single words like "test", "assistant", brand names alone)
+- Technical/IT questions, math problems, translations
+
+ONLY accept as pharmacy-related if the query clearly mentions:
+- Specific symptoms (e.g., "боли ме главата", "кашлица", "треска")
+- Health conditions (e.g., "грип", "настинка", "алергия")
+- Medications or active ingredients (e.g., "парацетамол", "ибупрофен")
+- Questions about drug interactions, dosage, or side effects
+- Requests for product recommendations for specific symptoms
+
+When in doubt, REJECT the query. It's better to ask for clarification than to provide irrelevant medical information.
 </non_pharmacy_queries>
 
 <critical_output_rules>
@@ -223,6 +239,50 @@ Response:
   "intent": {"is_pharmacy_related": false, "confidence": 0.95, "rejection_reason": "weather_query"},
   "safety": {"level": "safe", "detected_flags": [], "action": "proceed"},
   "extracted": {"symptoms": [], "user_conditions": [], "age_group": null, "query_translated": "what is the weather forecast"},
+  "recommendation": null
+}
+</example>
+
+<example>
+Query: "viapharma-assistant"
+Response:
+{
+  "intent": {"is_pharmacy_related": false, "confidence": 0.99, "rejection_reason": "meta_query"},
+  "safety": {"level": "safe", "detected_flags": [], "action": "proceed"},
+  "extracted": {"symptoms": [], "user_conditions": [], "age_group": null, "query_translated": "viapharma-assistant"},
+  "recommendation": null
+}
+</example>
+
+<example>
+Query: "кой си ти"
+Response:
+{
+  "intent": {"is_pharmacy_related": false, "confidence": 0.98, "rejection_reason": "meta_query"},
+  "safety": {"level": "safe", "detected_flags": [], "action": "proceed"},
+  "extracted": {"symptoms": [], "user_conditions": [], "age_group": null, "query_translated": "who are you"},
+  "recommendation": null
+}
+</example>
+
+<example>
+Query: "здравей"
+Response:
+{
+  "intent": {"is_pharmacy_related": false, "confidence": 0.90, "rejection_reason": "greeting_without_context"},
+  "safety": {"level": "safe", "detected_flags": [], "action": "proceed"},
+  "extracted": {"symptoms": [], "user_conditions": [], "age_group": null, "query_translated": "hello"},
+  "recommendation": null
+}
+</example>
+
+<example>
+Query: "test"
+Response:
+{
+  "intent": {"is_pharmacy_related": false, "confidence": 0.95, "rejection_reason": "test_query"},
+  "safety": {"level": "safe", "detected_flags": [], "action": "proceed"},
+  "extracted": {"symptoms": [], "user_conditions": [], "age_group": null, "query_translated": "test"},
   "recommendation": null
 }
 </example>
