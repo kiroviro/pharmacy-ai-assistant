@@ -272,10 +272,11 @@ class Pipeline:
         response = self.response_builder.format_comparison_response(drug_names, products_by_drug)
 
         # Validate response for garbage text
-        is_valid, cleaned_response, validation_metadata = validate_and_clean(response, strict=False)
-        if validation_metadata.get("cleaned", False):
-            logger.info("Comparison response cleaned", extra={"patterns": validation_metadata.get("patterns_found", [])})
-            response = cleaned_response
+        if self.text_validator.contains_garbage(response):
+            cleaned_response = self.text_validator.filter_garbage_sentences(response)
+            if cleaned_response:
+                logger.info("Comparison response cleaned")
+                response = cleaned_response
 
         duration_ms = (time.perf_counter() - start_time) * 1000
         logger.info(
@@ -344,10 +345,11 @@ class Pipeline:
         response = self.response_builder.format_catalog_response(search_term, products, user_input)
 
         # Validate response for garbage text
-        is_valid, cleaned_response, validation_metadata = validate_and_clean(response, strict=False)
-        if validation_metadata.get("cleaned", False):
-            logger.info("Catalog response cleaned", extra={"patterns": validation_metadata.get("patterns_found", [])})
-            response = cleaned_response
+        if self.text_validator.contains_garbage(response):
+            cleaned_response = self.text_validator.filter_garbage_sentences(response)
+            if cleaned_response:
+                logger.info("Catalog response cleaned")
+                response = cleaned_response
 
         duration_ms = (time.perf_counter() - start_time) * 1000
         logger.info(
@@ -570,31 +572,19 @@ class Pipeline:
             )
 
         # Validate response for garbage text (Issue #17 - Phase 1)
-        is_valid, cleaned_response, validation_metadata = validate_and_clean(final_response, strict=False)
-
-        if not is_valid:
-            logger.error(
-                "Response validation failed - garbage text detected and could not be cleaned",
-                extra={
-                    "patterns_found": validation_metadata.get("patterns_found", []),
-                    "severity": validation_metadata.get("severity", "unknown"),
-                },
-            )
-            # Fall back to a safe generic response
-            final_response = (
-                "Съжалявам, не мога да генерирам подходящ отговор в момента. "
-                "Моля, консултирайте се с фармацевт или лекар."
-            )
-        elif validation_metadata.get("cleaned", False):
-            # Response was cleaned - use the cleaned version
-            logger.info(
-                "Response cleaned successfully",
-                extra={
-                    "patterns_removed": validation_metadata.get("patterns_found", []),
-                    "patterns_remaining": validation_metadata.get("patterns_remaining", []),
-                },
-            )
-            final_response = cleaned_response
+        if self.text_validator.contains_garbage(final_response):
+            cleaned_response = self.text_validator.filter_garbage_sentences(final_response)
+            if not cleaned_response:
+                logger.error("Response validation failed - garbage text detected and could not be cleaned")
+                # Fall back to a safe generic response
+                final_response = (
+                    "Съжалявам, не мога да генерирам подходящ отговор в момента. "
+                    "Моля, консултирайте се с фармацевт или лекар."
+                )
+            else:
+                # Response was cleaned - use the cleaned version
+                logger.info("Response cleaned successfully")
+                final_response = cleaned_response
 
         duration_ms = (time.perf_counter() - start_time) * 1000
         logger.info(
@@ -605,8 +595,6 @@ class Pipeline:
                 "candidates": len(candidate_products),
                 "selected": len(selected_products),
                 "conditions": llm_result.extraction.user_conditions,
-                "response_validated": is_valid,
-                "response_cleaned": validation_metadata.get("cleaned", False),
             },
         )
 
@@ -621,31 +609,6 @@ class Pipeline:
             selected_products=selected_products,
             user_conditions=llm_result.extraction.user_conditions,
             contraindicated_products=contraindicated_products,
-        )
-
-    def _build_medical_reasoning_from_unified(self, llm_result: UnifiedProcessorResult) -> MedicalReasoning:
-        """Convert UnifiedProcessorResult to MedicalReasoning for compatibility."""
-        reasoning = llm_result.reasoning
-        if not reasoning:
-            return MedicalReasoning(
-                symptoms=llm_result.extraction.symptoms,
-                likely_cause="",
-                treatment_type="",
-                warnings=[],
-                see_doctor=False,
-            )
-
-        return MedicalReasoning(
-            symptoms=llm_result.extraction.symptoms,
-            likely_cause=reasoning.explanation,
-            treatment_type=reasoning.treatment_category,
-            warnings=reasoning.warnings,
-            see_doctor=reasoning.see_doctor,
-            explanation=reasoning.explanation,
-            how_treatment_helps="",
-            self_care_tips=reasoning.self_care_tips,
-            duration_guidance="",
-            user_conditions=llm_result.extraction.user_conditions,
         )
 
     def _format_response_from_unified(
@@ -868,473 +831,9 @@ class Pipeline:
             ]
         return items
 
-    # Phrases indicating the model refused to help (English and Bulgarian)
-    _REFUSAL_PHRASES = {
-        # English
-        "i cannot",
-        "i can't",
-        "i'm not able to",
-        "i am not able to",
-        "i will not",
-        "i won't",
-        "cannot fulfill",
-        "can't fulfill",
-        "cannot help with",
-        "can't help with",
-        "not appropriate",
-        "inappropriate request",
-        "decline to",
-        "refuse to",
-        "against my guidelines",
-        "violates my guidelines",
-        "not a medical",
-        "isn't a medical",
-        "is not a medical",
-        # Bulgarian
-        "не мога",
-        "не съм в състояние",
-        "не е възможно",
-        "не е подходящо",
-        "неподходящ",
-        "отказвам",
-        "не е медицински",
-        "това не е",
-    }
-
-    def _is_refusal_response(self, reasoning: MedicalReasoning) -> bool:
-        """
-        Check if MedGemma's response indicates it cannot or will not help.
-
-        This catches cases where inappropriate queries slip through the intent
-        classifier but MedGemma refuses to respond.
-        """
-        if not reasoning or not reasoning.likely_cause:
-            return False
-
-        response_lower = reasoning.likely_cause.lower()
-        return any(phrase in response_lower for phrase in self._REFUSAL_PHRASES)
-
     def _translate_to_bulgarian(self, text: str) -> str:
         """Translate English to Bulgarian."""
         return self.translator.translate_to_bulgarian(text)
-
-    def _get_medical_reasoning(self, text: str) -> MedicalReasoning:
-        """
-        Use MedGemma to understand symptoms and suggest treatment categories.
-
-        Includes fallback strategy for graceful degradation if model fails.
-        """
-        try:
-            return self.medical_model.get_medical_reasoning(text)
-        except Exception as e:
-            logger.error(f"MedGemma inference failed: {e}", exc_info=True)
-            return self.medical_reasoning_service.create_fallback_reasoning(text)
-
-    def _create_fallback_reasoning(self, text: str) -> MedicalReasoning:
-        """
-        Create a safe fallback MedicalReasoning when MedGemma fails.
-
-        Returns a conservative response that recommends consulting a pharmacist.
-        """
-        logger.warning("Using fallback medical reasoning due to model failure")
-
-        # Extract basic symptoms from text using simple keyword detection
-        symptom_keywords = {
-            "headache": ["главоболие", "headache", "болка в главата"],
-            "fever": ["температура", "fever", "треска"],
-            "cough": ["кашлица", "cough"],
-            "pain": ["болка", "pain", "боли"],
-            "cold": ["настинка", "cold", "простуда"],
-            "stomach": ["стомах", "stomach", "корем"],
-            "throat": ["гърло", "throat"],
-        }
-
-        detected_symptoms = []
-        text_lower = text.lower()
-        for symptom, keywords in symptom_keywords.items():
-            if any(kw in text_lower for kw in keywords):
-                detected_symptoms.append(symptom)
-
-        return MedicalReasoning(
-            symptoms=detected_symptoms if detected_symptoms else ["described symptoms"],
-            likely_cause="Unable to perform detailed analysis",
-            treatment_type="general wellness products",
-            warnings=[
-                "Automated analysis unavailable - please consult a pharmacist",
-                "If symptoms persist or worsen, see a doctor",
-            ],
-            see_doctor=False,
-            explanation="Our medical analysis system is temporarily limited. "
-            "We can show you general wellness products that may help.",
-            how_treatment_helps="",
-            self_care_tips=["Rest and stay hydrated", "Monitor your symptoms"],
-            duration_guidance="Consult a pharmacist for personalized advice",
-            user_conditions=[],
-        )
-
-    def _check_safety(
-        self, original_query: str, translated_query: str, medical_reasoning: MedicalReasoning
-    ) -> tuple[bool, str]:
-        """
-        Check for red-flag symptoms requiring professional medical attention.
-
-        Checks both original Bulgarian and translated English text for safety patterns,
-        plus MedGemma's see_doctor recommendation.
-
-        Returns (is_red_flag, message):
-        - True means STOP and return safety message (no products)
-        - False means CONTINUE with product search (may still add warnings later)
-        """
-        # Check original Bulgarian text for actual emergencies
-        result = self.safety_layer.check_safety(original_query)
-        if result.is_red_flag:
-            return True, result.message
-
-        # Check translated English text for actual emergencies
-        result_en = self.safety_layer.check_safety(translated_query)
-        if result_en.is_red_flag:
-            return True, result_en.message
-
-        # For MedGemma's see_doctor recommendation, handle differently based on query type
-        if medical_reasoning.see_doctor:
-            # For child-related queries, DON'T block - continue to find products
-            # but add pediatric warnings (handled by add_child_disclaimer later)
-            if self.safety_validator.is_child_related_query(original_query):
-                logger.info("Child query with see_doctor=True - proceeding with pediatric warnings")
-                return False, ""  # Continue to product search
-
-            # For pregnancy-related queries, DON'T block - continue with warnings
-            if self.safety_check_service.is_pregnancy_query(original_query):
-                logger.info("Pregnancy query with see_doctor=True - proceeding with warnings")
-                return False, ""  # Continue to product search
-
-            # For drug combination/interaction queries, DON'T block - these are valid OTC questions
-            # (e.g., "Can I take ibuprofen with paracetamol?")
-            if self.safety_check_service.is_drug_combination_query(original_query):
-                logger.info("Drug combination query with see_doctor=True - proceeding with info")
-                return False, ""  # Continue to provide helpful information
-
-            # For substitute/alternative queries, DON'T block - search for OTC alternatives
-            # (e.g., "Generic substitute for Aulin", "Алтернатива на нимезулид")
-            if self.safety_check_service.is_substitute_query(original_query):
-                logger.info("Substitute query with see_doctor=True - proceeding to find OTC alternatives")
-                return False, ""  # Continue to find OTC alternatives
-
-            # For other queries, use the generic doctor recommendation
-            return True, (
-                "⚠️ **Препоръчваме консултация с лекар.**\n\n"
-                "Базирано на вашите симптоми, препоръчваме да се консултирате "
-                "с медицински специалист за правилна диагноза и лечение."
-            )
-
-        return False, ""
-
-    def _is_pregnancy_related_query(self, text: str) -> bool:
-        """Check if query mentions pregnancy or breastfeeding."""
-        text_lower = text.lower()
-        pregnancy_patterns = USER_CONDITION_PATTERNS.get("pregnancy", [])
-        breastfeeding_patterns = USER_CONDITION_PATTERNS.get("breastfeeding", [])
-        all_patterns = pregnancy_patterns + breastfeeding_patterns
-        return any(kw in text_lower for kw in all_patterns if not kw.startswith(r"\b"))
-
-    def _is_drug_combination_query(self, text: str) -> bool:
-        """Check if query is about combining/taking multiple medications together.
-
-        These are valid OTC questions like "Can I take ibuprofen with paracetamol?"
-        """
-        text_lower = text.lower()
-
-        # Keywords indicating drug combination questions
-        combination_keywords = {
-            # Bulgarian
-            "заедно с",
-            "едновременно",
-            "комбинирам",
-            "комбиниране",
-            "смесвам",
-            "да взема с",
-            "взема с",
-            "приемам с",
-            "може ли да взема",
-            "мога ли да взема",
-            "може ли да приема",
-            "мога ли да приема",
-            "да пия с",
-            "пия с",
-            "съчетавам",
-            "съчетание",
-            # English
-            "together with",
-            "at the same time",
-            "combine",
-            "combining",
-            "mix",
-            "take with",
-            "can i take",
-            "can i use",
-            "along with",
-            "in combination",
-        }
-
-        # Check for combination keywords
-        has_combination_keyword = any(kw in text_lower for kw in combination_keywords)
-
-        # Also check for pattern: two drug names mentioned
-        common_otc_drugs = {
-            "ибупрофен",
-            "ibuprofen",
-            "парацетамол",
-            "paracetamol",
-            "acetaminophen",
-            "аспирин",
-            "aspirin",
-            "нурофен",
-            "nurofen",
-            "панадол",
-            "panadol",
-            "адвил",
-            "advil",
-            "тайленол",
-            "tylenol",
-            "аналгин",
-            "analgin",
-            "темпалгин",
-            "темпра",
-            "ефералган",
-            "efferalgan",
-        }
-        drugs_mentioned = sum(1 for drug in common_otc_drugs if drug in text_lower)
-
-        return has_combination_keyword or drugs_mentioned >= 2
-
-    def _is_substitute_query(self, text: str) -> bool:
-        """Check if query is asking for a substitute/alternative/generic for a drug.
-
-        These are valid questions like "Generic substitute for Aulin" or
-        "Алтернатива на нимезулид" - user wants OTC options instead of prescription drug.
-        """
-        text_lower = text.lower()
-
-        substitute_keywords = {
-            # Bulgarian
-            "заместител",
-            "заместител на",
-            "замести",
-            "заместя",
-            "алтернатива",
-            "алтернатива на",
-            "алтернативен",
-            "генеричен",
-            "генерик",
-            "вместо",
-            "подобен на",
-            "подобно на",
-            "като",
-            "еквивалент",
-            "аналог",
-            "аналогичен",
-            # English
-            "substitute",
-            "substitute for",
-            "substitution",
-            "alternative",
-            "alternative to",
-            "instead of",
-            "generic",
-            "generic for",
-            "equivalent",
-            "similar to",
-            "like",
-            "analog",
-            "replacement",
-        }
-
-        return any(kw in text_lower for kw in substitute_keywords)
-
-    def _build_search_query(self, medical_reasoning: MedicalReasoning, original_query: str = "") -> str:
-        """Build search query from medical reasoning components.
-
-        For drug combination queries, extracts drug names from original query
-        since MedGemma returns generic terms like 'drug interaction query'.
-        """
-        parts = []
-
-        # Add treatment type (e.g., "analgesics")
-        if medical_reasoning.treatment_type:
-            parts.append(medical_reasoning.treatment_type)
-
-        # Filter out non-useful symptoms for product search
-        non_useful_symptoms = {
-            "drug interaction query",
-            "drug interaction",
-            "safety concern",
-            "medication question",
-            "dosage question",
-            "combination query",
-        }
-        if medical_reasoning.symptoms:
-            useful_symptoms = [s for s in medical_reasoning.symptoms if s.lower() not in non_useful_symptoms]
-            parts.extend(useful_symptoms)
-
-        # For drug combo queries, extract actual drug names from original query
-        if original_query and self.medical_reasoning_service.is_drug_combination_query(original_query):
-            drug_names = self.product_recommendation_service.extract_drug_names(original_query)
-            if drug_names:
-                parts.extend(drug_names)
-
-        # Add likely cause only if it's useful
-        if medical_reasoning.likely_cause:
-            cause_lower = medical_reasoning.likely_cause.lower()
-            if cause_lower not in {"safety concern", "unknown", "not specified"}:
-                parts.append(medical_reasoning.likely_cause)
-
-        # For child/baby queries, add age context to retrieval
-        if original_query:
-            ql = original_query.lower()
-            if any(kw in ql for kw in ["бебе", "бебет"]):
-                parts.append("бебе бейби за деца")
-            elif any(kw in ql for kw in ["дете", "детето", "деца"]):
-                parts.append("деца за деца")
-
-        return " ".join(parts) if parts else "medicine"
-
-    # Common OTC drug names for extraction
-    _DRUG_NAME_PATTERNS = {
-        # Bulgarian names
-        "ибупрофен",
-        "парацетамол",
-        "аспирин",
-        "аналгин",
-        "нурофен",
-        "панадол",
-        "темпалгин",
-        "темпра",
-        "ефералган",
-        "адвил",
-        "цитрамон",
-        "пенталгин",
-        "солпадеин",
-        # English names
-        "ibuprofen",
-        "paracetamol",
-        "acetaminophen",
-        "aspirin",
-        "nurofen",
-        "panadol",
-        "advil",
-        "tylenol",
-        "analgin",
-    }
-
-    # Bulgarian symptom keywords → treatment type mapping
-    # Used to validate/correct MedGemma's treatment_type
-    _BG_SYMPTOM_TO_TREATMENT = {
-        # Digestive/GI symptoms - HIGH PRIORITY (often misclassified as cold/flu)
-        "диария": "antidiarrheal",
-        "разстройство": "antidiarrheal",
-        "гадене": "digestive",
-        "повръщане": "digestive",
-        "стомах": "digestive",
-        "стомашни": "digestive",
-        "киселини": "antacids",
-        "запек": "laxatives",
-        "чревни": "digestive",
-        # Pain
-        "болка": "analgesics",
-        "главоболие": "analgesics",
-        "мигрена": "analgesics",
-        "болки": "analgesics",
-        # Fever
-        "температура": "antipyretics",
-        "треска": "antipyretics",
-        # Respiratory/Cold
-        "кашлица": "cough",
-        "хрема": "decongestants",
-        "настинка": "cough",
-        "простуда": "cough",
-        "грип": "antipyretics",
-        # Throat
-        "гърло": "throat",
-        # Allergy
-        "алергия": "antihistamines",
-        "кихане": "antihistamines",
-        "сърбеж": "antihistamines",
-    }
-
-    def _extract_treatment_from_query(self, query: str) -> str | None:
-        """
-        Extract treatment type from original Bulgarian query keywords.
-
-        Used to validate/correct MedGemma's treatment_type when there's
-        a mismatch between detected symptoms and recommended treatment.
-        """
-        query_lower = query.lower()
-
-        # Count symptom matches by treatment type
-        treatment_scores = {}
-        for keyword, treatment in self._BG_SYMPTOM_TO_TREATMENT.items():
-            if keyword in query_lower:
-                treatment_scores[treatment] = treatment_scores.get(treatment, 0) + 1
-
-        if not treatment_scores:
-            return None
-
-        # Return treatment with highest score (most keyword matches)
-        return max(treatment_scores, key=treatment_scores.get)
-
-    def _query_has_symptom_keywords(self, query: str) -> bool:
-        """
-        Check if the original query contains any recognizable symptom keywords.
-
-        Used to validate whether MedGemma's detected symptoms are phantom or real.
-        """
-        query_lower = query.lower()
-        return any(keyword in query_lower for keyword in self._BG_SYMPTOM_TO_TREATMENT.keys())
-
-    def _validate_symptoms_against_query(self, symptoms: list[str], original_query: str) -> list[str]:
-        """
-        Validate detected symptoms against the original query.
-
-        Filters out phantom symptoms that don't have any relation to the query.
-        This prevents showing symptoms like "кашлица, хрема" for a query like "помощ".
-
-        Args:
-            symptoms: List of symptom strings (in English or Bulgarian)
-            original_query: The original Bulgarian user query
-
-        Returns:
-            Filtered list of symptoms that are likely valid
-        """
-        if not symptoms or not original_query:
-            return symptoms
-
-        query_lower = original_query.lower()
-
-        # If query has no recognizable symptom keywords, symptoms are likely phantom
-        if not self._query_has_symptom_keywords(query_lower):
-            # Only keep symptoms if they match known Bulgarian symptom words
-            # This catches cases where the query IS about symptoms but uses different words
-            valid_symptoms = []
-            for symptom in symptoms:
-                symptom_lower = symptom.lower()
-                # Check if any keyword from our mapping appears in either the query or symptom
-                for keyword in self._BG_SYMPTOM_TO_TREATMENT.keys():
-                    if keyword in symptom_lower and keyword in query_lower:
-                        valid_symptoms.append(symptom)
-                        break
-            return valid_symptoms
-
-        # Query has symptom keywords, so keep all detected symptoms
-        return symptoms
-
-    def _extract_drug_names(self, text: str) -> list[str]:
-        """Extract known drug names from text for product search."""
-        text_lower = text.lower()
-        found = []
-        for drug in self._DRUG_NAME_PATTERNS:
-            if drug in text_lower:
-                found.append(drug)
-        return found
 
     def _convert_to_products(self, results: list) -> list:
         """Convert ChromaDB results to Product objects."""

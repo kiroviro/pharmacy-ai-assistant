@@ -40,7 +40,7 @@ def test_garbage_detection():
 
     print("Testing garbage pattern detection:\n")
     for i, test in enumerate(test_cases, 1):
-        contains_garbage = pipeline._contains_garbage(test["text"])
+        contains_garbage = pipeline.text_validator.contains_garbage(test["text"])
         expected = test["should_contain_garbage"]
 
         status = "✅ PASS" if contains_garbage == expected else "❌ FAIL"
