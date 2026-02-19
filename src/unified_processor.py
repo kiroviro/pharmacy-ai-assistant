@@ -208,18 +208,21 @@ class UnifiedProcessor:
     def __init__(
         self,
         model_path: str = "./models/medgemma-4b-it-bf16",
-        cache_size: int = 500,
-        temperature: float = 0.1,
-        max_tokens: int = 1200,
+        cache_size: int | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        settings=None,
     ):
+        self.settings = settings or get_settings()
         self.model_path = model_path
-        self.temperature = temperature
-        self.max_tokens = max_tokens
+        self.temperature = temperature if temperature is not None else self.settings.unified_processor_temperature
+        self.max_tokens = max_tokens if max_tokens is not None else self.settings.unified_processor_max_tokens
 
         self.model = None
         self.tokenizer = None
         self._loaded = False
 
+        cache_size = cache_size if cache_size is not None else self.settings.unified_processor_cache_size
         self._cache = ProcessorCache(max_size=cache_size)
 
     def load(self) -> None:

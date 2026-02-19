@@ -9,6 +9,7 @@ Extracted from orchestrator.py as part of Issue #1.
 
 import re
 
+from src.config import get_settings
 from src.logging_config import get_logger
 from src.medical_model import MedicalReasoning
 from src.common.models import Product
@@ -33,22 +34,24 @@ class ProductMatcher:
     2. Optional LLM-based refinement (refine_selection)
     """
 
-    def __init__(self, product_store, medical_model=None):
+    def __init__(self, product_store, medical_model=None, settings=None):
         """
         Initialize ProductMatcher.
 
         Args:
             product_store: ChromaDB product store for vector search
             medical_model: Optional medical model for LLM-based refinement
+            settings: Optional settings instance (uses get_settings() if not provided)
         """
         self.product_store = product_store
         self.medical_model = medical_model
+        self.settings = settings or get_settings()
 
     def retrieve_candidates(
         self,
         medical_reasoning: MedicalReasoning,
         original_query: str = "",
-        top_k: int = 10
+        top_k: int | None = None
     ) -> list[Product]:
         """
         Stage 1: Fast vector similarity search to get top-K product candidates.
@@ -64,6 +67,10 @@ class ProductMatcher:
         Returns:
             List of Product candidates
         """
+        # Use settings default if not specified
+        if top_k is None:
+            top_k = self.settings.vector_search_top_k
+
         if self.product_store.collection.count() == 0:
             logger.warning("Product store is empty. Run product_store.py --reload to load products.")
             return []
@@ -108,7 +115,7 @@ class ProductMatcher:
         self,
         candidates: list[Product],
         medical_reasoning: MedicalReasoning,
-        max_products: int = 3
+        max_products: int | None = None
     ) -> list[Product]:
         """
         Stage 2: LLM-based refinement to pick best matches.
@@ -124,6 +131,10 @@ class ProductMatcher:
         Returns:
             Refined list of most relevant products
         """
+        # Use settings default if not specified
+        if max_products is None:
+            max_products = self.settings.llm_refine_top_k
+
         if not candidates:
             return []
 
@@ -185,7 +196,7 @@ class ProductMatcher:
         self,
         products: list[Product],
         max_products: int,
-        max_per_ingredient: int = 1
+        max_per_ingredient: int | None = None
     ) -> list[Product]:
         """
         Remove duplicate products with same active ingredient.
@@ -200,6 +211,10 @@ class ProductMatcher:
         Returns:
             Deduplicated products
         """
+        # Use settings default if not specified
+        if max_per_ingredient is None:
+            max_per_ingredient = self.settings.max_products_per_ingredient
+
         if not products:
             return []
 

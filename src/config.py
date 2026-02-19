@@ -71,7 +71,16 @@ class Settings(BaseSettings):
     # ==========================================================================
     vector_search_top_k: int = Field(default=10, description="Number of candidates from vector search")
     llm_refine_top_k: int = Field(default=3, description="Number of products after LLM refinement")
+    max_products_per_ingredient: int = Field(
+        default=1, description="Max products per ingredient (for deduplication)"
+    )
     translation_cache_size: int = Field(default=1000, description="Max entries in translation cache")
+
+    # Medical reasoning generation
+    medical_reasoning_max_tokens: int = Field(default=500, description="Max tokens for medical reasoning generation")
+    medical_reasoning_temperature: float = Field(
+        default=0.3, description="Temperature for medical reasoning (higher = more creative)"
+    )
 
     # ==========================================================================
     # Security & Limits

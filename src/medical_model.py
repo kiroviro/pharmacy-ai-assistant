@@ -17,6 +17,7 @@ from dataclasses import asdict, dataclass
 from mlx_lm import generate, load
 from mlx_lm.sample_utils import make_sampler
 
+from src.config import get_settings
 from src.logging_config import get_logger
 
 logger = get_logger("viapharma.medical_model")
@@ -314,6 +315,7 @@ class MedicalModel:
         model_path: str = "./models/medgemma-4b-it-bf16",
         cache_size: int = REASONING_CACHE_SIZE,
         use_bulgarian: bool = False,
+        settings=None,
     ):
         """
         Initialize the medical model.
@@ -322,12 +324,14 @@ class MedicalModel:
             model_path: Path to the MedGemma model directory
             cache_size: Maximum number of cached reasoning results
             use_bulgarian: If True, generate Bulgarian responses directly (skip translation)
+            settings: Optional settings instance (uses get_settings() if not provided)
         """
         self.model_path = model_path
         self.model = None
         self.tokenizer = None
         self._loaded = False
         self.use_bulgarian = use_bulgarian
+        self.settings = settings or get_settings()
 
         # LRU cache for medical reasoning results
         self._cache: OrderedDict[str, dict] = OrderedDict()
@@ -518,8 +522,8 @@ class MedicalModel:
     def get_medical_reasoning(
         self,
         symptoms: str,
-        max_tokens: int = 500,
-        temperature: float = 0.3,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
         system_prompt: str = None,
         use_cache: bool = True,
         timeout_seconds: float = MEDICAL_REASONING_TIMEOUT_SECONDS,
@@ -532,8 +536,8 @@ class MedicalModel:
 
         Args:
             symptoms: Description of symptoms (in English)
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature (0.0 = deterministic, 1.0 = creative)
+            max_tokens: Maximum tokens to generate (uses settings default if None)
+            temperature: Sampling temperature (uses settings default if None)
             system_prompt: Optional custom system prompt
             use_cache: Whether to use caching (default True)
             timeout_seconds: Maximum time allowed for inference (default 15s)
@@ -544,6 +548,12 @@ class MedicalModel:
         Raises:
             TimeoutError: If inference exceeds timeout_seconds (caught internally, returns fallback)
         """
+        # Use settings defaults if not specified
+        if max_tokens is None:
+            max_tokens = self.settings.medical_reasoning_max_tokens
+        if temperature is None:
+            temperature = self.settings.medical_reasoning_temperature
+
         # Check cache first (only for default system prompt)
         cache_key = None
         if use_cache and system_prompt is None:
