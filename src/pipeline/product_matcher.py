@@ -18,6 +18,7 @@ from src.pipeline.product_ingredients import (
     extract_product_ingredient,
     get_recommended_ingredients,
 )
+from src.pipeline.symptom_mappings import extract_treatment_from_query
 
 logger = get_logger("viapharma.product_matcher")
 
@@ -72,7 +73,7 @@ class ProductMatcher:
         # Validate/correct treatment_type using original query keywords
         treatment_type = medical_reasoning.treatment_type
         if original_query:
-            query_treatment = self._extract_treatment_from_query(original_query)
+            query_treatment = extract_treatment_from_query(original_query)
             if query_treatment:
                 # Override if MedGemma's treatment doesn't match query symptoms
                 if treatment_type:
@@ -387,36 +388,8 @@ class ProductMatcher:
 
         return drugs
 
-    def _extract_treatment_from_query(self, query: str) -> str:
-        """
-        Extract treatment type from query keywords.
-
-        Catches cases where MedGemma misclassifies symptoms.
-
-        Args:
-            query: Original user query
-
-        Returns:
-            Treatment type or empty string
-        """
-        query_lower = query.lower()
-
-        # GI symptoms (high priority - often misclassified as cold/flu)
-        if any(kw in query_lower for kw in [
-            "диария", "диарея", "diarrhea", "разстройство", "стомах",
-            "коремна болка", "повръщане", "гадене"
-        ]):
-            return "antidiarrheal"
-
-        # Constipation
-        if any(kw in query_lower for kw in ["запек", "constipation"]):
-            return "laxatives"
-
-        # Heartburn/reflux
-        if any(kw in query_lower for kw in ["киселини", "heartburn", "рефлукс", "reflux", "стомашен сок"]):
-            return "antacids"
-
-        return ""
+    # Note: _extract_treatment_from_query moved to src/pipeline/symptom_mappings.py
+    # for centralized symptom mapping management
 
     def _convert_to_products(self, results: list) -> list[Product]:
         """

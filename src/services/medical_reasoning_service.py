@@ -11,6 +11,7 @@ Handles all medical analysis and reasoning logic:
 from src.logging_config import get_logger
 from src.medical_model import MedicalReasoning
 from src.pipeline.product_ingredients import get_recommended_ingredients
+from src.pipeline.symptom_mappings import BG_SYMPTOM_TO_TREATMENT
 from src.unified_processor import UnifiedProcessorResult
 
 logger = get_logger("viapharma.services.medical_reasoning")
@@ -27,40 +28,7 @@ class MedicalReasoningService:
     - Provide treatment recommendations and ingredients
     """
 
-    # Bulgarian symptom keywords → treatment type mapping
-    # Used to validate/correct MedGemma's treatment_type
-    BG_SYMPTOM_TO_TREATMENT = {
-        # Digestive/GI symptoms - HIGH PRIORITY (often misclassified as cold/flu)
-        "диария": "antidiarrheal",
-        "разстройство": "antidiarrheal",
-        "гадене": "digestive",
-        "повръщане": "digestive",
-        "стомах": "digestive",
-        "стомашни": "digestive",
-        "киселини": "antacids",
-        "запек": "laxatives",
-        "чревни": "digestive",
-        # Pain
-        "болка": "analgesics",
-        "главоболие": "analgesics",
-        "мигрена": "analgesics",
-        "болки": "analgesics",
-        # Fever
-        "температура": "antipyretics",
-        "треска": "antipyretics",
-        # Respiratory/Cold
-        "кашлица": "cough",
-        "хрема": "decongestants",
-        "настинка": "cough",
-        "простуда": "cough",
-        "грип": "antipyretics",
-        # Throat
-        "гърло": "throat",
-        # Allergy
-        "алергия": "antihistamines",
-        "кихане": "antihistamines",
-        "сърбеж": "antihistamines",
-    }
+    # Note: Symptom mappings now centralized in src/pipeline/symptom_mappings.py
 
     # Brief action descriptions per treatment type (what the ingredients DO)
     TREATMENT_ACTION_TEXTS = {
@@ -362,7 +330,7 @@ class MedicalReasoningService:
             for symptom in symptoms:
                 symptom_lower = symptom.lower()
                 # Check if any keyword from our mapping appears in either the query or symptom
-                for keyword in self.BG_SYMPTOM_TO_TREATMENT.keys():
+                for keyword in BG_SYMPTOM_TO_TREATMENT.keys():
                     if keyword in symptom_lower and keyword in query_lower:
                         valid_symptoms.append(symptom)
                         break
@@ -384,7 +352,7 @@ class MedicalReasoningService:
             True if query contains symptom keywords
         """
         query_lower = query.lower()
-        return any(keyword in query_lower for keyword in self.BG_SYMPTOM_TO_TREATMENT.keys())
+        return any(keyword in query_lower for keyword in BG_SYMPTOM_TO_TREATMENT.keys())
 
     def extract_treatment_from_query(self, query: str) -> str | None:
         """
@@ -403,7 +371,7 @@ class MedicalReasoningService:
 
         # Count symptom matches by treatment type
         treatment_scores = {}
-        for keyword, treatment in self.BG_SYMPTOM_TO_TREATMENT.items():
+        for keyword, treatment in BG_SYMPTOM_TO_TREATMENT.items():
             if keyword in query_lower:
                 treatment_scores[treatment] = treatment_scores.get(treatment, 0) + 1
 

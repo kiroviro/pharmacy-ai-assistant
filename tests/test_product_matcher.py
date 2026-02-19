@@ -14,6 +14,7 @@ import pytest
 from src.medical_model import MedicalReasoning
 from src.pipeline.models import Product
 from src.pipeline.product_matcher import ProductMatcher
+from src.pipeline.symptom_mappings import extract_treatment_from_query
 
 
 # =========================================================================
@@ -410,30 +411,18 @@ class TestHelperMethods:
         assert "analgesics" in query
 
     def test_extract_treatment_from_query_diarrhea(self):
-        """Test treatment extraction for diarrhea."""
-        mock_store = MockProductStore()
-        matcher = ProductMatcher(product_store=mock_store)
-
-        treatment = matcher._extract_treatment_from_query("имам диария и болки в корема")
-
+        """Test treatment extraction for diarrhea (now uses centralized function)."""
+        treatment = extract_treatment_from_query("имам диария и болки в корема")
         assert treatment == "antidiarrheal"
 
     def test_extract_treatment_from_query_constipation(self):
-        """Test treatment extraction for constipation."""
-        mock_store = MockProductStore()
-        matcher = ProductMatcher(product_store=mock_store)
-
-        treatment = matcher._extract_treatment_from_query("запек от няколко дни")
-
+        """Test treatment extraction for constipation (now uses centralized function)."""
+        treatment = extract_treatment_from_query("запек от няколко дни")
         assert treatment == "laxatives"
 
     def test_extract_treatment_from_query_heartburn(self):
-        """Test treatment extraction for heartburn."""
-        mock_store = MockProductStore()
-        matcher = ProductMatcher(product_store=mock_store)
-
-        treatment = matcher._extract_treatment_from_query("имам рефлукс и киселини")
-
+        """Test treatment extraction for heartburn (now uses centralized function)."""
+        treatment = extract_treatment_from_query("имам рефлукс и киселини")
         assert treatment == "antacids"
 
     def test_is_drug_combination_query(self):
