@@ -11,6 +11,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from src.logging_config import get_logger
+from src.utils.validation import is_empty_or_whitespace
 
 logger = get_logger("viapharma.safety_embeddings")
 
@@ -202,7 +203,7 @@ class EmbeddingSafetyClassifier:
         Returns:
             EmbeddingSafetyResult with severity and matched phrase
         """
-        if not text or not text.strip():
+        if is_empty_or_whitespace(text):
             return EmbeddingSafetyResult("safe", 1.0, None, 0.0)
 
         # Encode user input (normalized for cosine similarity)

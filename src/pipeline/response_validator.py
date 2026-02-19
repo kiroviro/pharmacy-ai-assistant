@@ -15,6 +15,7 @@ import re
 from collections import Counter
 
 from src.logging_config import get_logger
+from src.utils.validation import is_valid_text
 
 logger = get_logger("viapharma.response_validator")
 
@@ -453,7 +454,7 @@ class TextValidator:
         Returns:
             True if text contains garbage, False otherwise
         """
-        if not text or len(text.strip()) < 3:
+        if not is_valid_text(text, min_length=3):
             return True
 
         text_lower = text.lower()
@@ -511,7 +512,7 @@ class TextValidator:
         Returns:
             Filtered text with garbage sentences removed
         """
-        if not text or len(text.strip()) < 5:
+        if not is_valid_text(text, min_length=5):
             return ""
 
         # Split by sentence-ending punctuation
@@ -595,7 +596,7 @@ class TextValidator:
         Returns:
             True if tip is valid, False if garbage
         """
-        if not tip or len(tip.strip()) < 8:
+        if not is_valid_text(tip, min_length=8):
             return False
 
         t = tip.lower().strip()

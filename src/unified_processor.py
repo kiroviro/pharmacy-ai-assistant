@@ -22,6 +22,7 @@ from mlx_lm.sample_utils import make_sampler
 from src.config import get_settings
 from src.logging_config import get_logger
 from src.prompts.unified_prompt import UNIFIED_SYSTEM_PROMPT, build_prompt
+from src.utils.validation import is_empty_or_whitespace
 
 logger = get_logger("viapharma.unified_processor")
 
@@ -263,7 +264,7 @@ class UnifiedProcessor:
         Returns:
             UnifiedProcessorResult with all processing outputs
         """
-        if not query or not query.strip():
+        if is_empty_or_whitespace(query):
             return self._empty_result()
 
         # Check cache

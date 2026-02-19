@@ -571,9 +571,13 @@ class Pipeline:
                 llm_result.extraction.user_conditions,
             )
 
-        # Validate response for garbage text (Issue #17 - Phase 1)
-        # DISABLED: text_validator.filter_garbage_sentences is too aggressive and destroys valid sections
-        # TODO: Fix text validator to not destroy properly formatted responses
+        # Garbage text validation INTENTIONALLY DISABLED (Issue #17 - Phase 1)
+        # Investigation (Code Quality Review Issue #7):
+        # - filter_garbage_sentences() destroyed 77% of valid content (2748 → 627 chars)
+        # - Too aggressive: removes sentences <10 chars, splits on commas (breaks markdown),
+        #   filters >40% uppercase (breaks product names/medical terms)
+        # - E2E regression test in test_e2e_regression.py verifies this stays disabled
+        # DECISION: Keep disabled. Upstream LLM quality is good enough.
         # if self.text_validator.contains_garbage(final_response):
         #     cleaned_response = self.text_validator.filter_garbage_sentences(final_response)
         #     if cleaned_response:

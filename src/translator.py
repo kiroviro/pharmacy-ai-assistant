@@ -17,6 +17,7 @@ from transformers import MarianMTModel, MarianTokenizer
 
 from src.config import get_settings
 from src.logging_config import get_logger
+from src.utils.validation import is_empty_or_whitespace
 
 logger = get_logger("viapharma.translator")
 
@@ -464,7 +465,7 @@ class Translator:
         Returns:
             Bulgarian translation
         """
-        if not text or not text.strip():
+        if is_empty_or_whitespace(text):
             return text
 
         # First, try to translate using dictionary for short/common phrases
@@ -683,7 +684,7 @@ class Translator:
         Returns:
             Bulgarian translation
         """
-        if not symptom or not symptom.strip():
+        if is_empty_or_whitespace(symptom):
             return symptom
 
         symptom_clean = symptom.strip().lower()
