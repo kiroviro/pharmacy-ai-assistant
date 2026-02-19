@@ -1726,22 +1726,6 @@ class Pipeline:
         if not products:
             return []
 
-        # Common active ingredients to detect (Bulgarian + English)
-        INGREDIENT_PATTERNS = INGREDIENT_PATTERNS_GLOBAL
-
-        def extract_ingredient(product: Product) -> str:
-            """Extract primary active ingredient from product."""
-            composition = (product.composition or "").lower()
-            title = (product.title or "").lower()
-            combined = f"{composition} {title}"
-
-            for ingredient, patterns in INGREDIENT_PATTERNS.items():
-                if any(pattern in combined for pattern in patterns):
-                    return ingredient
-
-            # Fallback: use first word of title as pseudo-ingredient
-            return title.split()[0] if title else "unknown"
-
         seen_ingredients: dict[str, int] = {}
         result = []
         selected_keys: set[str] = set()
@@ -1758,7 +1742,8 @@ class Pipeline:
             return f"title:{title}"
 
         for product in products:
-            ingredient = extract_ingredient(product)
+            # Use fallback_to_title=True for deduplication grouping
+            ingredient = extract_product_ingredient(product, fallback_to_title=True)
             count = seen_ingredients.get(ingredient, 0)
 
             if count < max_per_ingredient:

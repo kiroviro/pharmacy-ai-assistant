@@ -49,9 +49,19 @@ def test_extract_product_ingredient():
             self.composition = composition
             self.title = title
 
+    # Standard ingredient detection
     assert extract_product_ingredient(MockProduct("парацетамол 500mg")) == "paracetamol"
     assert extract_product_ingredient(MockProduct("", "Нурофен таблетки")) == "ibuprofen"
-    assert extract_product_ingredient(MockProduct("витамин C")) == ""
+
+    # Vitamin C now recognized (expanded patterns from Task 3)
+    assert extract_product_ingredient(MockProduct("витамин C")) == "vitamin_c"
+
+    # Unknown product with no fallback
+    assert extract_product_ingredient(MockProduct("неизвестен продукт")) == ""
+
+    # Unknown product WITH fallback (for deduplication)
+    unknown = MockProduct("", "СпециаленПродукт XYZ")
+    assert extract_product_ingredient(unknown, fallback_to_title=True) == "специаленпродукт"
 
 
 def test_is_combination_product():

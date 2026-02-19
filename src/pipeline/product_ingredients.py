@@ -176,10 +176,28 @@ def extract_all_product_ingredients(product) -> list[str]:
     ]
 
 
-def extract_product_ingredient(product) -> str:
-    """Extract primary active ingredient from product.composition and product.title."""
+def extract_product_ingredient(product, fallback_to_title: bool = False) -> str:
+    """
+    Extract primary active ingredient from product.composition and product.title.
+
+    Args:
+        product: Product object to extract from
+        fallback_to_title: If True and no ingredient found, use first word of title.
+                          Useful for deduplication to group similar products.
+
+    Returns:
+        Ingredient name, or fallback value, or empty string
+    """
     ingredients = extract_all_product_ingredients(product)
-    return ingredients[0] if ingredients else ""
+    if ingredients:
+        return ingredients[0]
+
+    # Fallback for deduplication: use first word of title as pseudo-ingredient
+    if fallback_to_title:
+        title = (product.title or "").strip().lower()
+        return title.split()[0] if title else "unknown"
+
+    return ""
 
 
 def is_combination_product(product) -> bool:
