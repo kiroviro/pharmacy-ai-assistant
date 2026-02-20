@@ -8,7 +8,7 @@ import pytest
 
 from src.medical_model import MedicalReasoning
 from src.services.product_recommendation_service import ProductRecommendationService
-from tests.contracts import MedicalReasoningBuilder, ProductBuilder, simple_product
+from tests.contracts import MedicalReasoningBuilder, simple_product
 
 
 # =========================================================================

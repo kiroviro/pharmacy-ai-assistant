@@ -12,12 +12,9 @@ from tests.contracts import (
     MedicalReasoningBuilder,
     ProductBuilder,
     simple_medical_reasoning,
-    simple_product,
-    child_product,
 )
 from tests.contracts.product_matching_contract import (
     assert_product_list_valid,
-    assert_products_relevant,
     ProductMatchingTestScenarios,
 )
 

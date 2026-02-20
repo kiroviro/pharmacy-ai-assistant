@@ -17,7 +17,6 @@ from src.pipeline.product_ingredients import (
     extract_composition_summary,
     extract_contraindication_summary,
     extract_product_ingredient,
-    is_combination_product,
 )
 
 logger = get_logger("viapharma.response_builder")

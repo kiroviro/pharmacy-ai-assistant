@@ -6,7 +6,6 @@ Pipeline follows the Perplexity two-stage retrieval pattern:
 2. LLM refines and picks best matches (accurate)
 """
 
-import re
 import time
 
 from src.config import get_settings
@@ -14,13 +13,9 @@ from src.logging_config import get_logger
 from src.medical_model import MedicalReasoning, get_medical_model
 from src.medical_terms_validator import get_medical_validator
 from src.common.contraindications import (
-    extract_user_conditions,
     filter_by_contraindications,
 )
 from src.pipeline.constants import (
-    CHILD_KEYWORDS,
-    CHRONIC_DISEASE_KEYWORDS,
-    SAFETY_KEYWORDS,
     USER_CONDITION_PATTERNS,
 )
 
@@ -29,13 +24,7 @@ from src.common.models import PipelineResult, Product
 from src.pipeline.ingredient_analyzer import IngredientAnalyzer
 from src.pipeline.product_ingredients import (
     INGREDIENT_BG_NAMES,
-    INGREDIENT_PATTERNS_GLOBAL,
-    build_ingredient_duplication_warning,
     extract_all_product_ingredients,
-    extract_composition_summary,
-    extract_contraindication_summary,
-    extract_product_ingredient,
-    is_combination_product,
 )
 from src.pipeline.product_matcher import ProductMatcher
 from src.pipeline.query_router import (
@@ -46,7 +35,7 @@ from src.pipeline.query_router import (
     is_single_drug_name_query,
 )
 from src.pipeline.response_builder import ResponseBuilder
-from src.pipeline.response_validator import TextValidator, get_text_validator
+from src.pipeline.response_validator import get_text_validator
 from src.pipeline.safety_validator import SafetyValidator
 from src.product_store import get_product_store
 from src.safety import get_safety_layer

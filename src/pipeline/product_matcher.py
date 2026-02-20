@@ -7,15 +7,12 @@ Separates product matching logic from orchestration.
 Extracted from orchestrator.py as part of Issue #1.
 """
 
-import re
 
 from src.config import get_settings
 from src.logging_config import get_logger
 from src.medical_model import MedicalReasoning
 from src.common.models import Product
 from src.pipeline.product_ingredients import (
-    INGREDIENT_BG_NAMES,
-    extract_all_product_ingredients,
     extract_product_ingredient,
     get_recommended_ingredients,
 )

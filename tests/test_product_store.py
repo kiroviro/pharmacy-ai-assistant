@@ -5,12 +5,11 @@ Goal: Increase coverage from 18% to 75%+
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 from src.product_store import (
     ProductStore,
     _is_homeopathic_product,
     MIN_SIMILARITY_THRESHOLD,
-    KEYWORD_BOOST_PER_MATCH,
     TREATMENT_CATEGORY_MAP,
 )
 

@@ -6,7 +6,6 @@ Tests focus on behavior rather than implementation details.
 
 import pytest
 
-from src.medical_model import MedicalReasoning
 from src.services.safety_check_service import SafetyCheckService
 from tests.contracts import MedicalReasoningBuilder
 

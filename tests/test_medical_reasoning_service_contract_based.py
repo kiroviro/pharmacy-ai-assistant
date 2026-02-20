@@ -8,8 +8,6 @@ import pytest
 
 from src.medical_model import MedicalReasoning
 from src.services.medical_reasoning_service import MedicalReasoningService
-from src.unified_processor import UnifiedProcessorResult
-from tests.contracts import MedicalReasoningBuilder
 
 
 # =========================================================================

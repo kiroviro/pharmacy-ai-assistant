@@ -6,7 +6,6 @@ and observability through metrics.
 """
 
 import functools
-import logging
 from typing import Any, Callable, TypeVar
 
 from src.logging_config import get_logger

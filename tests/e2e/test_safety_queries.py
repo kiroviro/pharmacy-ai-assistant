@@ -4,16 +4,13 @@ Tests drug safety questions, interactions, and pediatric queries requiring speci
 """
 
 import json
-import sys
 import time
 from datetime import datetime
-from pathlib import Path
 
 import requests
 
 # Import shared helpers
 from e2e_helpers import (
-    API_URL,
     OUTPUT_DIR,
     analyze_response,
     generate_report,
