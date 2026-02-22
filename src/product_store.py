@@ -267,7 +267,7 @@ class ProductStore:
             )
         return self._collection
 
-    def load_products(self, data_dir: str = "output", force_reload: bool = False) -> int:
+    def load_products(self, data_dir: str = "data", force_reload: bool = False) -> int:
         """
         Load products from CSV files into ChromaDB.
 

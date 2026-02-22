@@ -8,6 +8,7 @@ with Open WebUI and other OpenAI-compatible clients.
 import asyncio
 import gc
 import json
+import secrets
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -285,8 +286,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -444,6 +445,61 @@ async def clear_cache():
         cleared.append("unified_processor")
     logger.info("Caches cleared", extra={"cleared": cleared})
     return {"ok": True, "cleared": cleared}
+
+
+_reload_in_progress: bool = False
+
+
+@app.post("/admin/reload")
+async def admin_reload(req: Request):
+    """
+    Reload the product catalogue from products_processed.csv into ChromaDB.
+
+    Requires: Authorization: Bearer <VIAPHARMA_RELOAD_API_KEY>
+    Returns 202 immediately; reload runs in the background (~30-60s).
+    Poll GET /health for products_count to confirm completion.
+    """
+    global _reload_in_progress
+
+    if settings.reload_api_key is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Reload endpoint not configured: VIAPHARMA_RELOAD_API_KEY is not set.",
+        )
+
+    auth_header = req.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer ") or not secrets.compare_digest(
+        auth_header[7:], settings.reload_api_key
+    ):
+        raise HTTPException(status_code=401, detail="Invalid or missing Authorization header.")
+
+    if _reload_in_progress:
+        return JSONResponse(
+            status_code=409,
+            content={"status": "reload_in_progress", "message": "A reload is already running."},
+        )
+
+    _reload_in_progress = True
+
+    async def _do_reload():
+        global _reload_in_progress
+        try:
+            pipeline = get_pipeline()
+            count = await asyncio.to_thread(pipeline.product_store.load_products, force_reload=True)
+            logger.info("Admin reload complete", extra={"products_loaded": count})
+        except Exception as e:
+            logger.error(f"Admin reload failed: {e}", exc_info=True)
+        finally:
+            _reload_in_progress = False
+
+    asyncio.create_task(_do_reload())
+    return JSONResponse(
+        status_code=202,
+        content={
+            "status": "reload_started",
+            "message": "Reload started in background. Poll /health for products_count to confirm.",
+        },
+    )
 
 
 @app.get("/hints")

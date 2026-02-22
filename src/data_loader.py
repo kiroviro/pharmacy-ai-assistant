@@ -1,13 +1,11 @@
 """
 Data loader for ViaPharma product catalogue.
 
-Parses Shopify CSV exports and extracts structured product information
-for loading into ChromaDB.
+Reads from data/products_processed.csv — the pre-processed flat CSV produced
+by the pharmacy-to-shopify pipeline and kept up-to-date by price_sync.py.
 """
 
-import re
 from dataclasses import dataclass, field
-from html.parser import HTMLParser
 from pathlib import Path
 
 import pandas as pd
@@ -16,13 +14,10 @@ from src.logging_config import get_logger
 
 logger = get_logger("viapharma.data_loader")
 
-# BGN to EUR conversion rate (approximate, update as needed)
-BGN_TO_EUR_RATE = 0.51  # 1 BGN ≈ 0.51 EUR (fixed rate in Bulgaria)
-
 
 @dataclass
 class ParsedProduct:
-    """Structured product data extracted from Shopify CSV."""
+    """Structured product data extracted from the processed CSV."""
 
     # Core identifiers
     sku: str
@@ -36,8 +31,8 @@ class ParsedProduct:
     compare_at_price: float | None = None
 
     # Brand/Vendor
-    brand: str = ""  # Марка (from Vendor column)
-    manufacturer: str = ""  # Производител (from description)
+    brand: str = ""
+    manufacturer: str = ""
 
     # Categories
     category: str = ""
@@ -45,25 +40,22 @@ class ParsedProduct:
     target_audience: str = ""  # За кого (Възрастни/Деца)
     form: str = ""  # Форма (Сироп, Капсули, etc.)
 
-    # Parsed description sections
-    description: str = ""  # Описание
-    composition: str = ""  # Състав
-    usage: str = ""  # Начин на употреба
-    contraindications: str = ""  # Противопоказания
-    additional_info: str = ""  # Допълнителна информация
+    # Description sections
+    description: str = ""
+    composition: str = ""
+    usage: str = ""
+    contraindications: str = ""
+    additional_info: str = ""
 
     # Media
     image_url: str = ""
 
     # Status
     status: str = "Active"
-    is_otc: bool = True  # Assume all products are OTC for now
+    is_otc: bool = True
 
     def to_searchable_text(self) -> str:
-        """
-        Create a single searchable text combining all relevant fields.
-        This will be used for vector embeddings.
-        """
+        """Create a single searchable text combining all relevant fields for vector embeddings."""
         parts = [
             self.title,
             f"Марка: {self.brand}" if self.brand else "",
@@ -90,7 +82,7 @@ class ParsedProduct:
             "tags": ", ".join(self.tags),
             "target_audience": self.target_audience,
             "form": self.form,
-            "description": self.description[:1000],  # Truncate for metadata
+            "description": self.description[:1000],
             "composition": self.composition[:500],
             "usage": self.usage[:500],
             "contraindications": self.contraindications[:500],
@@ -100,208 +92,91 @@ class ParsedProduct:
         }
 
 
-class HTMLTextExtractor(HTMLParser):
-    """Simple HTML parser to extract plain text."""
-
-    def __init__(self):
-        super().__init__()
-        self.text_parts = []
-        self.current_tag = None
-
-    def handle_starttag(self, tag, attrs):
-        self.current_tag = tag
-
-    def handle_endtag(self, tag):
-        if tag in ("p", "h3", "div", "br"):
-            self.text_parts.append("\n")
-        self.current_tag = None
-
-    def handle_data(self, data):
-        text = data.strip()
-        if text:
-            self.text_parts.append(text)
-
-    def get_text(self) -> str:
-        return " ".join(self.text_parts)
+def _str(val) -> str:
+    """Return string value or empty string for NaN/None."""
+    return str(val) if pd.notna(val) else ""
 
 
-def strip_html(html_text: str) -> str:
-    """Remove HTML tags and return plain text."""
-    if not html_text or pd.isna(html_text):
-        return ""
-
-    parser = HTMLTextExtractor()
-    try:
-        parser.feed(str(html_text))
-        text = parser.get_text()
-        # Clean up extra whitespace
-        text = re.sub(r"\s+", " ", text)
-        return text.strip()
-    except Exception:
-        # Fallback: just remove tags with regex
-        return re.sub(r"<[^>]+>", " ", str(html_text)).strip()
-
-
-def extract_section(html_text: str, section_name: str) -> str:
-    """
-    Extract a specific section from HTML description.
-
-    Sections are marked with <h3>Section Name</h3> followed by content.
-    """
-    if not html_text or pd.isna(html_text):
-        return ""
-
-    # Pattern to match section header and content until next section or end
-    pattern = rf"<h3>\s*{re.escape(section_name)}\s*</h3>(.*?)(?=<h3>|$)"
-    match = re.search(pattern, str(html_text), re.IGNORECASE | re.DOTALL)
-
-    if match:
-        return strip_html(match.group(1))
-    return ""
-
-
-def extract_manufacturer(additional_info: str) -> str:
-    """Extract manufacturer from additional info section."""
-    if not additional_info:
-        return ""
-
-    match = re.search(r"Производител\s*:\s*([^Б\n]+)", additional_info)
-    if match:
-        # Clean up asterisks and extra whitespace
-        return match.group(1).strip().rstrip("*").strip()
-
-    # Fallback: try to get text before "Баркод"
-    match = re.search(r"Производител\s*:\s*(.+?)(?=Баркод|$)", additional_info)
-    if match:
-        return match.group(1).strip().rstrip("*").strip()
-
-    return ""
-
-
-def extract_barcode_from_desc(additional_info: str) -> str:
-    """Extract barcode from additional info section if not in main field."""
-    if not additional_info:
-        return ""
-
-    match = re.search(r"Баркод\s*:\s*(\d+)", additional_info)
-    if match:
-        return match.group(1)
-    return ""
-
-
-def parse_product_row(row: pd.Series) -> ParsedProduct:
-    """Parse a single product row from the Shopify CSV."""
-
-    # Get raw description HTML
-    description_html = str(row.get("Description", "")) if pd.notna(row.get("Description")) else ""
-
-    # Extract sections from description
-    description = extract_section(description_html, "Описание")
-    composition = extract_section(description_html, "Състав")
-    usage = extract_section(description_html, "Начин на употреба")
-    contraindications = extract_section(description_html, "Противопоказания")
-    additional_info = extract_section(description_html, "Допълнителна информация")
-
-    # Extract manufacturer from additional info
-    manufacturer = extract_manufacturer(additional_info)
-
-    # Get barcode - prefer from column, fallback to description
-    barcode = str(row.get("Barcode", "")) if pd.notna(row.get("Barcode")) else ""
-    if not barcode:
-        barcode = extract_barcode_from_desc(additional_info)
-
-    # Parse price
-    price_bgn = 0.0
-    if pd.notna(row.get("Price")):
+def _float(val) -> float:
+    """Return float value or 0.0 for NaN/None/invalid."""
+    if pd.notna(val):
         try:
-            price_bgn = float(row["Price"])
+            return float(val)
         except (ValueError, TypeError):
             pass
-
-    # Parse compare-at price
-    compare_at = None
-    if pd.notna(row.get("Compare-at price")):
-        try:
-            compare_at = float(row["Compare-at price"])
-        except (ValueError, TypeError):
-            pass
-
-    # Parse tags
-    tags = []
-    if pd.notna(row.get("Tags")):
-        tags = [t.strip() for t in str(row["Tags"]).split(",") if t.strip()]
-
-    # Clean SKU (remove .0 from float conversion)
-    sku = str(row.get("SKU", "")) if pd.notna(row.get("SKU")) else ""
-    sku = sku.replace(".0", "") if sku else ""
-
-    return ParsedProduct(
-        sku=sku,
-        barcode=barcode.replace(".0", "") if barcode else "",
-        title=str(row.get("Title", "")) if pd.notna(row.get("Title")) else "",
-        url_handle=str(row.get("URL handle", "")) if pd.notna(row.get("URL handle")) else "",
-        price_bgn=price_bgn,
-        price_eur=round(price_bgn * BGN_TO_EUR_RATE, 2),
-        compare_at_price=compare_at,
-        brand=str(row.get("Vendor", "")) if pd.notna(row.get("Vendor")) else "",
-        manufacturer=manufacturer,
-        category=str(row.get("Product category", "")) if pd.notna(row.get("Product category")) else "",
-        tags=tags,
-        target_audience=str(row.get("За кого (product.metafields.custom.target_audience)", ""))
-        if pd.notna(row.get("За кого (product.metafields.custom.target_audience)"))
-        else "",
-        form=str(row.get("Форма (product.metafields.custom.application_form)", ""))
-        if pd.notna(row.get("Форма (product.metafields.custom.application_form)"))
-        else "",
-        description=description,
-        composition=composition,
-        usage=usage,
-        contraindications=contraindications,
-        additional_info=additional_info,
-        image_url=str(row.get("Product image URL", "")) if pd.notna(row.get("Product image URL")) else "",
-        status=str(row.get("Status", "Active")) if pd.notna(row.get("Status")) else "Active",
-    )
+    return 0.0
 
 
-def load_products(data_dir: str = "output") -> list[ParsedProduct]:
+def load_products(data_dir: str = "data") -> list[ParsedProduct]:
     """
-    Load and parse all product CSVs from the data directory.
+    Load products from data/products_processed.csv.
 
     Args:
-        data_dir: Directory containing product CSV files
+        data_dir: Directory containing products_processed.csv (default: "data")
 
     Returns:
-        List of ParsedProduct objects
+        List of ParsedProduct objects with status == "Active"
     """
-    data_path = Path(data_dir)
-    csv_files = sorted(data_path.glob("products_*.csv"))
+    csv_path = Path(data_dir) / "products_processed.csv"
 
-    if not csv_files:
-        raise FileNotFoundError(f"No product CSV files found in {data_dir}")
+    if not csv_path.exists():
+        raise FileNotFoundError(f"Product CSV not found: {csv_path}")
 
-    all_products = []
+    logger.info(f"Loading products from {csv_path}...")
+    df = pd.read_csv(csv_path, encoding="utf-8")
 
-    for csv_file in csv_files:
-        logger.info(f"Loading {csv_file.name}...")
-        df = pd.read_csv(csv_file, encoding="utf-8")
+    # Filter to active products only
+    if "status" in df.columns:
+        df = df[df["status"] == "Active"]
 
-        # Filter to active products only
-        if "Status" in df.columns:
-            df = df[df["Status"] == "Active"]
+    products = []
+    for _, row in df.iterrows():
+        try:
+            title = _str(row.get("title"))
+            if not title:
+                continue  # Skip empty rows
 
-        for _, row in df.iterrows():
-            try:
-                product = parse_product_row(row)
-                if product.title:  # Skip empty rows
-                    all_products.append(product)
-            except Exception as e:
-                logger.warning(f"Error parsing row: {e}")
-                continue
+            # SKU and barcode: strip float-conversion artefact (e.g. "3490.0" → "3490")
+            sku = _str(row.get("sku")).replace(".0", "")
+            barcode = _str(row.get("barcode")).replace(".0", "")
 
-        logger.info(f"Loaded {len(df)} products from {csv_file.name}")
+            tags = (
+                [t.strip() for t in _str(row.get("tags")).split(",") if t.strip()]
+                if pd.notna(row.get("tags"))
+                else []
+            )
 
-    logger.info(f"Total products loaded: {len(all_products)}")
-    return all_products
+            is_otc = _str(row.get("is_otc")).strip().lower() == "true"
+
+            products.append(
+                ParsedProduct(
+                    sku=sku,
+                    barcode=barcode,
+                    title=title,
+                    url_handle=_str(row.get("url_handle")),
+                    price_bgn=_float(row.get("price_bgn")),
+                    price_eur=_float(row.get("price_eur")),
+                    brand=_str(row.get("brand")),
+                    manufacturer=_str(row.get("manufacturer")),
+                    category=_str(row.get("category")),
+                    tags=tags,
+                    target_audience=_str(row.get("target_audience")),
+                    form=_str(row.get("form")),
+                    description=_str(row.get("description")),
+                    composition=_str(row.get("composition")),
+                    usage=_str(row.get("usage")),
+                    contraindications=_str(row.get("contraindications")),
+                    image_url=_str(row.get("image_url")),
+                    status=_str(row.get("status")) or "Active",
+                    is_otc=is_otc,
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Error parsing row (sku={row.get('sku', '?')}): {e}")
+            continue
+
+    logger.info(f"Loaded {len(products)} active products from {csv_path}")
+    return products
 
 
 def save_processed_products(products: list[ParsedProduct], output_path: str = "data/products_processed.csv"):
@@ -316,10 +191,8 @@ def save_processed_products(products: list[ParsedProduct], output_path: str = "d
 
 
 if __name__ == "__main__":
-    # Test the loader
-    products = load_products("output")
+    products = load_products()
 
-    # Show sample
     if products:
         print("\n" + "=" * 60)
         print("Sample product:")
@@ -333,6 +206,3 @@ if __name__ == "__main__":
         print(f"Composition: {p.composition[:200]}..." if p.composition else "Composition: N/A")
         print(f"Contraindications: {p.contraindications[:200]}..." if p.contraindications else "Contraindications: N/A")
         print(f"Image: {p.image_url}")
-
-        # Save processed data
-        save_processed_products(products)

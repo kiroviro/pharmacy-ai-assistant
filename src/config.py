@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     # Product Settings
     # ==========================================================================
     product_base_url: str = Field(default="https://viapharma.us/products", description="Base URL for product links")
-    product_data_dir: str = Field(default="output", description="Directory with product CSV files")
+    product_data_dir: str = Field(default="data", description="Directory containing products_processed.csv")
 
     # ==========================================================================
     # Pipeline Settings
@@ -90,8 +90,12 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = Field(default=30, description="Max requests per minute per IP")
     request_timeout_seconds: int = Field(default=60, description="Request timeout in seconds (hard cap)")
     cors_origins: str = Field(
-        default="https://viapharma.us,http://localhost:3000,http://localhost:8080",
+        default="https://viapharma.us,https://www.viapharma.us,http://localhost:3000,http://localhost:3007,http://localhost:8080",
         description="Comma-separated list of allowed CORS origins",
+    )
+    reload_api_key: str | None = Field(
+        default=None,
+        description="Bearer token for POST /admin/reload. If unset, the endpoint returns 503.",
     )
 
     # ==========================================================================

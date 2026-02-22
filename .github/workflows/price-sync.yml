@@ -105,6 +105,24 @@ jobs:
             automated
             prices
 
+      - name: Reload ChromaDB via API
+        if: github.event.inputs.mode == 'sync' || github.event.inputs.mode == 'full-sync'
+        env:
+          API_URL: ${{ secrets.VIAPHARMA_API_URL }}
+          RELOAD_API_KEY: ${{ secrets.VIAPHARMA_RELOAD_API_KEY }}
+        run: |
+          echo "Triggering ChromaDB reload on the production API..."
+          HTTP_STATUS=$(curl -s -o /tmp/reload_response.json -w "%{http_code}" \
+            -X POST "${API_URL}/admin/reload" \
+            -H "Authorization: Bearer ${RELOAD_API_KEY}" \
+            -H "Content-Type: application/json")
+          cat /tmp/reload_response.json
+          if [ "$HTTP_STATUS" != "202" ]; then
+            echo "::error::ChromaDB reload failed (HTTP $HTTP_STATUS)"
+            exit 1
+          fi
+          echo "Reload accepted. Poll ${API_URL}/health for products_count to confirm."
+
       - name: Check for significant mismatches
         if: github.event_name == 'schedule'
         run: |
