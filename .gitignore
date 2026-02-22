@@ -55,6 +55,7 @@ output/
 
 # Data files (may contain large CSVs)
 data/*.csv
+!data/products_processed.csv
 
 # ChromaDB (generated, can be rebuilt)
 data/chromadb/
