@@ -40,13 +40,6 @@ from src.pipeline.safety_validator import SafetyValidator
 from src.product_store import get_product_store
 from src.safety import get_safety_layer
 
-# Service layer imports (Phase 5)
-from src.services import (
-    MedicalReasoningService,
-    ProductRecommendationService,
-    SafetyCheckService,
-)
-
 from src.translator import get_translator
 from src.unified_processor import UnifiedProcessorResult, get_unified_processor
 
@@ -64,7 +57,6 @@ class Pipeline:
 
     def __init__(
         self,
-        lazy_load: bool = True,
         # Dependency injection (backward compatible - defaults to singletons)
         safety_layer=None,
         medical_validator=None,
@@ -78,29 +70,8 @@ class Pipeline:
         safety_validator=None,
         ingredient_analyzer=None,
         text_validator=None,
-        # Service layer (Phase 5)
-        medical_reasoning_service=None,
-        product_recommendation_service=None,
-        safety_check_service=None,
     ):
-        """
-        Initialize the pipeline with dependency injection.
-
-        Args:
-            lazy_load: If True, models are loaded on first use. If False, load immediately.
-            safety_layer: Optional SafetyLayer instance (defaults to singleton)
-            medical_validator: Optional MedicalValidator instance (defaults to singleton)
-            response_builder: Optional ResponseBuilder instance (defaults to new instance)
-            product_store: Optional ProductStore instance (defaults to singleton)
-            medical_model: Optional MedicalModel instance (defaults to singleton)
-            translator: Optional Translator instance (defaults to singleton)
-            unified_processor: Optional UnifiedProcessor instance (defaults to singleton)
-            settings: Optional Settings instance (defaults to singleton)
-            product_matcher: Optional ProductMatcher instance (defaults to new instance)
-            safety_validator: Optional SafetyValidator instance (defaults to new instance)
-            ingredient_analyzer: Optional IngredientAnalyzer instance (defaults to new instance)
-            text_validator: Optional TextValidator instance (defaults to new instance)
-        """
+        """Initialize the pipeline with dependency injection."""
         # Initialize dependencies (use provided or fall back to singletons)
         self.safety_layer = safety_layer or get_safety_layer()
         self.medical_validator = medical_validator or get_medical_validator()
@@ -120,8 +91,6 @@ class Pipeline:
         self._unified_processor = unified_processor
         self._unified_processor_provided = unified_processor is not None
 
-        self._lazy_load = lazy_load
-
         # Feature flags
         settings = settings or get_settings()
         self._generate_bulgarian_directly = getattr(settings, "generate_bulgarian_directly", False)
@@ -140,30 +109,6 @@ class Pipeline:
 
         # Text validator (handles garbage detection, Bulgarian ratio, English leaks)
         self.text_validator = text_validator or get_text_validator(translator=self.translator)
-
-        # Service layer (Phase 5) - orchestrates business logic
-        self.medical_reasoning_service = medical_reasoning_service or MedicalReasoningService(
-            medical_model=self.medical_model,
-            user_condition_patterns=USER_CONDITION_PATTERNS
-        )
-
-        self.product_recommendation_service = product_recommendation_service or ProductRecommendationService(
-            product_matcher=self.product_matcher,
-            safety_validator=self.safety_validator,
-            safety_layer=self.safety_layer,
-            medical_reasoning_service=self.medical_reasoning_service
-        )
-
-        self.safety_check_service = safety_check_service or SafetyCheckService(
-            safety_layer=self.safety_layer,
-            safety_validator=self.safety_validator,
-            medical_reasoning_service=self.medical_reasoning_service
-        )
-
-        if not lazy_load:
-            self._load_translator()
-            self._load_product_store()
-            self._load_unified_processor()
 
     @property
     def product_store(self):
@@ -215,13 +160,6 @@ class Pipeline:
             self._translator = get_translator()
         if not self._translator_provided:
             self._translator.load_all()
-
-    def _load_medical_model(self):
-        """Load the MedGemma model."""
-        if self._medical_model is None:
-            self._medical_model = get_medical_model()
-        if not self._medical_model_provided:
-            self._medical_model.load()
 
     # =========================================================================
     # Catalog & Comparison Processing
@@ -281,27 +219,6 @@ class Pipeline:
             candidate_products=all_products[:6],
         )
 
-    # Generic terms that shouldn't be used for strict filtering
-    _GENERIC_TERMS = {
-        "мг",
-        "mg",
-        "мл",
-        "ml",
-        "капсули",
-        "таблетки",
-        "сироп",
-        "капки",
-        "крем",
-        "гел",
-        "разтвор",
-        "суспензия",
-        "за",
-        "при",
-        "х",
-        "g",
-        "гр",
-    }
-
     def _process_catalog_query(self, user_input: str, search_term: str) -> PipelineResult:
         """
         Process a catalog query without medical reasoning.
@@ -354,14 +271,8 @@ class Pipeline:
             selected_products=products[:3],
         )
 
-    # Standard OTC disclaimer for all responses
-    _OTC_DISCLAIMER = (
-        "\n---\n⚠️ *Тази информация е само за справка. Консултирайте се с фармацевт или лекар за персонална препоръка.*"
-    )
-
     # Issue 8: Response length standardization - consistent UX
     _MAX_EXPLANATION_LEN = 350
-    _MAX_HOW_HELPS_LEN = 200
     _MAX_TIP_LEN = 120
     _MAX_WARNING_LEN = 150
     _MAX_DURATION_LEN = 120
@@ -509,7 +420,7 @@ class Pipeline:
             )
 
         # Build MedicalReasoning from unified result (for compatibility)
-        medical_reasoning = self.medical_reasoning_service.build_medical_reasoning_from_unified(llm_result)
+        medical_reasoning = self._build_medical_reasoning_from_unified(llm_result)
 
         # Product retrieval (uses vector DB + age filtering)
         candidate_products = self.product_matcher.retrieve_candidates(medical_reasoning, user_input)
@@ -552,13 +463,6 @@ class Pipeline:
             # Add general doctor recommendation if not already in response
             if "консултация с лекар" not in final_response.lower():
                 final_response = self.safety_layer.add_safety_disclaimer(final_response, safety_result)
-
-        if contraindicated_products:
-            final_response = self._add_contraindication_warning(
-                final_response,
-                contraindicated_products,
-                llm_result.extraction.user_conditions,
-            )
 
         # Garbage text validation INTENTIONALLY DISABLED (Issue #17 - Phase 1)
         # Investigation (Code Quality Review Issue #7):
@@ -618,7 +522,7 @@ class Pipeline:
             parts.append("*Не можах да анализирам запитването.*")
             return "\n".join(parts)
 
-        medical_reasoning = self.medical_reasoning_service.build_medical_reasoning_from_unified(llm_result)
+        medical_reasoning = self._build_medical_reasoning_from_unified(llm_result)
 
         # ── SECTION 1: Symptom info header ──────────────────────────────
         symptom_label = self._build_symptom_header(llm_result.extraction.symptoms, original_query)
@@ -817,6 +721,31 @@ class Pipeline:
             ]
         return items
 
+    def _build_medical_reasoning_from_unified(self, llm_result: UnifiedProcessorResult) -> MedicalReasoning:
+        """Convert UnifiedProcessorResult to MedicalReasoning for compatibility."""
+        reasoning = llm_result.reasoning
+        if not reasoning:
+            return MedicalReasoning(
+                symptoms=llm_result.extraction.symptoms,
+                likely_cause="",
+                treatment_type="",
+                warnings=[],
+                see_doctor=False,
+            )
+
+        return MedicalReasoning(
+            symptoms=llm_result.extraction.symptoms,
+            likely_cause=reasoning.explanation,
+            treatment_type=reasoning.treatment_category,
+            warnings=reasoning.warnings,
+            see_doctor=reasoning.see_doctor,
+            explanation=reasoning.explanation,
+            how_treatment_helps="",
+            self_care_tips=reasoning.self_care_tips,
+            duration_guidance="",
+            user_conditions=llm_result.extraction.user_conditions,
+        )
+
     def _translate_to_bulgarian(self, text: str) -> str:
         """Translate English to Bulgarian."""
         return self.translator.translate_to_bulgarian(text)
@@ -830,240 +759,6 @@ class Pipeline:
             except Exception as e:
                 logger.warning("Failed to parse product", extra={"error": str(e)})
         return products
-
-    # Condition name translations for user-friendly messages
-    _CONDITION_NAMES_BG = {
-        "pregnancy": "бременност",
-        "breastfeeding": "кърмене",
-        "child": "деца",
-        "elderly": "възрастни хора",
-        "diabetes": "диабет",
-        "heart": "сърдечни заболявания",
-        "kidney": "бъбречни проблеми",
-        "liver": "чернодробни проблеми",
-        "allergy": "алергии",
-        "stomach": "стомашни проблеми",
-        "asthma": "астма",
-    }
-
-    def _add_contraindication_warning(
-        self, response: str, contraindicated_products: list[tuple], user_conditions: list[str]
-    ) -> str:
-        """Contraindication info is now part of the product card warnings
-        and the safety block in the main template. No extra block appended."""
-        return response
-
-    def _format_response(
-        self,
-        medical_reasoning: MedicalReasoning,
-        products: list,
-        translate_reasoning: bool = True,
-        original_query: str = "",
-    ) -> str:
-        """Format response using the updated template (Feb 2026).
-
-        🔍 Info → 💊 Ingredients → 💧 Tip → 🛡️ Safety (compact) →
-        🛒 Products (prominent, separated) → ⚠️ Triage → ℹ️ Footer
-        """
-        parts = []
-
-        # Collect all texts to translate in one batch for efficiency
-        if translate_reasoning:
-            texts_to_translate = self._collect_texts_for_translation(medical_reasoning)
-            translated_texts = self._batch_translate_texts(texts_to_translate)
-
-            # Validate and correct medical terms in translated text
-            validated_texts = {}
-            for key, text in translated_texts.items():
-                if text:
-                    corrected_text, issues = self.medical_validator.validate_and_correct(text, context=key)
-                    validated_texts[key] = corrected_text
-                else:
-                    validated_texts[key] = text
-            translated_texts = validated_texts
-        else:
-            translated_texts = {}
-
-        def get_translated(key: str, original: str, min_length: int = 3) -> str | None:
-            if not original or len(original) <= min_length:
-                return None
-
-            # If generating Bulgarian directly, text is already in Bulgarian - no translation needed
-            if self._generate_bulgarian_directly:
-                if self.text_validator.contains_garbage(original):
-                    return None
-                return self.text_validator.clean_english_leaks(original)
-
-            if not translate_reasoning:
-                return self.text_validator.clean_english_leaks(original)
-            translated = translated_texts.get(key, original)
-            if self.text_validator.contains_garbage(translated):
-                return None
-            # Reject text with too much English (< 60% Bulgarian chars)
-            if self.text_validator.calculate_bulgarian_ratio(translated) < 0.60:
-                fresh = self.translator.translate_to_bulgarian(original)
-                if fresh and self.text_validator.calculate_bulgarian_ratio(fresh) >= 0.60:
-                    return self.text_validator.clean_english_leaks(fresh)
-                return None
-            return self.text_validator.clean_english_leaks(translated)
-
-        # ── SECTION 1: Symptom info header ──────────────────────────────
-        symptom_label = self._build_symptom_header(medical_reasoning.symptoms, original_query)
-        parts.append(f"## 🔍 Информация при симптом: {symptom_label}\n")
-
-        # Explanation
-        if cause := get_translated("likely_cause", medical_reasoning.likely_cause):
-            parts.append(cause)
-        if explanation := get_translated("explanation", medical_reasoning.explanation, min_length=10):
-            explanation = self._truncate_for_display(explanation, self._MAX_EXPLANATION_LEN)
-            parts.append(explanation)
-
-        # Recovery timeline (inline)
-        if medical_reasoning.duration_guidance:
-            duration = get_translated("duration_guidance", medical_reasoning.duration_guidance)
-            if duration and not any(bad in duration.lower() for bad in ["intron", "интрон", "лечение с", "терапия с"]):
-                duration = self._truncate_for_display(duration, self._MAX_DURATION_LEN)
-                if len(duration) >= 5:
-                    parts.append(duration)
-
-        parts.append("")
-
-        # ── SECTION 2: Active ingredients ───────────────────────────────
-        # ALWAYS show this section when products are present (Issue #18)
-        parts.append("---")
-        treatment_type = medical_reasoning.treatment_type or ""
-        recommended_ingredients = self.ingredient_analyzer.get_recommended_ingredients(treatment_type)
-        # Fallback: derive from products when LLM omits
-        if not recommended_ingredients and products:
-            seen = set()
-            for p in products[:5]:
-                for ing in extract_all_product_ingredients(p):
-                    seen.add(ing)
-            recommended_ingredients = list(seen)[:5]
-        symptom_count = len(medical_reasoning.symptoms) if medical_reasoning.symptoms else 1
-
-        # Show ingredients section if we have products (even if ingredient extraction failed)
-        if products:
-            parts.append("## 💊 Подходящи активни съставки\n")
-            if recommended_ingredients:
-                ingredient_names_bg = [INGREDIENT_BG_NAMES.get(ing, ing) for ing in recommended_ingredients]
-                for name_bg in ingredient_names_bg:
-                    parts.append(f"• **{name_bg}**")
-                action_text = self.ingredient_analyzer.get_treatment_action_text(treatment_type)
-                if action_text:
-                    parts.append(f"\n{action_text}")
-            else:
-                # Fallback when ingredient extraction fails (Issue #18)
-                parts.append("*Проверете активните съставки и дозировката в листовката на продукта.*")
-
-        # Self-care tips (inline 💧, max 2) — filter garbage from LLM (Issue #17)
-        if medical_reasoning.self_care_tips:
-            for i, tip in enumerate(medical_reasoning.self_care_tips[:2]):
-                if not tip or len(tip) < 5:
-                    continue
-                translated_tip = get_translated(f"tip_{i}", tip, min_length=5)
-                if translated_tip:
-                    translated_tip = self._truncate_for_display(translated_tip, self._MAX_TIP_LEN)
-                    # Validate self-care tip and filter garbage patterns
-                    if len(translated_tip) >= 5 and self.text_validator.is_valid_self_care_tip(translated_tip):
-                        parts.append(f"\n💧 {translated_tip}")
-                    elif len(translated_tip) >= 5:
-                        logger.warning(f"Filtered garbage from self-care tip: {translated_tip[:100]}")
-
-        parts.append("")
-
-        # ── SECTION 3: Safety block (compact, smaller text) ────────────
-        parts.append("---")
-        safety_block = self.response_builder.build_safety_block(medical_reasoning, products, original_query)
-        if safety_block:
-            parts.append(safety_block)
-            parts.append("")
-
-        # ── SECTION 4: Products (prominent, with separators) ───────────
-        parts.append("---")
-        parts.append("## 🛒 Подходящи продукти\n")
-        if products:
-            displayed_products = self.safety_validator.filter_by_severity(products, symptom_count)
-            for i, product in enumerate(displayed_products, 1):
-                if i > 1:
-                    parts.append("---")
-                product_block = self.response_builder.format_product_card(product, i, treatment_type, medical_reasoning)
-                parts.append(product_block)
-        else:
-            parts.append("*Съжалявам, не намерих подходящи продукти в каталога.*")
-
-        parts.append("")
-
-        # ── SECTION 5: Triage (always shown) ───────────────────────────
-        parts.append("---")
-        parts.append("## ⚠️ Потърсете лекар ако:\n")
-        triage_items = self._collect_triage_items_legacy(medical_reasoning, products, original_query, get_translated)
-        for item in triage_items:
-            parts.append(f"• {item}")
-        parts.append("")
-
-        # ── SECTION 6: Footer ──────────────────────────────────────────
-        parts.append("---")
-        parts.append("ℹ️ **Важна информация**")
-        parts.append("Информацията има общ характер и не замества консултация с лекар или фармацевт.")
-        parts.append("Преди употреба прочетете листовката.")
-
-        response = "\n".join(parts)
-        # Final garbage cleanup pass (Issue #17)
-        return self.response_builder._final_garbage_cleanup(response)
-
-    def _collect_triage_items_legacy(self, medical_reasoning, products, original_query, get_translated) -> list[str]:
-        """Collect triage bullet points for the legacy path."""
-        items = []
-        seen = set()
-
-        # Model-generated warnings
-        if medical_reasoning.warnings:
-            for i, warning in enumerate(medical_reasoning.warnings):
-                translated = get_translated(f"warning_{i}", warning, min_length=10)
-                if translated:
-                    translated = self._truncate_for_display(translated, self._MAX_WARNING_LEN)
-                    if len(translated) >= 10:
-                        # Filter garbage from warnings (Issue #17)
-                        translated_lower = translated.lower()
-                        has_garbage = any(
-                            pattern in translated_lower
-                            for pattern in [
-                                "зъбні протези",
-                                "грижа за зъбні протези",
-                                "защита на личните",
-                                "средство за защита",
-                                "репелент",
-                                "комар",
-                                "комари",
-                                "пластмасов",
-                                "ламарин",
-                                "металокерамика",
-                            ]
-                        )
-                        if not has_garbage:
-                            items.append(translated)
-                            seen.add(translated[:20])
-                        else:
-                            logger.warning(f"Filtered garbage from triage warning: {translated[:100]}")
-
-        # Data-driven triage
-        if products:
-            for item in self.response_builder.build_triage_defaults(medical_reasoning, products, original_query):
-                if item[:20] not in seen:
-                    items.append(item)
-                    seen.add(item[:20])
-
-        if medical_reasoning.see_doctor and "консултация" not in " ".join(items).lower():
-            items.append("🏥 Препоръчваме консултация с лекар за вашите симптоми.")
-
-        if not items:
-            items = [
-                "Симптомите продължават повече от 3 дни",
-                "Състоянието се влошава или се появяват нови симптоми",
-                "Имате висока температура (>39°C)",
-            ]
-        return items
 
     def _build_symptom_header(self, symptoms: list | None, original_query: str) -> str:
         """Build the symptom label for the header, e.g. 'Температура (38°C)'.
@@ -1094,56 +789,6 @@ class Pipeline:
                     return translated.capitalize()
 
         return "вашите симптоми"
-
-    def _collect_texts_for_translation(self, medical_reasoning: MedicalReasoning) -> dict[str, str]:
-        """Collect all texts from MedicalReasoning that need translation."""
-        texts = {}
-
-        # Symptoms
-        if medical_reasoning.symptoms:
-            for symptom in medical_reasoning.symptoms:
-                if symptom and len(symptom) < 40:
-                    texts[f"symptom_{symptom}"] = symptom
-
-        if medical_reasoning.likely_cause:
-            texts["likely_cause"] = medical_reasoning.likely_cause
-        if medical_reasoning.explanation:
-            texts["explanation"] = medical_reasoning.explanation
-        if medical_reasoning.treatment_type:
-            texts["treatment_type"] = medical_reasoning.treatment_type
-        if medical_reasoning.how_treatment_helps:
-            texts["how_treatment_helps"] = medical_reasoning.how_treatment_helps
-        if medical_reasoning.duration_guidance:
-            texts["duration_guidance"] = medical_reasoning.duration_guidance
-
-        # Self-care tips
-        if medical_reasoning.self_care_tips:
-            for i, tip in enumerate(medical_reasoning.self_care_tips):
-                if tip:
-                    texts[f"tip_{i}"] = tip
-
-        # Warnings
-        if medical_reasoning.warnings:
-            for i, warning in enumerate(medical_reasoning.warnings):
-                if warning:
-                    texts[f"warning_{i}"] = warning
-
-        return texts
-
-    def _batch_translate_texts(self, texts: dict[str, str]) -> dict[str, str]:
-        """Batch translate all texts in one call for efficiency."""
-        if not texts:
-            return {}
-
-        keys = list(texts.keys())
-        values = list(texts.values())
-
-        try:
-            translated_values = self.translator.translate_batch_to_bulgarian(values)
-            return dict(zip(keys, translated_values, strict=False))
-        except Exception as e:
-            logger.warning(f"Batch translation failed, falling back to originals: {e}")
-            return texts
 
 
 # Global pipeline instance (singleton for production use)

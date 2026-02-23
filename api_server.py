@@ -47,6 +47,8 @@ executor = ThreadPoolExecutor(max_workers=1)
 
 # Rate limiting storage (simple in-memory implementation)
 rate_limit_store: dict[str, list[float]] = {}
+_rate_limit_last_eviction: float = 0.0
+_RATE_LIMIT_EVICTION_INTERVAL = 300  # Evict stale IPs every 5 minutes
 
 # Metrics tracking
 metrics_store = {
@@ -89,11 +91,20 @@ def validate_message(message: str) -> str:
 
 def check_rate_limit(client_ip: str) -> bool:
     """Check if client has exceeded rate limit. Returns True if within limit."""
+    global _rate_limit_last_eviction
+
     if not settings.enable_rate_limiting:
         return True
 
     now = time.time()
     window_start = now - 60
+
+    # Periodic eviction of stale IPs to prevent unbounded memory growth
+    if now - _rate_limit_last_eviction > _RATE_LIMIT_EVICTION_INTERVAL:
+        stale_ips = [ip for ip, timestamps in rate_limit_store.items() if not timestamps or timestamps[-1] < window_start]
+        for ip in stale_ips:
+            del rate_limit_store[ip]
+        _rate_limit_last_eviction = now
 
     if client_ip not in rate_limit_store:
         rate_limit_store[client_ip] = []
@@ -109,10 +120,7 @@ def check_rate_limit(client_ip: str) -> bool:
 
 
 def get_client_ip(request: Request) -> str:
-    """Get client IP from request, handling proxies."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """Get client IP from the socket connection (not spoofable headers)."""
     return request.client.host if request.client else "unknown"
 
 
@@ -340,23 +348,28 @@ async def request_middleware(request: Request, call_next):
     return response
 
 
+_GC_INTERVAL_SECONDS = 60  # Run GC every 60 seconds instead of every request
+_last_gc_time: float = 0.0
+
+
 @app.middleware("http")
 async def memory_cleanup_middleware(request: Request, call_next):
     """
-    Aggressive memory cleanup after heavy inference requests.
-    Prevents VRAM accumulation and server crashes.
+    Periodic memory cleanup after inference requests.
+    Runs GC at most once per minute instead of every request.
     """
+    global _last_gc_time
     response = await call_next(request)
 
-    # Cleanup after chat completion requests (heavy inference)
-    if "/chat/completions" in str(request.url.path) or "/v1/chat/completions" in str(request.url.path):
-        try:
-            # Force Python garbage collection
-            gc.collect()
-            # Clear MLX metal cache (releases GPU memory on Apple Silicon)
-            mx.metal.clear_cache()
-        except Exception:
-            pass  # Silently ignore cleanup errors
+    if "/chat/completions" in request.url.path:
+        now = time.time()
+        if now - _last_gc_time > _GC_INTERVAL_SECONDS:
+            try:
+                gc.collect()
+                mx.metal.clear_cache()
+            except Exception:
+                pass
+            _last_gc_time = now
 
     return response
 
@@ -429,9 +442,21 @@ async def health_check():
     )
 
 
+def _require_admin_auth(request: Request) -> None:
+    """Verify admin API key from Authorization header. Raises HTTPException if invalid."""
+    if settings.reload_api_key is None:
+        return  # No key configured — allow access (dev mode)
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer ") or not secrets.compare_digest(
+        auth_header[7:], settings.reload_api_key
+    ):
+        raise HTTPException(status_code=401, detail="Invalid or missing Authorization header.")
+
+
 @app.post("/cache/clear")
-async def clear_cache():
+async def clear_cache(req: Request):
     """Clear in-memory caches (translator, medical model, unified processor). Use before e2e tests for a clean run."""
+    _require_admin_auth(req)
     pipeline = get_pipeline()
     cleared = []
     if pipeline._translator is not None and hasattr(pipeline._translator, "clear_cache"):
@@ -467,11 +492,7 @@ async def admin_reload(req: Request):
             detail="Reload endpoint not configured: VIAPHARMA_RELOAD_API_KEY is not set.",
         )
 
-    auth_header = req.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer ") or not secrets.compare_digest(
-        auth_header[7:], settings.reload_api_key
-    ):
-        raise HTTPException(status_code=401, detail="Invalid or missing Authorization header.")
+    _require_admin_auth(req)
 
     if _reload_in_progress:
         return JSONResponse(
@@ -514,8 +535,9 @@ async def get_hints():
 
 
 @app.get("/metrics")
-async def get_metrics():
+async def get_metrics(req: Request):
     """Get application metrics for monitoring."""
+    _require_admin_auth(req)
     pipeline = get_pipeline()
 
     avg_latency = (

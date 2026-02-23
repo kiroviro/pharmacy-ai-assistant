@@ -1,8 +1,8 @@
 # Technical Debt & Issues Tracker
 
 **Last Updated**: February 23, 2026
-**Project Grade**: B (78/100) - *Improved: God object refactored, unified processor migrated, E2E tests split*
-**Source**: Staff Engineering Review + E2E Quality Tests (352 queries)
+**Project Grade**: B+ (84/100) - *Staff review: all 16 issues resolved, orchestrator <1K LOC, 547 tests, 74% coverage*
+**Source**: Staff Engineering Review (Feb 23) + E2E Quality Tests (352 queries)
 
 ## 📊 Quality Status (E2E Tests - February 14, 2026)
 
@@ -36,10 +36,11 @@
 
 ---
 
-### 2. 🟡 MOSTLY RESOLVED: God Object Anti-Pattern (Orchestrator Refactoring)
-**Status**: 🟡 88% Complete (1,210 LOC, target <1,000)
+### 2. ✅ RESOLVED: God Object Anti-Pattern (Orchestrator Refactoring)
+**Status**: ✅ Complete — **855 LOC** (target was <1,000)
 **Priority**: P1
 **Date Started**: February 2026
+**Date Resolved**: February 23, 2026
 
 **Original Problem**:
 - `src/pipeline/orchestrator.py` was **2,676 lines, 68 methods**
@@ -50,14 +51,11 @@
 - Phase 3: Added test contracts and builders
 - Phase 4: Contract-based test migration guide
 - Phase 5: Extracted IngredientAnalyzer (215 LOC, 98% coverage)
-- Phase 6: Extracted TextValidator into response_validator.py (745 LOC) — biggest single phase
-- Phase 7: Service layer integration (3 services created)
+- Phase 6: Extracted TextValidator into response_validator.py — biggest single phase
+- Phase 7: Service layer created then inlined (over-engineering removed)
+- Phase 8: Dead code deletion (325 LOC), service layer removal, lazy_load cleanup
 
-**Current State**: 2,676 LOC -> **1,210 LOC** (55% reduction)
-
-**Remaining**:
-- ~210 LOC of duplicate methods to delete
-- Final cleanup to reach <1,000 LOC goal
+**Final State**: 2,676 LOC -> **855 LOC** (68% reduction)
 
 **Files Created**:
 - `src/pipeline/product_matcher.py` (148 LOC)
@@ -65,9 +63,11 @@
 - `src/pipeline/ingredient_analyzer.py` (215 LOC)
 - `src/pipeline/response_builder.py` (227 LOC)
 - `src/pipeline/response_validator.py` (745 LOC)
-- `src/services/medical_reasoning_service.py` (97 LOC)
-- `src/services/product_recommendation_service.py` (86 LOC)
-- `src/services/safety_check_service.py` (70 LOC)
+
+**Deleted** (over-engineered, unused):
+- `src/services/` directory (3 services, never called from production code)
+- `src/pipeline/conditions.py` (deprecated shim)
+- `src/pipeline/models.py` (deprecated shim)
 
 ---
 
@@ -278,7 +278,7 @@ ab -n 100 -c 10 http://localhost:8001/v1/chat/completions
 - `test_catalog_queries.py`
 - `test_edge_cases.py`
 
-**Note**: Legacy `e2e_query_tests.py` still exists in root — can be deleted once split tests are fully validated
+**Note**: Legacy `e2e_query_tests.py` deleted. Added `tests/e2e/conftest.py` to fix pytest collection of `e2e_helpers` imports.
 
 ---
 
@@ -975,9 +975,9 @@ with patch('src.translator.get_translator', return_value=mock_translator):
 | Response Time (p99) | 49.3s | <10s | 🔴 |
 | Product Relevance | 99% (3 failures) | >99% | 🟢 |
 | **Code Quality** | | | |
-| Orchestrator Size | 1,210 LOC | <1,000 LOC | 🟡 |
-| Test Coverage | 68% | >80% | 🟡 |
-| Unit Tests | ~491 collected | 100% passing | 🟡 |
+| Orchestrator Size | 855 LOC | <1,000 LOC | ✅ |
+| Test Coverage | 74% | >80% | 🟡 |
+| Unit Tests | 547 passing | 100% passing | ✅ |
 | Security CVEs | 1 | 0 | 🟢 |
 | **Architecture** | | | |
 | Concurrent Workers | 1 | 1 (validated) | ✅ |
@@ -993,5 +993,5 @@ with patch('src.translator.get_translator', return_value=mock_translator):
 - **Bi-weekly**: Review orchestrator extraction progress
 - **Monthly**: Re-run staff engineering review, update grade
 
-**Last Review**: February 13, 2026 (Grade: B-)
-**Next Review**: March 13, 2026 (Target: B+)
+**Last Review**: February 23, 2026 (Grade: B+, up from B-)
+**Next Review**: March 23, 2026 (Target: A-)

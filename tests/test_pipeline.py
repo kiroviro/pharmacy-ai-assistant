@@ -225,7 +225,6 @@ def mock_pipeline():
 
     # Inject dependencies directly - no patching needed!
     pipeline = Pipeline(
-        lazy_load=False,  # Load immediately for testing
         safety_layer=mock_safety_layer,
         medical_validator=mock_validator,
         response_builder=response_builder,
@@ -289,8 +288,7 @@ class TestPipelineInitialization:
         assert mock_pipeline.unified_processor is not None
 
     def test_lazy_loading_works(self, mock_pipeline):
-        """Components should be lazily loaded."""
-        # Access translator to trigger lazy load
+        """Components should be lazily loaded via properties."""
         translator = mock_pipeline.translator
         assert translator is not None
 
@@ -674,50 +672,3 @@ class TestPipelineResultWithContraindications:
         assert result.contraindicated_products == []
 
 
-class TestContraindicationWarningMessage:
-    """Tests for contraindication warning messages.
-
-    Note: As of recent refactor, contraindication warnings are now embedded
-    in product card warnings and the safety block, not appended to responses.
-    The _add_contraindication_warning method now returns the response unchanged.
-    """
-
-    def test_warning_includes_condition(self, mock_pipeline):
-        """Contraindication warnings are now in product cards, not appended."""
-        original = "Original response"
-        response = mock_pipeline._add_contraindication_warning(
-            original, [("MockProduct", ["pregnancy"])], ["pregnancy"]
-        )
-
-        # Method should return response unchanged (warnings are in product cards)
-        assert response == original
-
-    def test_warning_mentions_filtered_count(self, mock_pipeline):
-        """Contraindication warnings are now in product cards, not appended."""
-        original = "Original response"
-        # Create mock tuples
-        filtered = [
-            (Mock(title="Product A"), ["pregnancy"]),
-            (Mock(title="Product B"), ["pregnancy"]),
-        ]
-
-        response = mock_pipeline._add_contraindication_warning(original, filtered, ["pregnancy"])
-
-        # Method should return response unchanged (warnings are in product cards)
-        assert response == original
-
-    def test_no_warning_when_no_contraindicated(self, mock_pipeline):
-        """Should not add warning when no products filtered."""
-        original = "Original response"
-        response = mock_pipeline._add_contraindication_warning(original, [], ["pregnancy"])
-
-        assert response == original
-
-    def test_no_warning_when_no_conditions(self, mock_pipeline):
-        """Should not add warning when no user conditions."""
-        original = "Original response"
-        filtered = [(Mock(title="Product A"), ["pregnancy"])]
-
-        response = mock_pipeline._add_contraindication_warning(original, filtered, [])
-
-        assert response == original

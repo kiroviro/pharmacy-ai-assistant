@@ -179,17 +179,6 @@ def load_products(data_dir: str = "data") -> list[ParsedProduct]:
     return products
 
 
-def save_processed_products(products: list[ParsedProduct], output_path: str = "data/products_processed.csv"):
-    """Save processed products to a clean CSV for inspection."""
-    output_file = Path(output_path)
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-
-    records = [p.to_dict() for p in products]
-    df = pd.DataFrame(records)
-    df.to_csv(output_file, index=False, encoding="utf-8")
-    logger.info(f"Saved processed products to {output_path}")
-
-
 if __name__ == "__main__":
     products = load_products()
 
