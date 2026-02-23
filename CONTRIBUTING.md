@@ -7,7 +7,7 @@ Thank you for your interest in contributing to the Pharmacy AI Assistant project
 ### Prerequisites
 
 - Python 3.11+
-- Mac with Apple Silicon (M1/M2/M3) for MedGemma inference
+- Mac with Apple Silicon (M1/M2/M3/M4) for MedGemma inference via MLX
 - ~8GB disk space for models
 
 ### Quick Setup
@@ -23,7 +23,6 @@ source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
-pip install -r requirements-dev.txt  # Development tools
 
 # Download the MedGemma model
 huggingface-cli login
@@ -37,33 +36,46 @@ pytest tests/ -v
 
 ```
 pharmacy-ai-assistant/
-├── src/                    # Source code
-│   ├── pipeline/           # Main pipeline (modular)
-│   │   ├── orchestrator.py # Pipeline class
-│   │   ├── models.py       # Product, PipelineResult
-│   │   ├── constants.py    # Keywords, patterns
-│   │   ├── conditions.py   # Condition extraction
-│   │   ├── product_ingredients.py  # Ingredient parsing
-│   │   └── query_router.py # Query routing
-│   ├── medical_model.py    # MedGemma wrapper
-│   ├── translator.py       # BG↔EN translation
-│   ├── safety.py           # Emergency detection
-│   ├── product_store.py    # ChromaDB vector store
-│   ├── unified_processor.py # Unified LLM processor
-│   └── intent_classifier.py
-├── tests/                  # Test suite
-├── data/                   # Product data, embeddings
-├── models/                 # Downloaded models
-└── docs/                   # Documentation
+├── src/
+│   ├── pipeline/                    # Main pipeline (modular)
+│   │   ├── orchestrator.py          # Pipeline class (~1,210 LOC)
+│   │   ├── product_matcher.py       # Product search & ranking
+│   │   ├── safety_validator.py      # Age/severity filtering
+│   │   ├── ingredient_analyzer.py   # Ingredient extraction
+│   │   ├── response_builder.py      # Response formatting
+│   │   ├── response_validator.py    # Garbage text filtering
+│   │   ├── query_router.py          # Query routing
+│   │   ├── product_ingredients.py   # Ingredient parsing
+│   │   ├── conditions.py            # Condition extraction
+│   │   └── models.py                # Product, PipelineResult
+│   ├── services/                    # Service layer
+│   │   ├── medical_reasoning_service.py
+│   │   ├── product_recommendation_service.py
+│   │   └── safety_check_service.py
+│   ├── unified_processor.py         # LLM-driven processor
+│   ├── medical_model.py             # MedGemma MLX wrapper
+│   ├── translator.py                # EN→BG translation (MarianMT)
+│   ├── safety.py                    # Hard-coded emergency detection
+│   ├── product_store.py             # ChromaDB vector store
+│   ├── config.py                    # Centralized config (pydantic-settings)
+│   └── prompts/
+│       └── unified_prompt.py        # LLM prompt templates
+├── tests/
+│   ├── e2e/                         # E2E quality tests (5 files)
+│   ├── contracts/                   # Test contracts & builders
+│   └── test_*.py                    # Unit & integration tests
+├── data/                            # Product data, ChromaDB
+├── models/                          # Downloaded models (git-ignored)
+└── docs/                            # Architecture, tech debt
 ```
 
 ## Code Style
 
 ### Python Standards
 
-- **Formatting**: We don't enforce a specific formatter, but keep code clean and readable
+- **Formatting & Linting**: [ruff](https://github.com/astral-sh/ruff) (line-length=120)
 - **Type hints**: Use type hints for function signatures
-- **Docstrings**: Document public functions with Args/Returns sections
+- **Docstrings**: Document public functions — only where the logic isn't self-evident
 
 ### Naming Conventions
 
@@ -91,7 +103,7 @@ pytest tests/ -v
 # Run specific test file
 pytest tests/test_translator.py -v
 
-# Run with coverage
+# Run with coverage (enforced minimum: 35%)
 pytest tests/ --cov=src --cov-report=term-missing
 
 # Run only fast tests (skip slow LLM tests)
@@ -101,12 +113,15 @@ pytest tests/ -v -m "not slow"
 #### End-to-End (E2E) Quality Tests
 
 ```bash
-# Run comprehensive E2E quality tests
-python e2e_query_tests.py
+# Run all E2E tests
+pytest tests/e2e/ -v
 
-# Results are saved to:
-# - output/test_results.json (structured data)
-# - test_results.txt (human-readable report)
+# Run by category
+pytest tests/e2e/test_symptom_queries.py -v
+pytest tests/e2e/test_medication_queries.py -v
+pytest tests/e2e/test_safety_queries.py -v
+pytest tests/e2e/test_catalog_queries.py -v
+pytest tests/e2e/test_edge_cases.py -v
 ```
 
 **What E2E Tests Check**:
@@ -116,9 +131,6 @@ python e2e_query_tests.py
 - **Product relevance**: Verifies recommended products match symptoms
 - **Safety validation**: Tests emergency detection and triage
 - **Performance**: Tracks response times (target <10s)
-
-**E2E Test Results**:
-The E2E tests run 352 real Bulgarian medical queries and generate a detailed quality report. Review `test_results.txt` for issues before making PRs.
 
 ### Writing Tests
 
@@ -140,7 +152,8 @@ def test_translation(input, expected):
 
 - **Unit tests**: Test individual functions/methods
 - **Integration tests**: Test component interactions
-- **Regression tests**: Prevent re-introducing bugs (see `TestRegressionPrevention`)
+- **Contract tests**: Test interface contracts (survive refactoring)
+- **E2E tests**: Full pipeline quality validation
 
 ## Making Changes
 
@@ -155,7 +168,8 @@ def test_translation(input, expected):
 1. **Write tests first** for any new functionality
 2. Make your changes
 3. Run the test suite: `pytest tests/ -v`
-4. Update documentation if needed
+4. Run linting: `ruff check src/ tests/`
+5. Update documentation if needed
 
 ### Commit Messages
 
@@ -175,25 +189,27 @@ Add retry logic to model inference
 2. **Include tests**: New code should have test coverage
 3. **Update docs**: If behavior changes, update relevant docs
 4. **Run all tests**: Ensure `pytest tests/ -v` passes
+5. **Lint passes**: Ensure `ruff check` passes
 
 ## Safety Considerations
 
 This is a medical-adjacent application. Please:
 
-- **Never remove safety checks** without discussion
+- **Never remove the hard-coded safety layer** (`src/safety.py`) — this is non-negotiable
 - **Test edge cases** for medical content
 - **Preserve emergency detection** for critical symptoms
 - **Maintain disclaimers** for medical advice
+- **MLX is single-threaded** — `max_workers=1` is correct; concurrent inference causes segfault
 
 ### Critical Safety Files
 
-- `src/safety.py` - Emergency keyword detection
-- Pipeline safety layer integration
-- Disclaimer generation
+- `src/safety.py` — Hard-coded emergency keyword detection
+- `src/pipeline/safety_validator.py` — Age/severity filtering
+- `src/services/safety_check_service.py` — Safety check service
 
 ## Translation Dictionary
 
-The medical dictionary in `src/translator.py` ensures consistent translations.
+The medical dictionary in `src/translator.py` handles EN→BG translation (BG→EN query translation is handled by the unified processor).
 
 ### Adding Terms
 
@@ -230,12 +246,12 @@ def test_new_term_translation(self, translator, english, expected_bulgarian):
 
 1. Review `src/pipeline/orchestrator.py`
 2. Consider impacts on caching
-3. Update `docs/pipeline_diagram.md` if flow changes
+3. Update `docs/ARCHITECTURE.md` if flow changes
 
 ## Getting Help
 
 - Check existing documentation in `docs/`
-- Review the `docs/ARCHITECTURE.md` for system design
+- Review `docs/ARCHITECTURE.md` for system design
 - Open an issue for questions
 
 ## Code of Conduct

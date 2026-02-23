@@ -1,7 +1,7 @@
 # Technical Debt & Issues Tracker
 
-**Last Updated**: February 14, 2026
-**Project Grade**: C+ (70/100) - *Downgraded due to E2E quality findings*
+**Last Updated**: February 23, 2026
+**Project Grade**: B (78/100) - *Improved: God object refactored, unified processor migrated, E2E tests split*
 **Source**: Staff Engineering Review + E2E Quality Tests (352 queries)
 
 ## 📊 Quality Status (E2E Tests - February 14, 2026)
@@ -36,61 +36,38 @@
 
 ---
 
-### 2. ⚠️ ACTIVE: God Object Anti-Pattern (Orchestrator Explosion)
-**Status**: 🔴 Not Started
-**Priority**: P0 (Highest)
-**Effort**: 2-3 weeks (incremental)
+### 2. 🟡 MOSTLY RESOLVED: God Object Anti-Pattern (Orchestrator Refactoring)
+**Status**: 🟡 88% Complete (1,210 LOC, target <1,000)
+**Priority**: P1
+**Date Started**: February 2026
 
-**Problem**:
-- File: `src/pipeline/orchestrator.py`
-- Size: **2,676 lines, 68 methods** in single Pipeline class
-- Violates Single Responsibility Principle catastrophically
-- Impossible to unit test in isolation
-- PR reviews must be 500+ lines
+**Original Problem**:
+- `src/pipeline/orchestrator.py` was **2,676 lines, 68 methods**
 
-**Impact**:
-- Blocks new engineer onboarding (2+ weeks to understand)
-- Prevents parallel development (constant merge conflicts)
-- Makes debugging extremely difficult
+**Progress** (Strangler Fig Pattern):
+- Phase 1: Extracted ProductMatcher (148 LOC, 90% coverage)
+- Phase 2: Extracted SafetyValidator (72 LOC)
+- Phase 3: Added test contracts and builders
+- Phase 4: Contract-based test migration guide
+- Phase 5: Extracted IngredientAnalyzer (215 LOC, 98% coverage)
+- Phase 6: Extracted TextValidator into response_validator.py (745 LOC) — biggest single phase
+- Phase 7: Service layer integration (3 services created)
 
-**Solution** (Strangler Fig Pattern):
-```
-Week 1: Extract QueryRouter (~300 LOC)
-  - src/pipeline/orchestrator.py:39-350
-  - Move to: src/pipeline/query_router.py (already partially exists)
-  - Extract: is_catalog_query, is_comparison_query, is_single_drug_name_query
+**Current State**: 2,676 LOC -> **1,210 LOC** (55% reduction)
 
-Week 2: Extract ResponseBuilder (~400 LOC)
-  - src/pipeline/orchestrator.py:800-1200
-  - Move to: src/pipeline/response_builder.py (new)
-  - Extract: _format_response, _build_product_list, _format_markdown
+**Remaining**:
+- ~210 LOC of duplicate methods to delete
+- Final cleanup to reach <1,000 LOC goal
 
-Week 3: Extract ProductMatcher (~300 LOC)
-  - src/pipeline/orchestrator.py:400-700
-  - Move to: src/pipeline/product_matcher.py (new)
-  - Extract: _search_products, _refine_products, _deduplicate
-
-Week 4: Extract SafetyValidator (~200 LOC)
-  - src/pipeline/orchestrator.py:200-400
-  - Move to: src/pipeline/safety_validator.py (new)
-  - Extract: safety checks, contraindication filtering
-
-Week 5: Extract IngredientAnalyzer (~250 LOC)
-  - Already partially done in src/pipeline/product_ingredients.py
-  - Complete extraction from orchestrator
-```
-
-**Files**:
-- `src/pipeline/orchestrator.py:50-2676`
-
-**Tests to Write**:
-- Each extracted class needs isolated unit tests
-- Integration tests to ensure pipeline still works
-
-**Rollback Plan**:
-- Each extraction is a separate PR
-- Old code stays until new code is proven
-- Feature flag for each component
+**Files Created**:
+- `src/pipeline/product_matcher.py` (148 LOC)
+- `src/pipeline/safety_validator.py` (72 LOC)
+- `src/pipeline/ingredient_analyzer.py` (215 LOC)
+- `src/pipeline/response_builder.py` (227 LOC)
+- `src/pipeline/response_validator.py` (745 LOC)
+- `src/services/medical_reasoning_service.py` (97 LOC)
+- `src/services/product_recommendation_service.py` (86 LOC)
+- `src/services/safety_check_service.py` (70 LOC)
 
 ---
 
@@ -154,57 +131,16 @@ Parallel (max_workers=4):
 
 ---
 
-### 4. ⚠️ ACTIVE: Parallel Architecture Paths (Double Maintenance)
-**Status**: 🟡 Needs Decision
-**Priority**: P1 (Architecture Debt)
-**Effort**: 2-3 days (migration) + 1 week (monitoring)
-
-**Problem**:
-- Unified processor (new LLM-based) coexists with legacy (keyword-based)
-- Feature flag: `unified_processor_enabled=False` (default off)
-- Both paths maintained = 2x bugs, 2x testing, 2x cognitive load
-
-**Files**:
-- `src/unified_processor.py:1-465` (new path)
-- `src/intent_classifier.py:1-346` (legacy path)
-- `src/translator.py:137-166` (query translation - legacy)
-- `src/pipeline/orchestrator.py:79-88` (feature flag)
-
-**Decision Matrix**:
-
-| Factor | Unified Processor | Legacy Path |
-|--------|------------------|-------------|
-| Speed | 180ms p50 (30% faster) ✅ | 250ms p50 |
-| Accuracy | Semantic understanding ✅ | Keyword matching |
-| Maintainability | Single LLM call ✅ | 3+ components |
-| Debuggability | Black box ❌ | Clear logic ✅ |
-| VRAM Usage | Higher ❌ | Lower ✅ |
-| Failure Mode | Single point ❌ | Isolated components ✅ |
-
-**Recommendation**: **Go all-in on Unified Processor**
-
-**Migration Plan**:
-```
-Week 1: Enable by default
-  - src/config.py:114 change False → True
-  - Deploy to staging
-  - Monitor error rates, latency, VRAM usage
-
-Week 2: Validate in production (10% traffic)
-  - Feature flag rollout: 10% → 50% → 100%
-  - Compare accuracy with legacy (sample 100 queries)
-  - If accuracy < 95% of legacy, rollback
-
-Week 3: Remove legacy code (if stable)
-  - Delete: src/intent_classifier.py
-  - Delete: query translation from src/translator.py (keep response translation)
-  - Remove feature flag
-  - Update tests
-
-Rollback: Set unified_processor_enabled=False
-```
-
-**IMPORTANT**: Keep hard-coded safety layer regardless of decision (non-negotiable)
+### 4. ✅ RESOLVED: Parallel Architecture Paths (Double Maintenance)
+**Status**: ✅ Completed (February 2026)
+**Original Problem**: Unified processor (LLM-based) coexisted with legacy (keyword-based intent classifier)
+**Resolution**:
+- Enabled `unified_processor_enabled=True` (default)
+- Deleted `src/intent_classifier.py` (346 lines)
+- Removed BG→EN query translation from `src/translator.py` (kept EN→BG response translation)
+- Removed dual path logic from orchestrator (173 lines)
+- Total: 17,873 lines removed across the migration
+- Hard-coded safety layer preserved (non-negotiable)
 
 ---
 
@@ -332,49 +268,17 @@ ab -n 100 -c 10 http://localhost:8001/v1/chat/completions
 
 ---
 
-### 7. ⚠️ ACTIVE: E2E Tests Monolith
-**Status**: 🔴 Not Started
-**Priority**: P2 (Code Quality)
-**Effort**: 3-4 hours
+### 7. ✅ RESOLVED: E2E Tests Monolith
+**Status**: ✅ Completed (February 2026)
+**Original Problem**: `e2e_query_tests.py` was 1,628 lines in a single file
+**Resolution**: Split into 5 category files in `tests/e2e/`:
+- `test_symptom_queries.py`
+- `test_medication_queries.py`
+- `test_safety_queries.py`
+- `test_catalog_queries.py`
+- `test_edge_cases.py`
 
-**Problem**:
-- File: `e2e_query_tests.py`
-- Size: **1,628 lines** in single file
-- Larger than most production modules
-- Violates test organization best practices
-- Hard to navigate, slow to run subset
-
-**Solution**:
-```
-Split into:
-  tests/e2e/
-    ├── test_medication_queries.py  (~400 LOC)
-    ├── test_symptom_queries.py     (~400 LOC)
-    ├── test_safety_queries.py      (~300 LOC)
-    ├── test_catalog_queries.py     (~300 LOC)
-    └── test_edge_cases.py          (~228 LOC)
-```
-
-**Migration**:
-```bash
-# 1. Create directory
-mkdir -p tests/e2e
-
-# 2. Split by category (preserve test names)
-# Extract all test_medication_* → test_medication_queries.py
-# Extract all test_symptom_* → test_symptom_queries.py
-# etc.
-
-# 3. Verify all tests still run
-pytest tests/e2e/ -v
-
-# 4. Delete original e2e_query_tests.py
-
-# 5. Update CI config if needed
-```
-
-**Files**:
-- `e2e_query_tests.py:1-1628`
+**Note**: Legacy `e2e_query_tests.py` still exists in root — can be deleted once split tests are fully validated
 
 ---
 
@@ -547,11 +451,11 @@ COPY models/ /app/models/
 
 ## 🟠 High Priority Issues
 
-### 17. ⚠️ ACTIVE: Garbage Text Contaminating Responses (CRITICAL)
-**Status**: 🟡 Investigation Complete - Fixing
-**Priority**: P0 (User-Facing Quality)
-**Effort**: 4-8 hours (investigation ✅ + fix 🔴)
+### 17. 🟡 PARTIALLY FIXED: Garbage Text Contaminating Responses
+**Status**: 🟡 Output validation implemented (Option 1), root cause remains (LLM hallucination)
+**Priority**: P1 (User-Facing Quality)
 **Investigation Date**: February 14, 2026
+**Mitigation**: `src/pipeline/response_validator.py` — TextValidator with 325+ garbage patterns
 
 **Problem**:
 - **25 issues detected** (6 CRITICAL) in E2E quality tests
@@ -1027,20 +931,8 @@ with patch('src.translator.get_translator', return_value=mock_translator):
 
 ## 🟢 Low Priority / Nice-to-Have
 
-### 15. ⚠️ ACTIVE: Dockerfile Not Visible
-**Status**: 🟡 Needs Verification
-**Priority**: P4
-**Effort**: 1 hour (if missing)
-
-**Problem**:
-- README mentions `docker-compose up -d`
-- No `docker-compose.yml` visible in root
-- May exist but not in current context
-
-**Action**: Verify Docker setup works or remove references
-
-**Files**:
-- Check for: `Dockerfile`, `docker-compose.yml`, `.dockerignore`
+### 15. ✅ RESOLVED: Dockerfile Not Visible
+**Status**: ✅ Verified — Both `Dockerfile` and `docker-compose.yml` exist in project root
 
 ---
 
@@ -1053,114 +945,22 @@ with patch('src.translator.get_translator', return_value=mock_translator):
 
 ## Prioritized Action Plan
 
-### 🚨 CRITICAL - Production Quality (This Week)
+### Remaining Active Issues
 
-**Priority: Fix user-facing quality issues before refactoring**
+**Production Quality:**
+1. **Template Compliance** (Issue #18) — Only 38% show active ingredients. Highest user-facing impact.
+2. **Language Quality** (Issue #19) — 4 responses with English leaks
+3. **Garbage Text** (Issue #17) — Partially mitigated with validator, needs further prompt/model work
+4. **Performance Outliers** (Issue #20) — 49s max response time
 
-#### Day 1: Investigate Garbage Text (4-6 hours) → Issue #17
-**Goal**: Find root cause of irrelevant text in responses
+**Code Quality:**
+1. **Complete God Object refactor** (Issue #2) — 1,210 LOC, ~210 LOC from goal
+2. **Fix Pipeline Tests** (Issue #21) — Mock paths need updating
+3. **Evaluate unused quality tooling** (Issue #10) — evaluation.py, metrics.py, query_collector.py
 
-```bash
-# 1. Sample failing queries from test_results.json
-jq '.critical_issues[] | select(.issues[] | .type == "GARBAGE")' output/test_results.json
-
-# 2. Trace through pipeline for one query
-python -c "
-from src.pipeline import get_pipeline
-pipeline = get_pipeline()
-result = pipeline.process('Имам температура 38 градуса')
-print('Products:', result.selected_products)
-print('Response:', result.response)
-"
-
-# 3. Check if garbage comes from:
-# - Product database (grep product data for "защита на личните")
-# - LLM output (log raw medical_model output)
-# - Template formatting (check response builder)
-```
-
-**Deliverable**: Root cause identified, fix approach decided
-
----
-
-#### Day 2-3: Fix Template Compliance (8-12 hours) → Issue #18
-**Goal**: Active ingredients section present in >95% of responses
-
-**Tasks**:
-1. Fix ingredient extraction (2-3h)
-   - Debug why only 38% have ingredients section
-   - Ensure `extract_product_ingredient()` works for all products
-
-2. Update response template (2-3h)
-   - Always show 💊 section when products present
-   - Generate ingredient-specific safety warnings
-
-3. Add combo product notes (2h)
-   - Detect multi-ingredient products
-   - Add explanation why combo is recommended
-
-4. Validate with E2E tests (2h)
-   - Re-run comprehensive tests
-   - Target: 112/297 → 285/297+ with ingredients
-
-**Files**:
-- `src/pipeline/product_ingredients.py`
-- `src/pipeline/orchestrator.py:_format_response_from_unified`
-
-**Success Criteria**: Template compliance 38% → >95%
-
----
-
-#### Day 4: Fix Language Quality (2-3 hours) → Issue #19
-**Goal**: Bulgarian ratio >95% in all responses
-
-**Tasks**:
-1. Add language validation (1h)
-   - Check response before returning
-   - Flag responses with <90% Bulgarian
-
-2. Fix English leaks (1h)
-   - Common patterns: "Afts", "Гидит", medical terms
-   - Add to translation dictionary or fix prompt
-
-3. Test with failing queries (1h)
-
-**Success Criteria**: 4 failures → 0 failures
-
----
-
-### 🟡 HIGH PRIORITY - Code Quality (Next Week)
-
-#### Week 2: Fix Unit Tests & Split E2E Tests (1 day)
-1. **Fix Pipeline Tests** (30min) → Issue #21
-   - Update mock paths in tests/test_pipeline.py
-   - Get all 275 tests passing
-
-2. **Split E2E Tests** (3-4h) → Issue #7
-   - Organize into 5 category files
-   - Improve test navigation
-
----
-
-### 🟢 MEDIUM PRIORITY - Architecture (Weeks 3-4)
-
-#### Week 3: Enable Unified Processor (3 days) → Issue #4
-- Feature flag → True
-- Monitor for 1 week
-- Remove legacy if stable
-
-#### Week 4: Start God Object Refactor (5 days) → Issue #2
-- Extract QueryRouter
-- Reduces orchestrator by ~300 LOC
-
----
-
-### 🔵 LOW PRIORITY - Future Work
-
-- **ResponseBuilder Extraction** (5 days) → Issue #2 (Week 2)
-- **Redis Rate Limiting** (1 day) → Issue #6
-- **Memory Leak Investigation** (1-2 days) → Issue #5
-- **Performance Outlier Investigation** (2-4h) → Issue #20
+**Infrastructure:**
+1. **Redis Rate Limiting** (Issue #6) — Needed before horizontal scaling
+2. **Memory Leak Investigation** (Issue #5) — VRAM cleanup after every request
 
 ---
 
@@ -1169,21 +969,21 @@ print('Response:', result.response)
 | Metric | Current | Target | Status |
 |--------|---------|--------|--------|
 | **Production Quality** | | | |
-| Garbage Text in Responses | 7% (25/352) | <1% | 🔴 |
+| Garbage Text in Responses | 7% (mitigated with validator) | <1% | 🟡 |
 | Template Compliance (Ingredients) | 38% (112/297) | >95% | 🔴 |
 | Language Quality (BG ratio) | 95% avg (4 failures) | >98% | 🟡 |
 | Response Time (p99) | 49.3s | <10s | 🔴 |
 | Product Relevance | 99% (3 failures) | >99% | 🟢 |
 | **Code Quality** | | | |
-| Orchestrator Size | 2,676 LOC | <1,000 LOC | 🔴 |
-| Test Coverage | 39% | >80% | 🟡 |
-| Unit Tests Passing | 270/275 (98%) | 100% | 🟡 |
+| Orchestrator Size | 1,210 LOC | <1,000 LOC | 🟡 |
+| Test Coverage | 68% | >80% | 🟡 |
+| Unit Tests | ~491 collected | 100% passing | 🟡 |
 | Security CVEs | 1 | 0 | 🟢 |
 | **Architecture** | | | |
 | Concurrent Workers | 1 | 1 (validated) | ✅ |
 | Cache Hit Rate Visibility | 100% | 100% | ✅ |
-| E2E Test Files | 1 (1,628 LOC) | 5 (<400 LOC each) | 🔴 |
-| Architecture Paths | 2 (unified + legacy) | 1 | 🟡 |
+| E2E Test Files | 5 files in tests/e2e/ | 5 (<400 LOC each) | ✅ |
+| Architecture Paths | 1 (unified only) | 1 | ✅ |
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-AI-powered pharmacy assistant for viapharma.us that understands Bulgarian-language symptom descriptions and recommends OTC products from a catalogue of ~10-11k items. Built with MedGemma medical AI, runs locally on Mac M-series with option to scale later.
+AI-powered pharmacy assistant for viapharma.us that understands Bulgarian-language symptom descriptions and recommends OTC products from a catalogue of ~9,600 items. Built with MedGemma 4B medical AI via MLX, runs locally on Mac Apple Silicon.
 
 ## Ecosystem Integration
 
@@ -10,110 +10,105 @@ This AI assistant is part of the ViaPharma pharmacy technology stack:
 
 - **Product Data Source**: Receives product catalog updates from the **pharmacy-to-shopify** synchronization pipeline
 - **Customer Touchpoint**: Integrated with **[viapharma.us](https://viapharma.us)** to provide intelligent product recommendations
+- **Frontend**: **cloudly-v3** Next.js app with chat panel connects to this API
 - **Data Flow**: `pharmacy-to-shopify` → Product CSV → ChromaDB embeddings → MedGemma recommendations → Customer interface
-
-The chatbot serves as an AI-powered recommendation engine that bridges customer symptoms with the right OTC products available at viapharma.us.
 
 ## Architecture
 
-Uses **Perplexity-style two-stage retrieval** for accurate product matching:
-1. **Stage 1**: Vector DB returns top-K candidates (fast, cheap)
-2. **Stage 2**: LLM refines and picks best matches (accurate)
+### Unified Processor (Active Architecture)
+
+The current architecture uses a **single LLM call** (unified processor) that handles intent classification, safety screening, medical reasoning, and product matching in one pass. This replaced the previous multi-step pipeline (separate intent classifier, BG→EN translation, etc.) which was removed in Week 3.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                           USER INTERFACE                                      │
+│                           USER INTERFACE                                     │
 └──────────────────────────────────────────────────────────────────────────────┘
 
-  ┌─────────────────┐
-  │   Open WebUI    │
-  │   Port 3000     │
-  └────────┬────────┘
-           │
-           ▼
-  ┌─────────────────┐
-  │  api_server.py  │
-  │   Port 8000     │
-  │  (OpenAI API)   │
-  └────────┬────────┘
-           │
-           ▼
+  ┌─────────────────┐     ┌─────────────────┐
+  │  cloudly-v3     │     │   Open WebUI    │
+  │  Port 3007      │     │   Port 3000     │
+  └────────┬────────┘     └────────┬────────┘
+           │                       │
+           └───────────┬───────────┘
+                       ▼
+  ┌─────────────────────────────────┐
+  │         api_server.py           │
+  │         Port 8000               │
+  │    (OpenAI-compatible API)      │
+  │    max_workers=1 (MLX limit)    │
+  └────────────┬────────────────────┘
+               │
+               ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                              PIPELINE FLOW                                    │
+│                              PIPELINE FLOW                                   │
 └──────────────────────────────────────────────────────────────────────────────┘
 
   User Input (Bulgarian)
         │
         ▼
 ┌───────────────┐
-│ 1. INTENT     │──── Not medical? ────▶ Polite rejection
-│   CLASSIFIER  │                        "Мога да помогна само с
-│  (Keywords)   │                         здравни въпроси"
+│ 1. HARD-CODED │──── Emergency? ────▶ "Обадете се на 112"
+│    SAFETY     │     (keyword-based,
+│   (safety.py) │      non-negotiable)
 └───────┬───────┘
-        │ Medical query
+        │ Safe
         ▼
 ┌───────────────┐
-│ 2. TRANSLATE  │
-│   BG → EN     │
-│  (MarianMT)   │
+│ 2. UNIFIED    │     Single LLM call handles:
+│   PROCESSOR   │     • Intent classification (medical vs non-medical)
+│  (MedGemma    │     • Query translation (BG → EN, internally)
+│    4B, MLX)   │     • Medical reasoning
+│               │     • Product extraction criteria
 └───────┬───────┘
         │
         ▼
-┌───────────────┐     ┌───────────────┐
-│ 3. MEDGEMMA   │────▶│ 4. SAFETY     │──── Red flag? ────▶ "Моля, консултирайте
-│   Medical     │     │    LAYER      │                      се с лекар"
-│   Reasoning   │     │  (Python)     │
-└───────────────┘     └───────┬───────┘
-                              │
-        ┌─────────────────────┴─────────────────────┐
-        │         TWO-STAGE RETRIEVAL               │
-        │         (Perplexity Pattern)              │
-        └─────────────────────┬─────────────────────┘
-                              │
-                              ▼
-                      ┌───────────────┐
-                      │ 5a. VECTOR DB │
-                      │   RETRIEVAL   │◄─── FAST: Get top-K candidates
-                      │  (ChromaDB)   │     from ~10k products
-                      └───────┬───────┘
-                              │ top-K candidates
-                              ▼
-                      ┌───────────────┐
-                      │ 5b. LLM       │◄─── ACCURATE: Pick best matches
-                      │   REFINEMENT  │     given query + candidates
-                      │  (MedGemma)   │
-                      └───────┬───────┘
-                              │ best matches
-                              ▼
-                      ┌───────────────┐
-                      │ 6. TRANSLATE  │
-                      │   EN → BG     │
-                      │  (MarianMT)   │
-                      └───────┬───────┘
-                              │
-                              ▼
-                      ┌───────────────┐
-                      │ 7. RESPONSE   │
-                      │   + Disclaimer│
-                      │   to UI       │
-                      └───────────────┘
+┌─────────────────────────────────────────┐
+│       TWO-STAGE RETRIEVAL               │
+│       (Perplexity Pattern)              │
+└─────────────────────┬───────────────────┘
+                      │
+                      ▼
+              ┌───────────────┐
+              │ 3a. VECTOR DB │
+              │   RETRIEVAL   │◄─── FAST: Get top-10 candidates
+              │  (ChromaDB)   │     from ~9,600 products
+              └───────┬───────┘
+                      │ top-10 candidates
+                      ▼
+              ┌───────────────┐
+              │ 3b. LLM       │◄─── ACCURATE: Pick best 3 matches
+              │   REFINEMENT  │     given query + candidates
+              │  (MedGemma)   │
+              └───────┬───────┘
+                      │ best matches
+                      ▼
+              ┌───────────────┐
+              │ 4. RESPONSE   │     • Garbage text filtering
+              │   VALIDATION  │     • Template compliance
+              │   + BUILDER   │     • Language quality checks
+              └───────┬───────┘
+                      │
+                      ▼
+              ┌───────────────┐
+              │ 5. TRANSLATE  │
+              │   EN → BG     │
+              │  (MarianMT)   │
+              └───────┬───────┘
+                      │
+                      ▼
+              ┌───────────────┐
+              │ 6. RESPONSE   │
+              │   + Disclaimer│
+              │   to UI       │
+              └───────────────┘
 ```
-
-## User Interface
-
-### Open WebUI
-- Full-featured chat interface
-- Conversation history
-- Model selection
-- Runs via `api_server.py` (OpenAI-compatible API)
-- See `OPEN_WEBUI_SETUP.md` for setup instructions
 
 ## Two-Stage Retrieval (Key Innovation)
 
 Inspired by Perplexity's finance widget architecture:
 
 ### Stage 1: Vector DB Retrieval (FAST)
-- **Input**: Medical reasoning from MedGemma
+- **Input**: Medical reasoning from unified processor
 - **Process**: Nearest-neighbor search over product embeddings
 - **Output**: Top 10 candidate products
 - **Speed**: ~10-50ms
@@ -129,114 +124,126 @@ Inspired by Perplexity's finance widget architecture:
 
 ## Pipeline Components
 
-### Step 1: Intent Classifier (`src/intent_classifier.py`)
-- **Method**: Keyword-based classification (fast, no ML model needed)
-- **Purpose**: Filter non-medical queries (weather, jokes, cooking, etc.)
-- **Languages**: Bulgarian and English medical terms supported
-- **Keywords**:
-  - Medical: symptoms, body parts, medications, treatment actions
-  - Non-medical: weather, news, sports, recipes, travel, banking
-- **Output**: `(is_medical: bool, confidence: float, reason: str)`
-- **Behavior**: Permissive - defaults to medical if unclear (better to process than reject)
-- **Status**: ✅ Implemented
-
-### Step 2: Translation BG → EN (`src/translator.py`)
-- **Model**: `Helsinki-NLP/opus-mt-bg-en` (MarianMT)
-- **Purpose**: Translate Bulgarian symptoms to English for MedGemma
-- **Cache**: LRU cache for repeated translations
-- **Status**: ✅ Implemented
-
-### Step 3: Medical Reasoning (`src/medical_model.py`)
-- **Model**: `mlx-community/medgemma-4b-it-bf16`
-- **Purpose**: Understand symptoms, suggest treatment categories
-- **Prompt**: Structured to output treatment types, not specific products
-- **Status**: ✅ Implemented
-
-### Step 4: Safety Layer (`src/safety.py`)
-- **Purpose**: Detect dangerous symptoms and ensure safe recommendations
-- **Severity Levels**:
-  - **Emergency** 🚨: Immediate 112 call (chest pain, difficulty breathing, seizures, poisoning, suicidal thoughts)
-  - **Urgent** ⚠️: See doctor within 24-48h (blood in urine/stool, high fever >3 days, severe headache, jaundice)
-  - **Warning** ℹ️: Monitor and seek help if worsens (persistent cough, unexplained weight loss, changing moles)
-- **Languages**: Bulgarian and English symptom detection
-- **OTC Filter**: Removes non-OTC products from recommendations
+### Step 1: Hard-Coded Safety Layer (`src/safety.py`)
+- **Method**: Keyword-based matching (Bulgarian + English)
+- **Purpose**: Detect emergency/urgent symptoms before any LLM processing
+- **Non-negotiable**: This layer is never removed — medical safety requires redundancy
 - **Output**: `SafetyCheckResult` with severity, matched symptoms, and localized message
-- **Status**: ✅ Implemented
 
-### Step 5a: Product Retrieval (`src/product_store.py`)
-- **Database**: ChromaDB with ~10-11k products
+### Step 2: Unified Processor (`src/unified_processor.py`)
+- **Model**: `mlx-community/medgemma-4b-it-bf16` via MLX
+- **Purpose**: Single LLM call handles intent, translation, reasoning, extraction
+- **Replaces**: Legacy intent classifier, BG→EN translator, separate reasoning step
+- **Coverage**: 92% test coverage
+
+### Step 3a: Product Retrieval (`src/product_store.py`)
+- **Database**: ChromaDB with ~9,600 products
 - **Embeddings**: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
 - **Method**: Vector similarity search
-- **Returns**: Top 10 candidate products (fast, cheap)
-- **Status**: ✅ Implemented
+- **Returns**: Top 10 candidate products
 
-### Step 5b: Product Refinement (`src/medical_model.py`)
+### Step 3b: Product Refinement (`src/pipeline/product_matcher.py`)
 - **Model**: MedGemma (reuses loaded model)
-- **Input**: Original query + top-K candidates from vector search
+- **Input**: Original query + top-10 candidates from vector search
 - **Method**: LLM picks best matches considering medical context
 - **Returns**: Top 3 most relevant products
-- **Status**: ✅ Implemented
 
-### Step 6: Translation EN → BG (`src/translator.py`)
+### Step 4: Response Validation (`src/pipeline/response_validator.py`)
+- **Purpose**: Catch LLM hallucinations and garbage text
+- **Method**: 325+ garbage patterns, template compliance checks
+- **Consolidation**: TextValidator class handles all validation
+
+### Step 5: Translation EN → BG (`src/translator.py`)
 - **Model**: `Helsinki-NLP/opus-mt-en-bg` (MarianMT)
 - **Purpose**: Translate response back to Bulgarian
-- **Status**: ✅ Implemented
+- **Note**: BG→EN query translation was removed — unified processor handles it
 
-### Step 7: Response Formatting (`src/pipeline.py`)
+### Step 6: Response Formatting (`src/pipeline/response_builder.py`)
 - Product recommendations with prices (BGN and EUR)
-- Safety disclaimers added based on symptom severity
+- Active ingredient display
+- Safety disclaimers based on symptom severity
 - Standard disclaimer always shown
-- **Status**: ✅ Implemented
 
 ## Project Structure
 
 ```
-medgemma/
-├── .env                        # HF token (git-ignored)
-├── .env.example                # Template for .env
-├── .gitignore
-├── ARCHITECTURE.md             # This file
-├── OPEN_WEBUI_SETUP.md         # Open WebUI setup guide
-├── requirements.txt            # Python dependencies
-│
-├── api_server.py               # OpenAI-compatible API (for Open WebUI)
-│
-├── models/
-│   └── medgemma-4b-it-bf16/    # MedGemma model (git-ignored)
-│
-├── data/
-│   ├── .gitkeep
-│   ├── products.csv            # Product catalogue (git-ignored)
-│   └── chromadb/               # Vector database (git-ignored)
+pharmacy-ai-assistant/
+├── api_server.py                        # OpenAI-compatible FastAPI server
 │
 ├── src/
-│   ├── __init__.py
-│   ├── config.py               # Centralized configuration (pydantic-settings)
-│   ├── logging_config.py       # Structured logging with request tracking
-│   ├── intent_classifier.py    # Step 1: Medical query detection
-│   ├── translator.py           # Step 2 & 6: BG↔EN translation
-│   ├── medical_model.py        # Step 3 & 5b: MedGemma wrapper
-│   ├── safety.py               # Step 4: Red-flag detection + OTC filter
-│   ├── product_store.py        # Step 5a: ChromaDB vector search
-│   ├── data_loader.py          # CSV to ChromaDB loader
-│   ├── unified_processor.py    # Unified LLM processor
-│   └── pipeline/               # Pipeline module
-│       ├── __init__.py
-│       ├── orchestrator.py     # Main pipeline class
-│       ├── models.py           # Data models (Product, PipelineResult)
-│       ├── constants.py        # Keywords, symptom mappings
-│       ├── conditions.py       # User condition extraction
-│       ├── product_ingredients.py  # Ingredient parsing
-│       └── query_router.py     # Query routing logic
+│   ├── config.py                        # Centralized config (pydantic-settings)
+│   ├── logging_config.py                # Structured JSON logging
+│   ├── unified_processor.py             # Unified LLM processor (492 LOC)
+│   ├── medical_model.py                 # MedGemma MLX wrapper
+│   ├── translator.py                    # EN→BG translation (MarianMT)
+│   ├── safety.py                        # Hard-coded safety layer
+│   ├── product_store.py                 # ChromaDB vector search
+│   ├── data_loader.py                   # CSV → ChromaDB loader
+│   ├── safety_embeddings.py             # Safety embedding search
+│   ├── medical_terms_validator.py       # Medical term validation
+│   │
+│   ├── pipeline/                        # Pipeline module (modular)
+│   │   ├── orchestrator.py              # Main pipeline (~1,210 LOC)
+│   │   ├── product_matcher.py           # Product search & ranking (148 LOC)
+│   │   ├── safety_validator.py          # Age/severity filtering (72 LOC)
+│   │   ├── ingredient_analyzer.py       # Ingredient extraction (215 LOC)
+│   │   ├── response_builder.py          # Response formatting (227 LOC)
+│   │   ├── response_validator.py        # Garbage filtering (745 LOC)
+│   │   ├── query_router.py              # Query routing logic
+│   │   ├── product_ingredients.py       # Ingredient parsing
+│   │   ├── conditions.py                # User condition extraction
+│   │   ├── models.py                    # Data models (Product, PipelineResult)
+│   │   ├── constants.py                 # Keywords, symptom mappings
+│   │   └── symptom_mappings.py          # Symptom→product mappings
+│   │
+│   ├── services/                        # Service layer
+│   │   ├── medical_reasoning_service.py # Medical reasoning (97 LOC)
+│   │   ├── product_recommendation_service.py # Product matching (86 LOC)
+│   │   └── safety_check_service.py      # Safety checks (70 LOC)
+│   │
+│   ├── common/
+│   │   ├── models.py                    # Shared data models
+│   │   └── contraindications.py         # Drug contraindications
+│   │
+│   └── prompts/
+│       └── unified_prompt.py            # LLM prompt templates
 │
-├── output/                     # Generated files (git-ignored)
+├── tests/
+│   ├── conftest.py                      # Pytest fixtures
+│   ├── test_safety.py                   # Safety tests (70 tests)
+│   ├── test_unified_processor.py        # Unified processor tests
+│   ├── test_ingredient_analyzer.py      # Ingredient tests (34 tests)
+│   ├── test_api.py                      # API integration tests
+│   ├── test_*.py                        # ~30 test files total
+│   ├── e2e/                             # E2E quality tests
+│   │   ├── test_symptom_queries.py
+│   │   ├── test_medication_queries.py
+│   │   ├── test_safety_queries.py
+│   │   ├── test_catalog_queries.py
+│   │   └── test_edge_cases.py
+│   └── contracts/                       # Test contracts & builders
 │
-└── tests/
-    ├── conftest.py             # Pytest fixtures
-    ├── test_safety.py          # Safety layer tests (22 tests)
-    ├── test_intent_classifier.py # Intent classifier tests (26 tests)
-    ├── test_api.py             # API integration tests (17 tests)
-    └── test_pipeline.py        # Pipeline integration tests (13 tests)
+├── data/
+│   ├── products_processed.csv           # Product catalogue (~9,600 products)
+│   └── chromadb/                        # Vector database
+│
+├── models/
+│   └── medgemma-4b-it-bf16/             # MedGemma model (git-ignored)
+│
+├── .github/workflows/
+│   ├── ci.yml                           # Tests, ruff linting, bandit, pip-audit
+│   └── price-sync.yml                   # Daily price sync from benu.bg
+│
+├── docs/
+│   ├── ARCHITECTURE.md                  # This file
+│   ├── TECHNICAL_DEBT.md                # Issue tracking
+│   └── PERFORMANCE_ANALYSIS.md          # Performance data
+│
+├── output/                              # Generated files (git-ignored)
+├── Dockerfile
+├── docker-compose.yml
+├── pyproject.toml
+└── requirements.txt
 ```
 
 ## API Endpoints
@@ -245,43 +252,15 @@ The API server (`api_server.py`) provides OpenAI-compatible endpoints plus custo
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/` | GET | Basic status check |
 | `/health` | GET | Detailed health check (models loaded, products count, uptime) |
+| `/health/live` | GET | Kubernetes liveness probe |
+| `/health/ready` | GET | Kubernetes readiness probe |
 | `/hints` | GET | Bulgarian UI hints and welcome message |
 | `/metrics` | GET | Application metrics (request counts, latencies, cache stats) |
 | `/v1/models` | GET | List available models (OpenAI-compatible) |
 | `/v1/chat/completions` | POST | Chat endpoint (OpenAI-compatible) |
-| `/models` | GET | Alias for `/v1/models` |
-| `/chat/completions` | POST | Alias for `/v1/chat/completions` |
-
-### Health Endpoint Response
-```json
-{
-  "status": "healthy",
-  "service": "ViaPharma Аптечен Асистент",
-  "version": "1.0.0",
-  "models_loaded": {
-    "medgemma": true,
-    "translator_bg_en": true,
-    "translator_en_bg": true
-  },
-  "products_count": 10247,
-  "uptime_seconds": 3600.5
-}
-```
-
-### Hints Endpoint Response
-```json
-{
-  "hints": [
-    "Имам главоболие и се чувствам уморен",
-    "Какво да взема за настинка?",
-    "..."
-  ],
-  "placeholder": "Опишете вашите симптоми...",
-  "welcome_message": "Здравейте! Аз съм вашият аптечен асистент."
-}
-```
+| `/docs` | GET | Swagger UI |
+| `/redoc` | GET | ReDoc API docs |
 
 ## Configuration
 
@@ -291,18 +270,31 @@ All settings are managed via `src/config.py` using pydantic-settings. Environmen
 |---------|---------|-------------|
 | `VIAPHARMA_API_PORT` | 8000 | API server port |
 | `VIAPHARMA_LOG_LEVEL` | INFO | Logging level |
-| `VIAPHARMA_LOG_JSON` | false | Use JSON log format |
+| `VIAPHARMA_LOG_JSON` | true | Use JSON log format |
 | `VIAPHARMA_MAX_MESSAGE_LENGTH` | 2000 | Max user message length |
 | `VIAPHARMA_RATE_LIMIT_PER_MINUTE` | 30 | Rate limit per IP |
 | `VIAPHARMA_ENABLE_RATE_LIMITING` | true | Enable rate limiting |
 | `VIAPHARMA_PREWARM_MODELS` | true | Pre-load models on startup |
+| `VIAPHARMA_MEDGEMMA_MODEL_PATH` | `./models/medgemma-4b-it-bf16` | Path to MedGemma model |
+
+## Performance Characteristics
+
+- **MLX single-threaded**: `max_workers=1` is correct — concurrent MLX inference causes segfault (exit code 139, validated via load testing)
+- **Single request latency**: ~2.7s per query
+- **Maximum throughput**: ~22 req/min (1,333 req/hour)
+- **Rate limiting**: 30 req/min per IP (in-memory, process-local)
+
+### Scaling Options (if needed)
+1. **Horizontal scaling** (recommended): Deploy multiple pods (3 pods = 3x throughput)
+2. **Model optimization**: Quantize to 2-bit or use smaller model variant
+3. **Batching**: Process multiple queries in single inference call
 
 ## Dependencies
 
 ```
 # Core ML
-mlx-lm                  # MedGemma inference on Mac
-transformers            # Intent classifier + MarianMT
+mlx-lm                  # MedGemma inference on Apple Silicon
+transformers            # MarianMT translation
 torch                   # PyTorch backend
 sentencepiece           # Tokenizer for MarianMT
 
@@ -310,7 +302,7 @@ sentencepiece           # Tokenizer for MarianMT
 chromadb                # Vector database
 sentence-transformers   # Multilingual embeddings
 
-# API & UI
+# API
 fastapi                 # REST API
 uvicorn                 # ASGI server
 pydantic                # Request/response models
@@ -324,67 +316,45 @@ python-dotenv           # Environment variables
 pytest                  # Test framework
 pytest-cov              # Coverage reporting
 pytest-asyncio          # Async test support
-```
 
-## Running the Application
-
-```bash
-# Terminal 1: Start API server
-python api_server.py
-
-# Terminal 2: Start Open WebUI (Docker)
-docker run -d --name open-webui -p 3000:8080 \
-  -e OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1 \
-  -e OPENAI_API_KEY=dummy \
-  ghcr.io/open-webui/open-webui:main
-
-# Open http://localhost:3000
+# Security
+pip-audit               # Dependency vulnerability scanning
 ```
 
 ## Safety Measures
 
-### Emergency Symptoms 🚨 (Call 112 immediately)
+### Emergency Symptoms (Call 112 immediately)
 Blocks all recommendations and shows emergency message:
 - Chest pain, pressure, or tightness
 - Difficulty breathing, choking
 - Loss of consciousness, fainting
 - Paralysis, facial drooping, slurred speech
-- Sudden vision loss
 - Seizures, convulsions
-- Severe bleeding
-- Anaphylaxis
+- Severe bleeding, anaphylaxis
 - Poisoning, overdose
 - Suicidal thoughts
 
-### Urgent Symptoms ⚠️ (See doctor within 24-48h)
+### Urgent Symptoms (See doctor within 24-48h)
 Blocks recommendations and advises medical consultation:
 - Blood in urine or stool
-- Vomiting blood
 - Severe abdominal pain
-- High fever (>39°C) for 3+ days
-- Worst headache ever, thunderclap headache
+- High fever (>39C) for 3+ days
+- Worst headache ever
 - Stiff neck with fever
-- Facial swelling, swollen tongue/lips
 - Jaundice (yellow eyes/skin)
 - Confusion, disorientation
-- Severe back/kidney pain
-- Unable to urinate
 
-### Warning Symptoms ℹ️ (Monitor, add disclaimer)
+### Warning Symptoms (Monitor, add disclaimer)
 Allows recommendations but adds warning message:
 - Persistent cough (>2 weeks)
 - Unexplained weight loss
 - Night sweats
-- Persistent fatigue (>2 weeks)
-- Lumps, nodules, growths
+- Persistent fatigue
 - Changing moles
 - Non-healing wounds
-- Difficulty swallowing
-- Frequent headaches
-- Vision/hearing changes
 
 ### OTC-Only Enforcement
-- Product catalogue has `is_otc: bool` column
+- Product catalogue has `is_otc` column
 - Safety layer filters to only OTC products
 - Prescription drugs never shown
 
@@ -392,38 +362,33 @@ Allows recommendations but adds warning message:
 - "Това е информационна услуга, не медицински съвет"
 - "Консултирайте се с фармацевт за повече информация"
 
-## Implementation Status
+## Running the Application
 
-| Component | Status | File | Tests |
-|-----------|--------|------|-------|
-| OpenAI API | ✅ Done | `api_server.py` | 18 tests |
-| Pipeline | ✅ Done | `src/pipeline/orchestrator.py` | 13 tests |
-| MedGemma | ✅ Done | `src/medical_model.py` | - |
-| Translation | ✅ Done | `src/translator.py` | - |
-| Product Store | ✅ Done | `src/product_store.py` | - |
-| Data Loader | ✅ Done | `src/data_loader.py` | - |
-| Intent Classifier | ✅ Done | `src/intent_classifier.py` | 26 tests |
-| Safety Layer | ✅ Done | `src/safety.py` | 22 tests |
-| Configuration | ✅ Done | `src/config.py` | - |
-| Logging | ✅ Done | `src/logging_config.py` | - |
+```bash
+# Terminal 1: Start API server
+python api_server.py
 
-**Total: 79 automated tests**
+# Terminal 2 (Option A): cloudly-v3 frontend
+cd ../cloudly-v3 && npm run dev
+# Open http://localhost:3007
+
+# Terminal 2 (Option B): Open WebUI (Docker)
+docker run -d --name open-webui -p 3000:8080 \
+  -e OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1 \
+  -e OPENAI_API_KEY=dummy \
+  ghcr.io/open-webui/open-webui:main
+# Open http://localhost:3000
+```
 
 ## Running Tests
 
 ```bash
-# Run all tests
+# Run all unit tests
 pytest tests/ -v
 
 # Run with coverage
 pytest tests/ --cov=src --cov-report=term-missing
 
-# Skip slow tests (those requiring model loading)
-pytest tests/ -v -k "not slow"
+# Run E2E quality tests
+pytest tests/e2e/ -v
 ```
-
-## Next Steps
-
-1. **Performance Optimization** - Caching for common queries
-2. **Monitoring** - Add metrics/observability
-3. **Production Deployment** - Docker, scaling considerations
